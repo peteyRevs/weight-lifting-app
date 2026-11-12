@@ -137,12 +137,13 @@ authoritative; the plan differs:
     0–2 as before, the same iOS build (`--build-only`'s arguments, its result bundle's name aside, so both
     shards and `main-cache.yml` share cache keys; check-wiring W84), then the tests of the targets `scripts/pr-shards.txt` gives shard
     `<n>`, the other shard's passed to `xcodebuild` as `-skip-testing`. `check-test-results.sh` then checks
-    that the bundle ran exactly those targets and they passed; step 5 is skipped. Each green shard uploads
-    its bundle as the artifact `PR-iOS-shard<n>` (overwritten by a re-run, since "Re-run failed jobs" does
+    that the bundle ran exactly those targets and they passed; step 5 is skipped. Each green shard packs
+    its bundle into one tar (download-artifact failed to extract a bundle's ~35,000 files on the macOS runner)
+    and uploads it as the artifact `PR-iOS-shard<n>` (overwritten by a re-run, since "Re-run failed jobs" does
     not re-run a green shard); a red one uploads `results-<run>-<attempt>-shard<n>` as before. Only shard 1
     saves the compilation cache: both build the same thing under one key. `Coverage` (`xcode-27`, 15 min)
-    needs both shards, selects and checks the Xcode as `check.sh` step 0 does, downloads both bundles and
-    runs `scripts/check-shards.sh`: each bundle against its shard's targets, the shards' targets together
+    needs both shards, selects and checks the Xcode as `check.sh` step 0 does, downloads both tars, unpacks them
+    where `check.sh` wrote the bundles and runs `scripts/check-shards.sh`: each bundle against its shard's targets, the shards' targets together
     against the PR plan (every enabled target once), then `coverage-gate.sh --ios-only` over both bundles,
     at the same thresholds. `gh pr checks` lists `Scope`,
     `Static checks`, `Check (shard 1/2)`, `Check (shard 2/2)` and `Coverage`.

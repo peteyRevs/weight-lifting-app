@@ -399,16 +399,21 @@ check "WF72 Check's matrix is scripts/pr-shards.txt's shards, 1 to $count, and i
 $(q pr '.jobs.check.name | test("/\\d+\\)$") and endswith("/'"$count"')")') \
 $(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .run | endswith("--shard ${{ matrix.shard }}/'"$count"'")')" \
     "shard $(seq "$count" | paste -sd , -) false true true"
-check "WF73 each shard uploads its test bundle under its own name, replacing an earlier attempt's, after a green check.sh only" \
-    is "$(q pr '.jobs.check.steps[] | select(.uses // "" | test("upload-artifact")) | select(.if == null)
-        | [.with.name, .with.path, .with["if-no-files-found"], .with.overwrite, .with["include-hidden-files"]] | map(tostring) | join(" ")')" \
-    'PR-iOS-shard${{ matrix.shard }} .derivedData/Results/PR-iOS-shard${{ matrix.shard }}.xcresult error true true'
-want=""
-for ((n = 1; n <= count; n++)); do want="${want}PR-iOS-shard$n>.derivedData/Results/PR-iOS-shard$n.xcresult "; done
-check "WF74 Coverage selects and checks the Xcode, downloads every shard's bundle to where check.sh wrote it, then runs check-shards.sh" \
-    is "$(q pr '[.jobs.coverage.steps[] | select(.uses // "" | test("download-artifact")) | "\(.with.name)>\(.with.path)"] | join(" ")') \
-$(q pr '[.jobs.coverage.steps[] | .uses // .run | split("@")[0]] | map(select(test("xcode-select") | not)) | join(" ")')" \
-    "${want}actions/checkout scripts/check-xcode-version.sh actions/download-artifact actions/download-artifact scripts/check-shards.sh"
+check "WF73 each shard packs its test bundle into one tar (35,000 files failed to extract) and uploads it under its own name, replacing an earlier attempt's, after a green check.sh only" \
+    is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("^tar -cf")) | [.run, .env.SHARD] | join(" ")')
+$(q pr '.jobs.check.steps[] | select(.uses // "" | test("upload-artifact")) | select(.if == null)
+        | [.with.name, .with.path, .with["if-no-files-found"], .with.overwrite] | map(tostring) | join(" ")')" \
+    'tar -cf "PR-iOS-shard$SHARD.xcresult.tar" -C .derivedData/Results "PR-iOS-shard$SHARD.xcresult" ${{ matrix.shard }}
+PR-iOS-shard${{ matrix.shard }} PR-iOS-shard${{ matrix.shard }}.xcresult.tar error true'
+unpack="mkdir -p .derivedData/Results
+for n in $(seq "$count" | paste -sd ' ' -); do tar -xf \"PR-iOS-shard\$n.xcresult.tar\" -C .derivedData/Results; done"
+check "WF74 Coverage selects and checks the Xcode, downloads every shard's tar, unpacks each where check.sh wrote it, then runs check-shards.sh" \
+    is "$(q pr '.jobs.coverage.steps[] | select(.uses // "" | test("download-artifact")) | "\(.with.pattern) \(.with["merge-multiple"])"')
+$(q pr '[.jobs.coverage.steps[] | .uses // .run | split("@")[0] | split("\n")[0]] | map(select(test("xcode-select") | not)) | join(" ")')
+$(q pr '.jobs.coverage.steps[] | select(.name == "Unpack them") | .run | rtrimstr("\n")')" \
+    "PR-iOS-shard* true
+actions/checkout scripts/check-xcode-version.sh actions/download-artifact mkdir -p .derivedData/Results scripts/check-shards.sh
+$unpack"
 check "WF74 ... and the bundles are the ones check.sh --shard writes (its result name)" \
     grep -qF '"PR-iOS${SHARD:+-shard${SHARD%/*}}"' "$ROOT/scripts/check.sh"
 

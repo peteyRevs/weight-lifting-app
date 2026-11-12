@@ -156,14 +156,19 @@ jobs:
           # LEDGER_SWEEP and run every size and setting (docs/ci-cd.md, "Sweeps on the runner").
           TEST_RUNNER_LEDGER_SWEEP: pr
         run: scripts/check.sh --ios-only --skip-static --shard ${{ matrix.shard }}/2
+      # A bundle is ~35,000 small files, which download-artifact failed to extract on the macOS runner
+      # (five retries, every attempt); one tar file round-trips.
+      - name: Pack this shard's test bundle
+        run: tar -cf "PR-iOS-shard$SHARD.xcresult.tar" -C .derivedData/Results "PR-iOS-shard$SHARD.xcresult"
+        env:
+          SHARD: ${{ matrix.shard }}
       # Coverage reads this shard's test bundle. Not per attempt: "Re-run failed jobs" re-runs a red shard
       # and Coverage, not a green shard, so Coverage must find the green one's bundle under the same name.
       - name: Upload this shard's test bundle for Coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: PR-iOS-shard${{ matrix.shard }}
-          path: .derivedData/Results/PR-iOS-shard${{ matrix.shard }}.xcresult
-          include-hidden-files: true # under .derivedData/
+          path: PR-iOS-shard${{ matrix.shard }}.xcresult.tar
           if-no-files-found: error
           overwrite: true # a re-run replaces its earlier attempt's bundle
           retention-days: 7
@@ -203,15 +208,14 @@ jobs:
         run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
       - name: Check the Xcode against .xcode-version (as check.sh step 0)
         run: scripts/check-xcode-version.sh
-      - name: Download shard 1's test bundle
+      - name: Download both shards' test bundles
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: PR-iOS-shard1
-          path: .derivedData/Results/PR-iOS-shard1.xcresult
-      - name: Download shard 2's test bundle
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: PR-iOS-shard2
-          path: .derivedData/Results/PR-iOS-shard2.xcresult
+          pattern: PR-iOS-shard*
+          merge-multiple: true # each artifact holds one tar, named for its shard
+      - name: Unpack them
+        run: |
+          mkdir -p .derivedData/Results
+          for n in 1 2; do tar -xf "PR-iOS-shard$n.xcresult.tar" -C .derivedData/Results; done
       - name: Both shards' results and coverage (check-shards.sh)
         run: scripts/check-shards.sh
