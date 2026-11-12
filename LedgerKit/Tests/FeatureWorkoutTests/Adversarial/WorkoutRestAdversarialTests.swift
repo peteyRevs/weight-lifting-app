@@ -120,7 +120,8 @@ struct WorkoutRestAdversarialTests {
             ends += walk.ends
             covers += walk.covers
         }
-        // The first 40 seeds give 325 logged sets, 97 rests that end on time and 156 covers.
+        // These 12 seeds give 95 logged sets, 28 rests that end on time and 36 covers; the first 40 give 325,
+        // 97 and 156 (re-measured with `RestCover.run`'s stepping, `chore(test)` 2026-11-12: unchanged).
         #expect(logs >= 40)
         #expect(ends >= 10)
         #expect(covers >= 20)
