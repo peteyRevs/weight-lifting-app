@@ -6,6 +6,7 @@ import LedgerDomain
 import LedgerSync
 import LedgerTestSupport
 import Observation
+import Testing
 
 /// A launcher and its stores under test: the seeded in-memory stores (the bundled catalog, the spec's program
 /// and its history), a session, and one probe that records and can hold or fail the calls made to the
@@ -194,11 +195,12 @@ struct WorkoutScene {
     }
 }
 
-/// Waits until `condition` holds, by watching what it reads (Observation), never by time. A condition that
-/// never holds ends at the suite's time limit.
+/// Waits until `condition` holds, by watching what it reads (Observation), never by time: `observed(_:)`, whose
+/// hang guard ends a condition that never holds before the suite's time limit, saying where it waited.
 @MainActor
-func eventually(_ condition: @escaping @MainActor @Sendable () -> Bool) async {
-    for await holds in Observations({ condition() }) where holds {
-        return
-    }
+func eventually(
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: @escaping @MainActor @Sendable () -> Bool
+) async {
+    await observed("the condition this test watches", sourceLocation: sourceLocation, condition)
 }

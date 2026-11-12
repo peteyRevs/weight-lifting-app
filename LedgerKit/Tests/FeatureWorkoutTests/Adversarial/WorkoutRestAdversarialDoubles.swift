@@ -30,7 +30,7 @@ struct LaggingRestBench {
             WorkoutStore()
         }
         following = Task { [store] in await store.follow() }
-        await eventually("the session's first update") { [store] in store.shown != nil }
+        await observed("the session's first update") { [store] in store.shown != nil }
     }
 
     var now: Date {

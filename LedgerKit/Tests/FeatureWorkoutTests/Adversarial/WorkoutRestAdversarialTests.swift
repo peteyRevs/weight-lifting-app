@@ -72,6 +72,7 @@ struct WorkoutRestAdversarialTests {
             // How long after the rest's end the wait that could find it over ended; nil when no time went by.
             var lateness: Double?
             if move < 10 {
+                // `run` wakes the rest's task at the end of each of its waits, its last one included.
                 await cover.run([0.25, 0.5, 0.75, 1, 1.5, 3, 10, 20, 40, 40][move])
                 lateness = 0
             } else if move < 14 {
@@ -119,7 +120,8 @@ struct WorkoutRestAdversarialTests {
             ends += walk.ends
             covers += walk.covers
         }
-        // The first 40 seeds give 325 logged sets, 97 rests that end on time and 156 covers.
+        // These 12 seeds give 95 logged sets, 28 rests that end on time and 36 covers; the first 40 give 325,
+        // 97 and 156 (re-measured with `RestCover.run`'s stepping, `chore(test)` 2026-11-12: unchanged).
         #expect(logs >= 40)
         #expect(ends >= 10)
         #expect(covers >= 20)

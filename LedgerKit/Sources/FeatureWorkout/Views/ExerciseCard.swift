@@ -49,9 +49,17 @@ struct ExerciseCard: View {
 /// so the name keeps the whole width and never wraps under the button.
 ///
 /// VoiceOver reads the place and the name, then the button, whatever the layout puts higher (criterion 32;
-/// F10-S8b-G2-2): the row is a container, the place and name one group in it, and the button sorts after
-/// that group (priority −1 against the default 0), not by position (a wrapped name starts below the
-/// button's top). Only the button carries a priority, so a card without it reads as before.
+/// F10-S8b-G2-2): the row is a container, and the button sorts after the place and the name (priority −1
+/// against their default 0), not by position (a wrapped name starts below the button's top). Only the
+/// button carries a priority, so a card without it reads as before.
+///
+/// The place and the name are not a container of their own inside the row. With one, once the card moved
+/// on to the next exercise, XCUITest's hit test at the name no longer found it: the nightly `WorkoutLogging`
+/// test's "the next exercise's name is on screen" failed with the name drawn at the top of the page. That
+/// test is the pin. No hosted test can be: in a package test process `accessibilityHitTest(_:event:)`
+/// answers nil at every point, the card's name before the move included, likely because UIKit's accessibility
+/// runtime is not loaded there (`chore(test)` fix round 2, 2026-11-12). Whether VoiceOver's touch
+/// exploration missed the name too was not shown.
 struct ExerciseCardTitleRow: View {
     let model: ExerciseCardModel
     let send: (WorkoutAction) -> Void
@@ -73,7 +81,6 @@ struct ExerciseCardTitleRow: View {
                     .accessibilityIdentifier("workout.card.title")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .contain)
             if let swap = model.swap {
                 IconPillButton(swap, icon: .swap) {
                     send(.swap(.open(exerciseIndex: model.exerciseIndex, exerciseID: model.exerciseID)))

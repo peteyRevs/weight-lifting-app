@@ -71,4 +71,120 @@ extension WorkoutSaveAdversarialTests {
         #expect(try await scene.session.current() == nil)
         #expect(try await scene.stores.workouts.workout(id: running.id) == nil)
     }
+
+    /// The same over this suite's `SaveSession`, which answers a cancelled discard as the host above does. It
+    /// once threw `CancellationError` instead: the store let the discard go, the cover stayed up on the
+    /// dropped workout until an update came, and a save tapped meanwhile closed it as saved (the save
+    /// walk's nightly seed 5115691).
+    @Test("This suite's session, too: a discard whose task is cancelled ends as a discard, with no update heard")
+    func session_cancelledDiscard_endsAsADiscard() async {
+        let cover = await Self.withASetLogged()
+        await cover.session.holdEveryEnd()
+        await cover.session.keepStreamsBehind()
+        cover.send(.finish, .discard)
+        await cover.until("the discard to be held") { cover.session.endsWaiting.value == 1 }
+        await cover.restartTasks(awaitingTheOld: false)
+        #expect(cover.store.isDiscarding, "the cancelled call has not ended")
+        cover.send(.finish, .save)
+        #expect(!cover.store.isSaving, "so no save can be tapped over the discard")
+        await cover.session.releaseEnd()
+        await cover.until("the cover to close") { cover.store.exit != nil }
+        #expect(cover.store.exit == .route(.discarded))
+        #expect(await cover.session.ended?.phase == .discarded)
+        await cover.close()
+    }
+
+    /// A cover with a set logged, so that "Save workout" would save.
+    static func withASetLogged() async -> SaveCover {
+        let cover = await SaveCover()
+        cover.tap(.log(exerciseIndex: 1, setID: cover.set(1, 0)))
+        await cover.until("the set to be shown as logged") { cover.store.shown?.doneSets == 1 }
+        return cover
+    }
+
+    /// A cover whose discard was cancelled, by a client that throws its cancelled caller `CancellationError`
+    /// once the workout is dropped (`SaveSession.throwToACancelledDiscard`), with the ending update kept back.
+    static func discardThrownAtItsCancelledCaller() async -> SaveCover {
+        let cover = await withASetLogged()
+        await cover.session.holdEveryEnd()
+        await cover.session.throwToACancelledDiscard()
+        await cover.session.keepStreamsBehind()
+        cover.send(.finish, .discard)
+        await cover.until("the discard to be held") { cover.session.endsWaiting.value == 1 }
+        await cover.restartTasks(awaitingTheOld: false)
+        // The new follow hears the live workout first; a stream opened after the discard would open on none.
+        await cover.rest()
+        await cover.until("the new follow to hear the session") { cover.store.isHearingTheSession }
+        await cover.session.releaseEnd()
+        await eventually("the workout to be dropped") { await cover.session.ended?.phase == .discarded }
+        await cover.rest()
+        return cover
+    }
+
+    @Test("A client that throws a cancelled discard: the store goes on discarding, and the update closes it so")
+    func throwingClient_cancelledDiscard_closesAsDiscarded() async {
+        let cover = await Self.discardThrownAtItsCancelledCaller()
+        #expect(cover.store.exit == nil, "the update that says how it ended is kept back")
+        #expect(cover.store.isDiscarding, "the discard went through: the store goes on discarding")
+        cover.send(.finish, .save)
+        #expect(!cover.store.isSaving, "so no save can be tapped over a workout already dropped")
+        await cover.session.keepStreamsBehind(false)
+        await cover.until("the cover to close") { cover.store.exit != nil }
+        #expect(cover.store.exit == .route(.discarded))
+        #expect(await cover.fault() == nil)
+        await cover.close()
+    }
+
+    @Test("A client that throws a cancelled discard, then the updates end: the failed screen's Close closes")
+    func throwingClient_cancelledDiscard_updatesEnd_closeCloses() async {
+        let cover = await Self.discardThrownAtItsCancelledCaller()
+        await cover.session.endStreams()
+        await cover.until("the failed screen") {
+            if case .failed = cover.store.workout {
+                return true
+            }
+            return false
+        }
+        #expect(!cover.store.isDiscarding, "no call runs for the discard any more")
+        cover.send(.minimize)
+        #expect(cover.store.exit != nil, "the failed screen's Close closes the cover")
+        await cover.close()
+    }
+
+    @Test("A client that throws a cancelled discard, the updates ending while it runs: the failed screen closes")
+    func throwingClient_updatesEndDuringTheCancelledDiscard_closeCloses() async {
+        let cover = await Self.withASetLogged()
+        await cover.session.holdEveryEnd()
+        await cover.session.throwToACancelledDiscard()
+        cover.send(.finish, .discard)
+        await cover.until("the discard to be held") { cover.session.endsWaiting.value == 1 }
+        await cover.restartTasks(awaitingTheOld: false)
+        await cover.rest()
+        await cover.until("the new follow to hear the session") { cover.store.isHearingTheSession }
+        await cover.session.endStreams()
+        await cover.until("the failed screen") {
+            if case .failed = cover.store.workout {
+                return true
+            }
+            return false
+        }
+        await cover.session.releaseEnd()
+        await eventually("the workout to be dropped") { await cover.session.ended?.phase == .discarded }
+        await cover.rest()
+        #expect(!cover.store.isDiscarding, "no update will come: the discard is let go")
+        cover.send(.minimize)
+        #expect(cover.store.exit != nil, "the failed screen's Close closes the cover")
+        await cover.close()
+    }
+
+    @Test("A client that throws a cancelled discard, then a new stream opens on no workout: it closes as discarded")
+    func throwingClient_droppedThenNothingLive_closesAsDiscarded() async {
+        let cover = await Self.discardThrownAtItsCancelledCaller()
+        #expect(cover.store.isDiscarding, "the session said the workout was gone")
+        await cover.restartTasks(awaitingTheOld: false)
+        await cover.until("the cover to close") { cover.store.exit != nil }
+        #expect(cover.store.exit == .route(.discarded), "not nothing to show: this cover discarded it")
+        #expect(await cover.fault() == nil)
+        await cover.close()
+    }
 }

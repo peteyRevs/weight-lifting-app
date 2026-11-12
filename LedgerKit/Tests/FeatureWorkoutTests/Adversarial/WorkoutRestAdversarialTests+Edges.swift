@@ -80,7 +80,7 @@ extension WorkoutRestAdversarialTests {
         await eventually("the session's first update") { store.isHearingTheSession }
         store.send(.edit(.log(exerciseIndex: 0, setID: running.exercises[0].sets[0].id)))
         store.send(.minimize)
-        await eventually("the cover to close") { store.exit != nil }
+        await observed("the cover to close") { store.exit != nil }
         following.cancel()
         pumping.cancel()
         await following.value
@@ -137,10 +137,10 @@ extension WorkoutRestAdversarialTests {
             $0.date = DateGenerator { Fixtures.now.addingTimeInterval(clock.elapsed / .seconds(1)) }
         }
         let following = Task { await store.follow() }
-        await eventually("the session's first update") { store.shown != nil }
+        await observed("the session's first update") { store.shown != nil }
         store.send(.edit(.log(exerciseIndex: 0, setID: running.exercises[0].sets[0].id)))
         await store.drain()
-        await eventually("the rest on the page") { store.shownRest != nil }
+        await observed("the rest on the page") { store.shownRest != nil }
         await eventually("the logged set to be felt") { await haptics.played == [.setLogged] }
         try #require(await haptics.played == [.setLogged], "the logged set was never felt")
         await haptics.hold()
@@ -186,7 +186,7 @@ extension WorkoutRestAdversarialTests {
     func endingUpdate_isFelt() async throws {
         let (cover, _) = try await Self.resting()
         let ended = try await cover.scene.session.finish(endedAt: cover.now)
-        await eventually("the cover to close") { cover.store.exit != nil }
+        await observed("the cover to close") { cover.store.exit != nil }
         #expect(cover.store.exit == .route(.saved(ended.id)))
         #expect(await cover.played() == [.setLogged, .workoutFinished])
         await cover.close()
@@ -250,7 +250,7 @@ extension WorkoutRestAdversarialTests {
         let bench = try await LaggingRestBench()
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: bench.running.exercises[0].sets[0].id)))
         await bench.store.drain()
-        await eventually("the rest on the page") { bench.store.shownRest != nil }
+        await observed("the rest on the page") { bench.store.shownRest != nil }
         let keeper = Task { await bench.store.keepRestTime() }
         await giveWay()
         await bench.clock.base.advance(by: .seconds(149))
@@ -278,7 +278,7 @@ extension WorkoutRestAdversarialTests {
         await bench.following.value
         await bench.session.keepStreamsBehind(false)
         bench.following = Task { [store = bench.store] in await store.follow() }
-        await eventually("the logged set on the page") { bench.store.shown?.doneSets == 1 }
+        await observed("the logged set on the page") { bench.store.shown?.doneSets == 1 }
         #expect(await bench.played() == [.setLogged])
         bench.following.cancel()
     }

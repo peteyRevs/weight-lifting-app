@@ -75,7 +75,7 @@ extension WorkoutRestAdversarialTests {
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
-        await eventually("the rest on the page") { bench.store.shownRest != nil }
+        await observed("the rest on the page") { bench.store.shownRest != nil }
         #expect(bench.store.restPanel?.isEnabled == true)
         await bench.session.holdEveryApply()
         bench.store.send(.edit(.stepReps(exerciseIndex: 0, setID: rows[1].id, .increment)))

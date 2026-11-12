@@ -5,7 +5,7 @@ import LedgerDomain
 import Observation
 
 /// The store of the workout's cover (M1 store convention): the workout as the session last published it, the
-/// row the lifter chose, the dialogs the cover can show over itself, and the work it starts: the discard, the
+/// row the lifter chose, the dialogs the cover can show over itself, and the work it starts: the discard and the
 /// save (`WorkoutStore+Finish.swift`), and the changes the page's taps ask for.
 ///
 /// It keeps no workout of its own. `follow()` listens to `WorkoutSessionClient.updates()` for as long as the
@@ -42,8 +42,9 @@ final class WorkoutStore {
     private(set) var workout = Loadable<WorkoutState>.idle
     /// (Set by the store alone; not `private(set)` because the pump is the store's extension in its own file.)
     var dialog: Dialog?
-    /// True from the tap on "Discard" until the session refuses it; once it succeeds the cover closes.
-    private(set) var isDiscarding = false
+    /// True from the tap on "Discard" until the session refuses it; once it succeeds the cover closes. (Set by
+    /// the store alone; the discard is in the save's file.)
+    var isDiscarding = false
     /// The discard the root's `.task(id:)` runs: each accepted tap on "Discard" makes the next.
     private(set) var discardAttempt = 0
     /// True from the accepted tap on "Save workout" until the save fails or is withdrawn; once it succeeds
@@ -61,7 +62,10 @@ final class WorkoutStore {
     /// first read, and no panel is drawn until then. Only `restPanel` reads it, so that a tick of a rest
     /// draws the panel again and nothing else. (Set by the store alone; the pump is in its own file.)
     var moment: Date?
-    @ObservationIgnored private var isDiscardRunning = false
+    @ObservationIgnored var isDiscardRunning = false
+    /// The session said this store's cancelled discard dropped the workout (`discard()`): it is not asked
+    /// again, and a stream that opens on no workout closes the cover as discarded (`exit(for:)`).
+    @ObservationIgnored var isDiscardConfirmed = false
     /// The taps waiting for the pump, oldest first, each with the moment it was made at. The one being
     /// applied stays at the front until it is done.
     @ObservationIgnored var queue: [WorkoutTap] = []
@@ -237,59 +241,36 @@ extension WorkoutStore {
     /// The session's updates ended while the cover was up: the store has lost its source and says so. The
     /// taps still waiting are given up with it, and so is a "Minimize" that waited for them, so that the
     /// failed screen's "Close" closes the cover (F10-S5-7). So are a save that waited for them, and either
-    /// sheet, which has no workout to ask about.
+    /// sheet, which has no workout to ask about. So is a discard that no call runs for any more (one whose
+    /// cancelled call was thrown `CancellationError`, `discard()`), which waited only for the ending update.
     private func loseTheSession() {
         logger.log.error("The session's updates ended while the workout's cover was up")
         emptyQueue()
         exitWhenDrained = nil
         isSaving = false
+        if !isDiscardRunning {
+            isDiscarding = false
+        }
         dismiss([.finish, .swap])
         workout = .failed(WorkoutStoreError.updatesEnded)
         settled?.wake.yield()
     }
 
     /// Why the cover closes on an update whose workout is not live. No workout at all, which only a
-    /// stream's first update can say, has nothing to tell, but in one case: this store asked the session
-    /// to save the workout and never heard the answer (the cover's tasks started again meanwhile). The
-    /// host completes that call in a task of its own, so the workout is the one being saved.
+    /// stream's first update can say, has nothing to tell, but in two cases: this store asked the session
+    /// to save the workout and never heard the answer (the cover's tasks started again meanwhile), and the
+    /// host completes that call in a task of its own, so the workout is the one being saved; or this store's
+    /// discard was cancelled and the session said the workout was gone (`discard()`), so it was discarded.
     private func exit(for ended: WorkoutState?) -> WorkoutExit {
         guard let ended else {
             if isSaving, let save = pendingSave, save.wasSent {
                 return .route(.saved(save.id))
             }
+            if isDiscardConfirmed {
+                return .route(.discarded)
+            }
             return .nothingToShow
         }
         return .route(ended.phase == .finished ? .saved(ended.id) : .discarded)
-    }
-
-    /// Runs the current discard, once: ends the workout through the session, at the injected date, and
-    /// closes the cover when the session has dropped it.
-    ///
-    /// - A refusal is logged and shown (`discardFailed`), and the workout stays as the session shows it.
-    /// - `noLiveWorkout` is no failure: the workout ended by another hand first, and the update that says
-    ///   how (saved or discarded) closes the cover.
-    /// - A discard cancelled because the cover went away is no failure either. The session's host completes
-    ///   the call in a task of its own.
-    func discard() async {
-        guard isDiscarding, exit == nil, !isDiscardRunning else {
-            return
-        }
-        isDiscardRunning = true
-        defer { isDiscardRunning = false }
-        do {
-            try await session.discard(endedAt: date.now)
-            leave(.route(.discarded))
-        } catch WorkoutSessionError.noLiveWorkout {
-            isDiscarding = false
-        } catch {
-            isDiscarding = false
-            guard !(error is CancellationError && Task.isCancelled) else {
-                return
-            }
-            logger.log.error("The workout could not be discarded: \(String(describing: error), privacy: .public)")
-            if exit == nil {
-                dialog = .discardFailed
-            }
-        }
     }
 }

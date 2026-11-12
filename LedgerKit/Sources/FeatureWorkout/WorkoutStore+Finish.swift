@@ -11,8 +11,9 @@ nonisolated struct PendingSave: Equatable, Sendable {
 }
 
 /// The save of `WorkoutStore` (F10 S7): "Save workout" on the "End workout?" sheet, and "Try again" after
-/// a save that did not go through. In a file of its own for its length; the members of the store it uses
-/// are the store's alone.
+/// a save that did not go through; and the other end, "Discard" (`discard()`, beside the save since
+/// `chore(test)`, 2026-11-12). In a file of its own for its length; the members of the store it uses are the
+/// store's alone.
 ///
 /// **No logged set is lost.** The taps made before "Save workout" are applied first, in order, each once
 /// (the pump's rules), and the session is asked to finish only when none waits and the last has answered.
@@ -126,6 +127,58 @@ extension WorkoutStore {
             logger.log.error("The workout could not be saved: \(String(describing: error), privacy: .public)")
             isSaving = false
             dialog = .saveFailed
+        }
+    }
+
+    /// Runs the current discard, once: ends the workout through the session, at the injected date, and
+    /// closes the cover when the session has dropped it.
+    ///
+    /// - A refusal is logged and shown (`discardFailed`), and the workout stays as the session shows it.
+    /// - `noLiveWorkout` is no failure: the workout ended by another hand first, and the update that says
+    ///   how (saved or discarded) closes the cover.
+    /// - A discard cancelled because the cover went away is no failure either. The session's host completes
+    ///   the call in a task of its own and answers it. A client that throws its cancelled caller
+    ///   `CancellationError` instead may or may not have dropped the workout (S13: one cancelled before the
+    ///   session answered did not), so the session is asked. Dropped, the store goes on discarding, as a
+    ///   cancelled save goes on saving: nothing answers a tap until an update closes the cover (the ending
+    ///   one, or a new stream's "nothing live", `exit(for:)`), and it is not asked again. Still live, or not
+    ///   known, the discard is let go and the workout stays as the session shows it. So is it when the
+    ///   session's updates have ended: no update will come, and the failed screen's Close must close. This
+    ///   helps only a client whose `current()` answers a cancelled caller; one that throws there too is
+    ///   "not known", as before.
+    func discard() async {
+        guard isDiscarding, exit == nil, !isDiscardRunning, !isDiscardConfirmed else {
+            return
+        }
+        isDiscardRunning = true
+        defer { isDiscardRunning = false }
+        do {
+            try await session.discard(endedAt: date.now)
+            leave(.route(.discarded))
+        } catch WorkoutSessionError.noLiveWorkout {
+            isDiscarding = false
+        } catch {
+            guard !(error is CancellationError && Task.isCancelled) else {
+                // An answer of "cancelled" from this task, which is, counts as not known.
+                let isGone: Bool
+                do {
+                    isGone = try await session.current() == nil
+                } catch {
+                    isGone = false
+                }
+                if case .failed = workout {
+                    isDiscarding = false
+                } else {
+                    isDiscarding = isGone
+                    isDiscardConfirmed = isGone
+                }
+                return
+            }
+            isDiscarding = false
+            logger.log.error("The workout could not be discarded: \(String(describing: error), privacy: .public)")
+            if exit == nil {
+                dialog = .discardFailed
+            }
         }
     }
 

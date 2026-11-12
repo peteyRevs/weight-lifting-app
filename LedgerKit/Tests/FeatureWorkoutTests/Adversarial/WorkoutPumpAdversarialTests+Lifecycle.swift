@@ -62,7 +62,7 @@ extension WorkoutPumpAdversarialTests {
         await bench.session.holdEveryApply(false)
         let next = Task { await bench.store.pump() }
         bench.tap(.stepWeight(exerciseIndex: 0, setID: first, .increment))
-        await eventually("the new pump to apply the tap") {
+        await observed("the new pump to apply the tap") {
             bench.store.shown?.exercises[0].sets[0].weight == .pounds(190)
         }
         #expect(await bench.session.applied.count == 1)
