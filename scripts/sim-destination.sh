@@ -26,8 +26,9 @@ done
 if [[ $fresh -eq 1 && -n "$udid" ]]; then echo "error: --fresh needs a destination by name and OS, not $1" >&2; exit 2; fi
 if [[ -z "$udid" ]]; then
     runtime="com.apple.CoreSimulator.SimRuntime.${platform% Simulator}-${os//./-}"
-    read -r udid type < <(xcrun simctl list devices available --json | jq -r --arg name "$name" --arg runtime "$runtime" \
-        'first(.devices[$runtime][]? | select(.name == $name) | "\(.udid) \(.deviceTypeIdentifier)") // empty') || true
+    found="$(xcrun simctl list devices available --json | jq -r --arg name "$name" --arg runtime "$runtime" \
+        'first(.devices[$runtime][]? | select(.name == $name) | "\(.udid) \(.deviceTypeIdentifier)") // empty')"
+    read -r udid type <<<"$found" || true # an empty line: no such simulator, named below
     [[ -n "$udid" ]] || { echo "error: no available simulator matches '$1' (name and OS, or id)" >&2; exit 1; }
     if [[ $fresh -eq 1 ]]; then
         udid="$(xcrun simctl create "Ledger $name" "$type" "$runtime")"

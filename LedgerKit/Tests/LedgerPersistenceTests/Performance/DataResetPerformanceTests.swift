@@ -67,6 +67,6 @@ struct DataResetPerformanceTests {
         let runs = Array(erases.dropFirst())
         let verdict = PerformanceRunner.verdict(runs, budget: PerformanceBudget.eraseAll)
         #expect(verdict.isWithinBudget, "\(verdict)")
-        Attachment.record(RecordReplayPerformanceTests.line("eraseAll", runs), named: "erase-all.txt")
+        Attachment.record("eraseAll: p95 \(verdict.percentile95), median \(verdict.median)", named: "erase-all.txt")
     }
 }

@@ -119,14 +119,20 @@ if [[ -n "$SHARD" ]]; then
         echo "error: --shard takes <n>/$shard_count, <n> from 1 to $shard_count ($SHARDS_FILE has $shard_count shards), not $SHARD" >&2
         exit 2
     fi
-    only=()
+    only=() other_suites=()
     while read -r shard entry _; do
         if [[ -z "$shard" || "$shard" == \#* ]]; then continue; fi
-        if [[ "$shard" != "${SHARD%/*}" ]]; then TEST_SELECTION+=("-skip-testing:$entry"); continue; fi
+        if [[ "$shard" != "${SHARD%/*}" ]]; then
+            TEST_SELECTION+=("-skip-testing:$entry")
+            if [[ "$entry" == */* ]]; then other_suites+=("-skip-testing:$entry"); fi
+            continue
+        fi
         only+=("-only-testing:$entry")
         if [[ " ${SHARD_TARGETS[*]-} " != *" ${entry%%/*} "* ]]; then SHARD_TARGETS+=("${entry%%/*}"); fi
     done <"$SHARDS_FILE"
-    if [[ "${only[*]}" == */* ]]; then TEST_SELECTION=("${only[@]}"); fi # this shard holds suites
+    # A shard that holds suites runs exactly its entries, less the suites other shards hold of a target it holds
+    # whole (xcodebuild applies -skip-testing after -only-testing).
+    if [[ "${only[*]-}" == */* ]]; then TEST_SELECTION=("${only[@]}" ${other_suites[@]+"${other_suites[@]}"}); fi
 fi
 # --build-only is the iOS half of the gate without its static steps; the rest of the script reads these.
 if [[ $BUILD_ONLY -eq 1 ]]; then IOS_ONLY=1 SKIP_LINT=1; fi
@@ -225,9 +231,9 @@ if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
 fi
 
 # In record mode a plan run fails by design; keep going so both simulators record.
-run_plan() { # <result bundle> <plan file> <xcodebuild args…>
-    local result="$1" plan="$2"
-    shift 2
+run_plan() { # <result bundle> <plan file> <destination> <xcodebuild args…>
+    local result="$1" plan="$2" destination="$3"
+    shift 3
     if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
         xcodebuild "$@" | beautify || true
         # A failed build or simulator boot also fails the run: it is a recording only if tests ran.
@@ -243,11 +249,15 @@ run_plan() { # <result bundle> <plan file> <xcodebuild args…>
         xcodebuild "$@" | beautify || status=$?
         if [[ $status -ne 0 ]]; then
             # Once, and only for the simulator's own failure: the test runner never connected, so no test ran
-            # (the nightly's watch leg 1, run 43170933804). Inside the same deadline; the first bundle is kept.
+            # (the nightly's watch leg 1, run 43170933804), and only before the deadline, on a restarted
+            # simulator. The first bundle is kept.
             if ! runner_never_connected "$result"; then return "$status"; fi
-            echo "warning: the test runner hung before it connected, and no test ran: testing again, once" >&2
-            rm -rf "${result%.xcresult}-runner-hung.xcresult"
+            if [[ -n "${LEDGER_XCODEBUILD_DEADLINE:-}" && $SECONDS -ge $LEDGER_XCODEBUILD_DEADLINE ]]; then return "$status"; fi
+            echo "warning: the test runner hung before it connected, and no test ran: restarting the simulator, testing again once" >&2
             mv "$result" "${result%.xcresult}-runner-hung.xcresult"
+            xcrun simctl shutdown "${destination##*id=}" || true # already shut down: nothing to stop
+            scripts/sim-boot.sh "$destination"
+            scripts/sim-boot.sh --wait "$destination"
             xcodebuild "$@" | beautify
         fi
         scripts/check-test-results.sh "$result" "$plan" ${SHARD_TARGETS[@]+"${SHARD_TARGETS[@]}"}
@@ -300,7 +310,7 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
         step "$1 · $2 build (the simulator boots meanwhile)"
         scripts/sim-boot.sh "$5"
     fi
-    rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"
+    rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult" "$RESULTS/$6-runner-hung.xcresult"
     xcodebuild build-for-testing "${xcargs[@]}" ${CACHE_SETTINGS[@]+"${CACHE_SETTINGS[@]}"} \
         -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
     done_step "$2 build"
@@ -316,7 +326,7 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     step "$1 · $2 $4 test plan${SHARD:+, shard $SHARD (${#SHARD_TARGETS[@]} test targets)}"
     # On a failure Xcode 27 runs `simctl diagnose`, which times out after 600 s here (F32 notes); the
     # result bundle still holds every failure, log and attachment.
-    run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" \
+    run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" "$5" \
         test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" -collect-test-diagnostics never \
         -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance "$TEST_ALLOWANCE" -quiet \
         ${TEST_SELECTION[@]+"${TEST_SELECTION[@]}"}

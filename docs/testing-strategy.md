@@ -115,7 +115,8 @@ Concrete test names (file = suite = source type; see §6):
   times; the 95th percentile (the 19th fastest) must be under 50 ms, as F05
   criterion 9 says (architecture §15). Budgets live in `PerformanceBudget.swift`
   next to the tests, never inline.
-- **Budgets and the runner (2026-11-12; Pete's ruling, recorded for review).** A
+- **Budgets and the runner (2026-11-12; an autopilot decision by the orchestrator,
+  pending Pete's review).** A
   budget belongs to the reference machine, a simulator on a developer Mac. A
   shared CI runner's virtual machine is not that machine, and there a 95th
   percentile of 20 runs measures the neighbours' noise more than our code. Two
@@ -131,7 +132,10 @@ Concrete test names (file = suite = source type; see §6):
     `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR` (`xcodebuild` hands the test
     runner the variable without the prefix; `workflows.adv.sh` WF79).
   - Every verdict reports the median, the 95th percentile and the runs, in the
-    failure message and the attachments, so the tails stay visible. A value that
+    failure message and the attachments. On the runner a 95th percentile over
+    the scaled budget is also recorded at the test's line as a warning issue
+    (Swift Testing's `Issue.record(_:severity: .warning)`), which fails nothing,
+    so the tails stay visible in the result bundle. A value that
     is not a number of at least 1 counts as 1: the factor can loosen a budget,
     never tighten or disable one (`PerformanceRunnerTests`).
   - Why: in the hosted nightly (run 43170933804) the timings missed their

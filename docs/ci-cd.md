@@ -249,9 +249,11 @@ authoritative; the plan differs:
       `main-cache.yml` saves them. A dispatch on `main` restores `main`'s newest cache.
     - *A runner that never connects.* Watch leg 1 of that run failed after 561 s with "xctest encountered
       an error (The test runner hung before establishing connection.)" and no test run. `check.sh` now tests
-      again once, inside the same deadline, when a test run fails and its bundle shows no test passed or
-      skipped and every failure is exactly that message (`runner_never_connected`; W93–W95); the first
-      bundle is kept as `<bundle>-runner-hung.xcresult`. Any other failure, or a second hang, fails as before.
+      again once when a test run fails and its bundle shows no test passed or skipped and every failure is
+      exactly that message (`runner_never_connected`, checked against that bundle; W93–W95): it shuts the
+      simulator down, boots it and waits for it (`sim-boot.sh`), and tests again, unless the deadline has
+      passed. The first bundle is kept as `<bundle>-runner-hung.xcresult`, and the next run removes it. Any
+      other failure, or a second hang, fails as before.
     - *The watch job's lost runner (round 1).* No cause was found in the code. The watch plan runs the same
       seeded targets as iOS at 2,000 seeds, plus the nightly-only `.performance` and `.slow` suites (20,000-set
       databases in files under the temporary directory); nothing in them grows without bound, and the tests run
@@ -263,6 +265,9 @@ authoritative; the plan differs:
       watch, of its device type and runtime, never paired or booted (`sim-destination.sh --fresh`, SD30–SD33),
       passes it to `check.sh` as `LEDGER_WATCH_DEST`, and deletes it at the end (`continue-on-error`; WF80).
       The local gate and the PR lane keep the named simulators.
+    - *Next (deferred).* Every leg builds the same tree for its platform. One build job per platform, its
+      products handed to the legs' `test-without-building`, would save each leg its build (about 500–1,500 s)
+      at the cost of an artifact round trip; a follow-up, not this change.
     - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 7,800 s in every leg; the step's timeout is 132 min, 2 min
       after it, and the job's 145, for checkout, Xcode, mise and the tar and upload. A leg's tests take at
       most ~2,900 s, after a build of up to 1,864 s (#94's slowest) and ~100 s of tools, catalogs and boot:

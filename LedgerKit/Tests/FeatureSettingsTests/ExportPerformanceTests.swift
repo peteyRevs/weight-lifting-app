@@ -72,6 +72,6 @@ struct ExportPerformanceTests {
         let added = Self.footprint() - before
         let verdict = PerformanceRunner.verdict(runs, budget: Self.budget, statistic: .median)
         #expect(verdict.isWithinBudget, "\(verdict)")
-        #expect(added < Self.memoryBudget, "\(added) bytes")
+        #expect(added < Self.memoryBudget, "\(added) bytes") // bytes, not a timing
     }
 }

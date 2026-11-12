@@ -24,9 +24,11 @@ struct MigrationTimingTests {
             return try clock.measure { _ = try LedgerDatabase.open(at: url) }
         }
         let timings = all.dropFirst().sorted() // run 0 warms up
-        let median = timings[timings.startIndex + timings.count / 2]
-        Attachment.record("median \(median); warm-up \(all[0]); runs \(timings)", named: "first-launch-open.txt")
         let verdict = PerformanceRunner.verdict(timings, budget: PerformanceBudget.firstLaunchOpen, statistic: .median)
+        Attachment.record(
+            "median \(verdict.median); warm-up \(all[0]); runs \(timings)",
+            named: "first-launch-open.txt"
+        )
         #expect(verdict.isWithinBudget, "\(verdict); warm-up \(all[0])")
     }
 }

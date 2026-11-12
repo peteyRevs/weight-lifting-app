@@ -552,10 +552,11 @@ check "W75 --lint-only, --static-only and --fast build nothing for iOS, so they 
 # <n> [file]: shard <n>'s targets, each once (a suite entry's target included), in the file's order
 targets() { awk -v n="$1" '$1 == n { split($2, t, "/"); if (!seen[t[1]]++) print t[1] }' "$ROOT/scripts/${2:-pr}-shards.txt" | tr '\n' ' ' | sed 's/ $//'; }
 # <n> [file]: the test selection shard <n> passes: every other shard's entries skipped; or, when it holds a suite,
-# exactly its own entries
+# exactly its own entries, less the other shards' suites
 selection() {
     awk -v n="$1" '$1 !~ /^#/ && NF { if ($1 == n) { mine = mine " -only-testing:" $2; if ($2 ~ /\//) suites = 1 }
-        else other = other " -skip-testing:" $2 } END { printf "%s", suites ? mine : other }' "$ROOT/scripts/${2:-pr}-shards.txt"
+        else { other = other " -skip-testing:" $2; if ($2 ~ /\//) theirs = theirs " -skip-testing:" $2 } }
+        END { printf "%s", suites ? mine theirs : other }' "${3:-$ROOT/scripts/${2:-pr}-shards.txt}"
 }
 for n in 1 2; do
     run --ios-only --skip-lint --shard "$n/2"
@@ -655,6 +656,18 @@ done
 check "W92 both platforms' --only, --nightly or --watch-only with a mode that tests nothing or records, a plan with no shards or a leg count not its file's: exit 2 before any step" \
     is "$rejected" "21 21 21 21 21 21 21 21 21 21 21 "
 
+# A shard holding both suites and a whole target whose suite another shard holds (SF1, G3's review): that suite is
+# skipped there too, or it would run twice. The shards file is swapped for one shaped so, then restored.
+cp "$SB/scripts/nightly-shards.txt" "$ADV_TMP/nightly-shards.saved"
+printf '%s\n' "1 FeatureWorkoutTests" "1 LedgerPersistenceTests/HistoryModelAdversarialTests" \
+    "2 FeatureWorkoutTests/WorkoutSaveAdversarialTests" "2 LedgerPersistenceTests" >"$SB/scripts/nightly-shards.txt"
+run --nightly --ios-only --skip-lint --shard 1/2
+mixed="$(grep '^test-without-building ' "$LOG.args" | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')"
+cp "$ADV_TMP/nightly-shards.saved" "$SB/scripts/nightly-shards.txt"
+check "W96 a shard of suites and a whole target skips the suites other shards hold of it, so none runs twice" \
+    is "$code$mixed" "0 -only-testing:FeatureWorkoutTests -only-testing:LedgerPersistenceTests/HistoryModelAdversarialTests\
+ -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests"
+
 # ---- a test runner that never connected (the nightly's watch leg 1, run 43170933804) ----------------------
 # xcodebuild failed with "The test runner hung before establishing connection." and no test ran: check.sh tests
 # again, once, inside the same deadline, keeping the first bundle. Any other failed run is not repeated.
@@ -666,16 +679,26 @@ tests_run() { grep -c '^xcodebuild-test-without-building' "$LOG"; }
 R=".derivedData/Results"
 rm -rf "$SB/$R"
 XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
-check "W93 a watch leg whose runner never connected tests again once, keeps the first bundle, and passes on the second" \
-    is "$code $(tests_run) ${calls##*xcodebuild-test-without-building-LedgerWatch xcbeautify }|$(grep -c 'testing again, once' <<<"$out")\
+check "W93 a watch leg whose runner never connected restarts its simulator, tests again once, keeps the first bundle, and passes" \
+    is "$code $(tests_run) ${calls##*xcodebuild-test-without-building-LedgerWatch xcbeautify }|$(grep -c 'testing again once' <<<"$out")\
 |$(cd "$SB/$R" && ls -d Nightly-watchOS-shard1*.xcresult | tr '\n' ' ')" \
     "0 2 check-test-results-Nightly-Watch |1|Nightly-watchOS-shard1-build.xcresult Nightly-watchOS-shard1-runner-hung.xcresult Nightly-watchOS-shard1.xcresult "
+hung_lifecycle="$(lifecycle)"
+check "W93 ... the restart: shut down, boot and wait, by UDID, between the two test runs" \
+    is "${hung_lifecycle#*test-without-building $W;}" "shutdown $W;boot $W;bootstatus $W;test-without-building $W;"
+run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W93 ... and the next run of that leg removes the stale hung bundle with its own" \
+    is "$code $(cd "$SB/$R" && ls -d Nightly-watchOS-shard1*.xcresult | tr '\n' ' ')" \
+    "0 Nightly-watchOS-shard1-build.xcresult Nightly-watchOS-shard1.xcresult "
 XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_ONCE_AT=xcodebuild-test-without-building-Ledger run --ios-only --skip-lint
 check "W93 ... an iOS run too (check.sh, not the workflow, retries)" is "$code $(tests_run)" "0 2"
 XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
 check "W94 ... only once: a runner that hangs again fails the leg, before its results are read" \
     is "$([[ $code -ne 0 ]] && echo failed) $(tests_run) $(grep -c '^check-test-results' "$LOG")" "failed 2 0"
 XCRUN_SUMMARY="$ADV_TMP/failed.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch LEDGER_XCODEBUILD_DEADLINE=0 \
+    run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W94 ... and not at all once the deadline has passed" is "$([[ $code -ne 0 ]] && echo failed) $(tests_run)" "failed 1"
 check "W95 a run that failed any other way is not repeated" is "$([[ $code -ne 0 ]] && echo failed) $(tests_run)" "failed 1"
 jq '.testFailures += [{"testName": "a test", "failureText": "Expectation failed"}]' "$ADV_TMP/hung.json" >"$ADV_TMP/mixed.json"
 XCRUN_SUMMARY="$ADV_TMP/mixed.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"

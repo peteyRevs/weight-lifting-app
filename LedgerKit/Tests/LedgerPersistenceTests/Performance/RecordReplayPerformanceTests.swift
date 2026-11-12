@@ -137,11 +137,8 @@ struct RecordReplayPerformanceTests {
         Attachment.record(report.joined(separator: "\n"), named: "finish-save.txt")
     }
 
-    static func percentile95(_ timings: [Duration]) -> Duration {
-        timings.sorted()[timings.count * 95 / 100 - 1]
-    }
-
     static func line(_ name: String, _ timings: [Duration]) -> String {
-        "\(name): p95 \(percentile95(timings)), median \(timings.sorted()[timings.count / 2])"
+        let (median, percentile95) = PerformanceRunner.statistics(timings)
+        return "\(name): p95 \(percentile95), median \(median)"
     }
 }

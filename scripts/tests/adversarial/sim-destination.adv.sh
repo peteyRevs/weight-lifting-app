@@ -67,6 +67,8 @@ for dest in 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=27.
 done
 XCRUN_FAIL='list devices' resolve "$WATCH"
 check "SD08 simctl failing fails the resolution" is "$code [$out]" "1 []"
+check "SD08 ... at simctl's own error, not as a missing simulator" \
+    is "$(grep -c 'simctl: list devices failed' <<<"$err") $(grep -c 'no available simulator' <<<"$err")" "1 0"
 
 # Unpairing: the fixture pairs the Series 11 (46mm) with iPhone 17 Pro Max (as the run's log shows),
 # and iPhone 17 with an Ultra 3 (confirmed by the first run's session logs, which pair their clones).

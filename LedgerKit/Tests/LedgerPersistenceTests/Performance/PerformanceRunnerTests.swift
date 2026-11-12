@@ -52,6 +52,18 @@ struct PerformanceRunnerTests {
         #expect(!fails.isWithinBudget) // 11 against 10
     }
 
+    @Test(
+        "On the runner a 95th percentile over the scaled budget is flagged (a warning, failing nothing); never off it"
+    )
+    func tail_isFlaggedOnTheRunnerOnly() {
+        let over = PerformanceRunner.verdict(Self.runs, budget: .milliseconds(6), statistic: .percentile95, factor: 2)
+        #expect(over.isWithinBudget && over.tailExceedsBudget && over.factor == 2) // median 11 < 12, p95 19 >= 12
+        let under = PerformanceRunner.verdict(Self.runs, budget: .milliseconds(10), statistic: .median, factor: 2)
+        #expect(under.isWithinBudget && !under.tailExceedsBudget) // p95 19 < 20
+        let reference = PerformanceRunner.verdict(Self.runs, budget: .milliseconds(12), statistic: .median, factor: 1)
+        #expect(reference.isWithinBudget && !reference.tailExceedsBudget && reference.factor == 1)
+    }
+
     @Test("A verdict reports both statistics and the runs, whichever it holds")
     func verdict_reportsBoth() {
         let verdict = PerformanceRunner.verdict(
