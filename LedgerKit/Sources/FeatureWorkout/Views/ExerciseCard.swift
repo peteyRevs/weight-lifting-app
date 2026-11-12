@@ -54,9 +54,12 @@ struct ExerciseCard: View {
 /// button carries a priority, so a card without it reads as before.
 ///
 /// The place and the name are not a container of their own inside the row. With one, once the card moved
-/// on to the next exercise, a touch on the name no longer found it: the nightly `WorkoutLogging` test's
-/// "the next exercise's name is on screen" failed with the name drawn at the top of the page, and
-/// VoiceOver's touch exploration, which finds an element the same way, would have missed it too.
+/// on to the next exercise, XCUITest's hit test at the name no longer found it: the nightly `WorkoutLogging`
+/// test's "the next exercise's name is on screen" failed with the name drawn at the top of the page. That
+/// test is the pin. No hosted test can be: in a package test process `accessibilityHitTest(_:event:)`
+/// answers nil at every point, the card's name before the move included, because UIKit's accessibility
+/// runtime is not loaded there (`chore(test)` fix round 2, 2026-11-12). Whether VoiceOver's touch
+/// exploration missed the name too was not shown.
 struct ExerciseCardTitleRow: View {
     let model: ExerciseCardModel
     let send: (WorkoutAction) -> Void
