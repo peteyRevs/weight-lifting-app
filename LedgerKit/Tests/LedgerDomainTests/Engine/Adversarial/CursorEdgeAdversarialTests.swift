@@ -79,7 +79,8 @@ struct CursorEdgeAdversarialTests {
         }
         #expect(state?.cursor == Adv.cursor(0, 2))
         state = Self.log(state, 0, 2, at: 50, seq: 6)
-        #expect(state?.rest?.endsAt == engineTime(130), "AD is not the last of the drop round")
+        // F10 S9, ruling Q4 (sanctioned edit): AD starts no rest, so it ends the round's.
+        #expect(state?.rest == nil, "AD is not the last of the drop round")
         #expect(state?.cursor == Adv.cursor(1, 2))
         state = Self.log(state, 1, 2, at: 60, seq: 7)
         #expect(state?.rest == RestTimer(endsAt: engineTime(150), total: .seconds(90)))

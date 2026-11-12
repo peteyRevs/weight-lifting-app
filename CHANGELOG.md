@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.21.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.20.0...v0.21.0) (2026-11-11)
+
+
+### Features
+
+* **workout:** draw a superset as one block, logged round by round (F10 S9) ([#92](https://github.com/peteyRevs/weight-lifting-app/issues/92)) ([71533ae](https://github.com/peteyRevs/weight-lifting-app/commit/71533ae6a4e06fdadefadf3c556a8344e3adb10c))
+
+## [0.20.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.19.0...v0.20.0) (2026-11-11)
+
+
+### Features
+
+* **settings:** delete all data, after a warning and the typed word, in one transaction (F14 S3) ([#91](https://github.com/peteyRevs/weight-lifting-app/issues/91)) ([2f452dd](https://github.com/peteyRevs/weight-lifting-app/commit/2f452dd534de9ef872982612f6ab8c56b2b1be44))
+
 ## [0.19.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.18.0...v0.19.0) (2026-11-11)
 
 

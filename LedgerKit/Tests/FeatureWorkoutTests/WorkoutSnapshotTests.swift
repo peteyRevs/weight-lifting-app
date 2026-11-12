@@ -16,6 +16,8 @@
     ///   logged, with a last workout and "Repeat"; a drop set in kilograms with nothing remaining; no
     ///   history) light and dark, the logging state at `.xLarge`, one dark `.accessibility3`, and one with
     ///   Increase Contrast.
+    /// - F10 S9: a superset's block in its second round, light and dark at `.large` and `.xLarge`, and dark
+    ///   `.accessibility3`; the drop set's references now draw its superset's block.
     @Suite("Workout snapshots", .serialized, .tags(.feature, .snapshot))
     struct WorkoutSnapshotTests {
         private func header(_ preview: WorkoutPreview) -> some View {
@@ -46,7 +48,7 @@
             assertLedgerSnapshot(of: cover(.logging), devices: [.phone], themes: [.dark], typeSizes: [.accessibility3])
         }
 
-        @Test("A drop set, in kilograms, on the last exercise: nothing remains")
+        @Test("A drop set, in kilograms, on the last exercise: its superset's block, with BD")
         func cover_dropSet_matchesReferences() {
             assertLedgerSnapshot(of: cover(.dropSet), devices: [.phone], typeSizes: [.large])
         }
@@ -62,6 +64,21 @@
                 )
             }
         #endif
+
+        /// F10 S9: a superset drawn as one block, in its second round after A1 and B1: the eyebrow, "Round 2 of
+        /// 3", the legend with A ink-filled and its orange letter, "Rest 1:15 after B", Last with Repeat, and the
+        /// rows A1 to B3 with A2 shown.
+        @Test("A superset in its second round: one block, its legend, and its rows round by round")
+        func cover_supersetRound2_matchesReferences() {
+            assertLedgerSnapshot(of: cover(.supersetRound2), devices: [.phone], typeSizes: [.large, .xLarge])
+        }
+
+        @Test("A superset in its second round at the largest text size of the matrix")
+        func cover_supersetRound2_accessibility3_matchesReference() {
+            assertLedgerSnapshot(
+                of: cover(.supersetRound2), devices: [.phone], themes: [.dark], typeSizes: [.accessibility3]
+            )
+        }
 
         @Test("No history yet: no Repeat")
         func cover_noHistory_matchesReferences() {

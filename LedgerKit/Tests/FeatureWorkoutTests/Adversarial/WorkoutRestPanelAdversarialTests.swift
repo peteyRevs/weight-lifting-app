@@ -48,7 +48,8 @@
         @Test("The models are the ones meant: a drop set in kilograms, and one with no next set")
         func models_areTheOnesMeant() throws {
             let models = try Self.models()
-            #expect(models[3].model.next?.line.hasPrefix("Drop set · ") == true)
+            // F10 S9 (edited for criterion 15): the drop set is a superset member's, named by its label.
+            #expect(models[3].model.next?.line.hasPrefix("BD · ") == true)
             #expect(models[3].model.next?.line.contains(" kg × ") == true)
             #expect(models[4].model.next == nil)
             #expect(models[2].model.clock == "58:59")

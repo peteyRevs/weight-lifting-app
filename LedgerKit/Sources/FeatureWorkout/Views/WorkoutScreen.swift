@@ -53,8 +53,9 @@ struct WorkoutScreen<Inset: View>: View {
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollPosition($position)
                 .safeAreaInset(edge: .bottom, spacing: 0) { inset }
-                .onChange(of: workout.page.card?.exerciseIndex) {
-                    // Another exercise is shown: its place and name are at the page's top (criterion 17).
+                .onChange(of: workout.page.shownPlace) {
+                    // Another exercise or superset is shown: its place and name are at the page's top
+                    // (criterion 17; F10 S9 review SF2). Another member of the same block moves nothing.
                     position.scrollTo(edge: .top)
                 }
             }

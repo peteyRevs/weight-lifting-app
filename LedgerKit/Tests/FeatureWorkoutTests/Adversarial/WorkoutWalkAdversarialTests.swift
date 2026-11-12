@@ -142,19 +142,68 @@ struct WorkoutWalkAdversarialTests {
         }
         bench.following.cancel()
     }
+}
 
-    // MARK: A day with a superset (criterion 6)
+// MARK: A day with a superset (criterion 6)
 
-    @Test("A superset's two members, drawn as cards that switch: every check logs the set its card showed")
+extension WorkoutWalkAdversarialTests {
+    /// F10 S9 (sanctioned edit, criterion 23): the first thing wrong with the block of `bench`, or nil: the
+    /// header's words and current segment, the legend's current member and the steppers name the same
+    /// member, and "REMAINING" lists none of the block's.
+    static func blockDisagreement(on bench: Bench, truth: WorkoutState) -> String? {
+        guard let page = bench.store.model.page, let header = bench.store.model.header, let block = page.block
+        else {
+            return "no block"
+        }
+        let members = block.legend.map(\.exerciseIndex)
+        let current = block.legend.first(where: \.isCurrent)?.exerciseIndex
+        let segment = header.segments.firstIndex { $0.state == .current }
+        let checks: [(Bool, String)] = [
+            (block.rows.count == members.reduce(0) { $0 + truth.exercises[$1].sets.count }, "rows are missing"),
+            (block.steppers?.exerciseIndex == current, "the steppers are another member's"),
+            (
+                current.map { header.progressValue == "Exercise \($0 + 1) of \(truth.exercises.count)" } ?? true,
+                "the header says \(header.progressValue)"
+            ),
+            (current == nil || segment == current, "segment \(segment ?? -1) is current"),
+            ((page.remaining?.rows ?? []).allSatisfy { !members.contains($0.exerciseIndex) }, "a member is listed")
+        ]
+        return checks.first { !$0.0 }?.1
+    }
+
+    /// Taps the block's shown row's check until it shows none, at most `limit` times. Each tap must log the
+    /// set the row showed, of the member it names.
+    static func logWhatTheBlockShows(on bench: Bench, limit: Int) async throws -> [Step] {
+        var steps: [Step] = []
+        while steps.count < limit, let truth = await bench.settled(), let block = bench.store.model.page?.block {
+            guard let row = block.rows.first(where: { $0.state == .active }) else {
+                break
+            }
+            let wrong = blockDisagreement(on: bench, truth: truth)
+            #expect(wrong == nil, "before tap \(steps.count + 1)")
+            let set = try #require(truth.exercises[row.exerciseIndex].sets.first { $0.id == row.id })
+            bench.tap(row.check)
+            await bench.store.drain()
+            let expected = WorkoutEvent.setLogged(
+                exerciseIndex: row.exerciseIndex, setID: row.id, weight: set.weight, reps: set.reps,
+                doneAt: bench.clock.value
+            )
+            #expect(await bench.session.applied.last == expected, "tap \(steps.count + 1)")
+            steps.append(Step(exercise: row.exerciseIndex, row: row.label))
+        }
+        return steps
+    }
+
+    @Test("A superset drawn as one block: every check logs the row it showed, round by round")
     func superset_walkedRoundByRound() async throws {
         let seed = try Fixtures.seedSession()
         #expect(seed.exercises[4].isSupersetWithPrevious, "Upper A ends with a superset")
         let bench = try await Bench.make { $0 = seed }
         bench.tap(.jump(exerciseIndex: 3))
         await bench.store.drain()
-        let steps = try await Self.logWhatIsShown(on: bench, limit: 6)
+        let steps = try await Self.logWhatTheBlockShows(on: bench, limit: 6)
         // The engine's rounds: A1, B1, A2, B2, A3, B3.
-        #expect(steps.map(\.description) == ["3:1", "4:1", "3:2", "4:2", "3:3", "4:3"])
+        #expect(steps.map(\.description) == ["3:A1", "4:B1", "3:A2", "4:B2", "3:A3", "4:B3"])
         let truth = try #require(await bench.settled())
         #expect(truth.exercises[3].sets.allSatisfy(\.isDone) && truth.exercises[4].sets.allSatisfy(\.isDone))
         #expect(truth.doneSets == 6)
@@ -172,9 +221,10 @@ struct WorkoutWalkAdversarialTests {
         bench.tap(.jump(exerciseIndex: 4))
         await bench.store.drain()
         await bench.settled()
-        let card = try #require(bench.store.model.page?.card)
-        let shown = try #require(card.steppers?.setID)
-        #expect(card.exerciseIndex == 4 && shown == seed.exercises[4].sets[0].id)
+        let block = try #require(bench.store.model.page?.block)
+        let shown = try #require(block.steppers?.setID)
+        #expect(block.steppers?.exerciseIndex == 4 && shown == seed.exercises[4].sets[0].id)
+        #expect(block.current?.exerciseIndex == 4)
         bench.tap(.stepReps(exerciseIndex: 4, setID: shown, .increment), .addSet(exerciseIndex: 4))
         await bench.store.drain()
         let truth = try #require(await bench.settled())
@@ -184,7 +234,7 @@ struct WorkoutWalkAdversarialTests {
         #expect(isUntouched, "the first member was changed")
         let lengths = [seed.exercises[3].sets.count, seed.exercises[4].sets.count + 1]
         #expect(bench.store.model.header?.segments.map(\.length).suffix(2) == lengths)
-        #expect(Self.disagreement(on: bench, truth: truth) == nil)
+        #expect(Self.blockDisagreement(on: bench, truth: truth) == nil)
         bench.following.cancel()
     }
 }

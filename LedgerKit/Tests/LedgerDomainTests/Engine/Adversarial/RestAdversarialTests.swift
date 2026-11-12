@@ -114,15 +114,16 @@ struct RestAdversarialTests {
         #expect(state?.rest == RestTimer(endsAt: engineTime(180), total: .seconds(150)))
     }
 
-    @Test("Rule 3a: a manual rest survives a later set that is not last of its round.")
-    func manualRest_survivesNonLastMember() {
+    /// F10 S9, ruling Q4 (sanctioned edit): a member that starts no rest ends a manual rest too.
+    @Test("Rule 3a and Q4: a manual rest ends at a later set that is not last of its round.")
+    func manualRest_endsAtNonLastMember() {
         let start = Adv.start(EventBuilders.session(EventBuilders.supersetExercises))
         let state = Adv.state(after: [
             start,
             Adv.env(.restStarted(endsAt: engineTime(300), total: .seconds(300)), seq: 2, at: 0),
             Adv.env(Adv.logged(0, 0, pounds: "55", reps: 10, doneAt: 30), seq: 3, at: 30)
         ])
-        #expect(state?.rest == RestTimer(endsAt: engineTime(300), total: .seconds(300)))
+        #expect(state?.rest == nil)
     }
 
     @Test("Rule 3a: with auto-rest off, a later set leaves a manual rest untouched.")

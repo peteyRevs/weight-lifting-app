@@ -207,22 +207,6 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
         }
     }
 
-    /// The exercise becomes the shown one, at its first set that is not logged. With none left it is shown
-    /// with no row selected, and the engine's cursor stays where it is: "REMAINING" lists such an exercise
-    /// only when the page shows no exercise at all (criterion 16), and its card then offers "+ Add set".
-    private mutating func jump(to exerciseIndex: Int, in state: WorkoutState) {
-        guard state.exercises.indices.contains(exerciseIndex) else {
-            return
-        }
-        let sets = state.exercises[exerciseIndex].sets
-        guard let setIndex = sets.firstIndex(where: { !$0.isDone }) else {
-            selection = WorkoutSelection(exerciseIndex: exerciseIndex, setID: nil)
-            return
-        }
-        events.append(.exerciseSelected(exerciseIndex: exerciseIndex, setIndex: setIndex))
-        selection = WorkoutSelection(exerciseIndex: exerciseIndex, setID: sets[setIndex].id)
-    }
-
     /// A set the workout holds, with its exercise and its place in it.
     private struct Row {
         let exercise: WorkoutExercise

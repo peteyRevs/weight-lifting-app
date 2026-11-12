@@ -47,8 +47,9 @@ nonisolated extension WorkoutPresentation {
                 records: summary.prs.isEmpty ? nil : WorkoutCopy.newRecords(summary.prs.count, locale: locale),
                 logged: WorkoutCopy.logged,
                 note: WorkoutCopy.prescribedOnTheRight,
-                // One summary row for each exercise, in order (`WorkoutEngine.summary`); a summary of another
-                // shape (S9's superset rows) would have `zip` drop rows silently.
+                // One summary row for each exercise, in order (`WorkoutEngine.summary`), a superset's members
+                // included as rows of their own (F10 S9, Q9: no letters, no block row), so the two zip one to
+                // one; a summary of another shape would have `zip` drop rows silently.
                 rows: zip(summary.rows, finished.exercises).map { row, exercise in
                     receiptRow(row, hasDoneSet: exercise.sets.contains(where: \.isDone), locale: locale)
                 }

@@ -93,11 +93,9 @@ final class WorkoutRest: XCTestCase {
         XCTAssertTrue(last.isHittable)
         attachScreenshot(of: app, named: "Rest panel, accessibility size, the page's end")
         last.tap()
-        let title = app.staticTexts["workout.card.title"]
-        let jumped = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label == %@", "Cable Lateral Raise"), object: title
-        )
-        XCTAssertEqual(XCTWaiter().wait(for: [jumped], timeout: 5), .completed, title.label)
+        // F10 S9 (edited for criterion 4): the last exercise is a superset's member, shown in its block.
+        XCTAssertTrue(app.staticTexts["workout.block.title"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["workout.block.legend.B"].isSelected, "Cable Lateral Raise is the current member")
         XCTAssertTrue(skip.exists, "a jump ends no rest")
 
         skip.tap()
