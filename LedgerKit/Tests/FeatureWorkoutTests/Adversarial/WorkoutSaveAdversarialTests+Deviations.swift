@@ -71,4 +71,23 @@ extension WorkoutSaveAdversarialTests {
         #expect(try await scene.session.current() == nil)
         #expect(try await scene.stores.workouts.workout(id: running.id) == nil)
     }
+
+    /// The same over this suite's `SaveSession`, which answers a cancelled discard as the host above does. It
+    /// once threw `CancellationError` instead: the store let the discard go, the cover stayed up on the
+    /// dropped workout until an update came, and a save tapped meanwhile closed it as saved (the save
+    /// walk's nightly seed 5115691).
+    @Test("This suite's session, too: a discard whose task is cancelled ends as a discard, with no update heard")
+    func session_cancelledDiscard_endsAsADiscard() async {
+        let cover = await SaveCover()
+        await cover.session.holdEveryEnd()
+        await cover.session.keepStreamsBehind()
+        cover.send(.finish, .discard)
+        await cover.until("the discard to be held") { cover.session.endsWaiting.value == 1 }
+        await cover.restartTasks(awaitingTheOld: false)
+        await cover.session.releaseEnd()
+        await cover.until("the cover to close") { cover.store.exit != nil }
+        #expect(cover.store.exit == .route(.discarded))
+        #expect(await cover.session.ended?.phase == .discarded)
+        await cover.close()
+    }
 }

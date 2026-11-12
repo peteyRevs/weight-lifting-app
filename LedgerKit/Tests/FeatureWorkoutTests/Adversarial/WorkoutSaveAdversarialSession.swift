@@ -10,8 +10,12 @@ import Testing
 /// a `finish` can be made to fail; the stream can be kept behind, its first update included, or ended; and
 /// another hand can change or end the workout in between.
 ///
-/// Like a host, an end that was let on is completed whatever became of its caller: a caller cancelled
-/// meanwhile is thrown `CancellationError`, and the workout has ended all the same.
+/// Like a host, an end that was let on is completed whatever became of its caller. A `finish` whose caller
+/// was cancelled meanwhile is thrown `CancellationError`, and the workout has ended all the same. A
+/// `discard` answers its cancelled caller as `LocalWorkoutSessionActor` does, whose call runs in a task of
+/// its own (`host_cancelledDiscard_staysADiscard`): it returns. Thrown `CancellationError` instead, the
+/// store let go of a discard the session had made, and showed the workout it had dropped as one that could
+/// still be saved, which no host does (the save walk's nightly seed 5115691, 2026-11-11).
 actor SaveSession: WorkoutSessionClient {
     nonisolated struct Refused: Error, Equatable {}
 
@@ -122,7 +126,6 @@ actor SaveSession: WorkoutSessionClient {
         await waitAsAnEnd(isFinish: false)
         _ = try reduce(.discarded(endedAt: endedAt))
         reached.append(.discarded(endedAt))
-        try Task.checkCancellation()
     }
 
     private func waitAsAnEnd(isFinish: Bool) async {
