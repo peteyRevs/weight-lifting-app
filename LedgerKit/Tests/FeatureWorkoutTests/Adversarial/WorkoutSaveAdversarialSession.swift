@@ -10,12 +10,16 @@ import Testing
 /// a `finish` can be made to fail; the stream can be kept behind, its first update included, or ended; and
 /// another hand can change or end the workout in between.
 ///
-/// Like a host, an end that was let on is completed whatever became of its caller. A `finish` whose caller
-/// was cancelled meanwhile is thrown `CancellationError`, and the workout has ended all the same. A
-/// `discard` answers its cancelled caller as `LocalWorkoutSessionActor` does, whose call runs in a task of
-/// its own (`host_cancelledDiscard_staysADiscard`): it returns. Thrown `CancellationError` instead, the
-/// store let go of a discard the session had made, and showed the workout it had dropped as one that could
-/// still be saved, which no host does (the save walk's nightly seed 5115691, 2026-11-11).
+/// Like a host, an end that was let on is completed whatever became of its caller. What a caller cancelled
+/// meanwhile is answered is not always the host's: `LocalWorkoutSessionActor` runs each call in a task of
+/// its own and returns its answer to a cancelled caller (`host_cancelledDiscard_staysADiscard`).
+/// - `finish` deliberately does not: it throws the cancelled caller `CancellationError`, the workout ended
+///   all the same, so that the store's defensive branch for a client that does so (`WorkoutStore.save()`'s
+///   cancelled save, which keeps `isSaving`) is exercised.
+/// - `discard` returns, as the host does, unless `throwsToACancelledDiscard` is set: then it too throws
+///   after the workout is dropped, for `WorkoutStore.discard()`'s branch of the same kind. Thrown by default,
+///   it let the save walk reach a store that had let go of its own discard, before that branch kept
+///   `isDiscarding` (nightly seed 5115691, 2026-11-11).
 actor SaveSession: WorkoutSessionClient {
     nonisolated struct Refused: Error, Equatable {}
 
@@ -57,6 +61,7 @@ actor SaveSession: WorkoutSessionClient {
     private var refused: Set<Int> = []
     private var holdsEveryApply = false
     private var holdsEveryEnd = false
+    private var throwsToACancelledDiscard = false
     private var isBehind = false
     private var keepsFirstUpdateBehind = false
     private var finishFailures: [any Error] = []
@@ -117,6 +122,7 @@ actor SaveSession: WorkoutSessionClient {
             throw WorkoutSessionError.invalidEndDate
         }
         reached.append(.finished(endedAt))
+        // Not the host's answer to a cancelled caller, on purpose (the type's comment).
         try Task.checkCancellation()
         return answer
     }
@@ -126,6 +132,15 @@ actor SaveSession: WorkoutSessionClient {
         await waitAsAnEnd(isFinish: false)
         _ = try reduce(.discarded(endedAt: endedAt))
         reached.append(.discarded(endedAt))
+        if throwsToACancelledDiscard {
+            try Task.checkCancellation()
+        }
+    }
+
+    /// Makes `discard` throw a caller cancelled meanwhile `CancellationError`, after the workout is dropped,
+    /// as a client other than the host might (the type's comment).
+    func throwToACancelledDiscard(_ isOn: Bool = true) {
+        throwsToACancelledDiscard = isOn
     }
 
     private func waitAsAnEnd(isFinish: Bool) async {

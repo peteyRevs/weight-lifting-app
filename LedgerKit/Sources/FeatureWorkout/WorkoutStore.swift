@@ -237,12 +237,14 @@ extension WorkoutStore {
     /// The session's updates ended while the cover was up: the store has lost its source and says so. The
     /// taps still waiting are given up with it, and so is a "Minimize" that waited for them, so that the
     /// failed screen's "Close" closes the cover (F10-S5-7). So are a save that waited for them, and either
-    /// sheet, which has no workout to ask about.
+    /// sheet, which has no workout to ask about. So is a discard that no call runs for any more (one whose
+    /// cancelled call was thrown `CancellationError`, `discard()`), which waited only for the ending update.
     private func loseTheSession() {
         logger.log.error("The session's updates ended while the workout's cover was up")
         emptyQueue()
         exitWhenDrained = nil
         isSaving = false
+        isDiscarding = isDiscarding && isDiscardRunning
         dismiss([.finish, .swap])
         workout = .failed(WorkoutStoreError.updatesEnded)
         settled?.wake.yield()
@@ -269,7 +271,10 @@ extension WorkoutStore {
     /// - `noLiveWorkout` is no failure: the workout ended by another hand first, and the update that says
     ///   how (saved or discarded) closes the cover.
     /// - A discard cancelled because the cover went away is no failure either. The session's host completes
-    ///   the call in a task of its own.
+    ///   the call in a task of its own, and answers it. A client that throws its cancelled caller
+    ///   `CancellationError` instead may have dropped the workout all the same, so the store goes on
+    ///   discarding, as a cancelled save goes on saving: nothing answers a tap until the ending update
+    ///   closes the cover, or a run of this function that starts again asks the session once more.
     func discard() async {
         guard isDiscarding, exit == nil, !isDiscardRunning else {
             return
@@ -282,10 +287,10 @@ extension WorkoutStore {
         } catch WorkoutSessionError.noLiveWorkout {
             isDiscarding = false
         } catch {
-            isDiscarding = false
             guard !(error is CancellationError && Task.isCancelled) else {
                 return
             }
+            isDiscarding = false
             logger.log.error("The workout could not be discarded: \(String(describing: error), privacy: .public)")
             if exit == nil {
                 dialog = .discardFailed
