@@ -23,7 +23,7 @@ struct WorkoutStoreAdversarialTests {
         let live = try await world.begin(day: 0)
         let store = WorkoutStore()
         let task = Task { await store.follow() }
-        await eventually("the first update") { store.onScreen != nil }
+        await observed("the first update") { store.onScreen != nil }
         await world.session.clearCalls()
         return Followed(store: store, live: live, task: task)
     }
@@ -61,7 +61,7 @@ struct WorkoutStoreAdversarialTests {
             store.send(.finish)
             store.send(.discard)
             await store.discard()
-            await eventually("the cover to close") { store.exit != nil }
+            await observed("the cover to close") { store.exit != nil }
             #expect(store.exit == .route(.discarded))
             let after = try await world.live()
             #expect(after?.id == nil)
@@ -88,7 +88,7 @@ struct WorkoutStoreAdversarialTests {
             store.send(.finish)
             store.send(.discard)
             await store.discard()
-            await eventually("the cover to close") { store.exit != nil }
+            await observed("the cover to close") { store.exit != nil }
             #expect(store.exit == .route(.discarded))
             let saved = try await world.stores.workouts.workout(id: live.id)
             #expect(saved?.id == nil, "a discarded workout reaches no history")
@@ -115,7 +115,7 @@ struct WorkoutStoreAdversarialTests {
             #expect(store.dialog != .finish)
             await world.session.release()
             await running.value
-            await eventually("the cover to close") { store.exit != nil }
+            await observed("the cover to close") { store.exit != nil }
             #expect(store.exit == .route(.discarded))
             let after = try await world.live()
             #expect(after?.id == nil)
@@ -139,7 +139,7 @@ struct WorkoutStoreAdversarialTests {
             await world.session.release()
             await first.value
             await store.discard()
-            await eventually("the cover to close") { store.exit != nil }
+            await observed("the cover to close") { store.exit != nil }
             #expect(await world.session.count(.discard) == 1)
             #expect(store.exit == .route(.discarded))
         }

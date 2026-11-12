@@ -241,7 +241,7 @@ struct PumpBench {
             WorkoutStore()
         }
         let task = Task { await cover.follow() }
-        await eventually("the session's first update") { cover.shown != nil }
+        await observed("the session's first update") { cover.shown != nil }
         return PumpBench(session: client, store: cover, following: task, running: workout, clock: time)
     }
 
@@ -260,7 +260,7 @@ struct PumpBench {
     func settled() async -> WorkoutState? {
         await session.deliver()
         let truth = await session.current()
-        await eventually("the page to show the session's workout") { store.shown == truth }
+        await observed("the page to show the session's workout") { store.shown == truth }
         return truth
     }
 

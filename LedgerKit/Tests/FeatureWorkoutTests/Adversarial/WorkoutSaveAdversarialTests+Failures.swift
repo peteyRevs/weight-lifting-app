@@ -127,7 +127,7 @@ extension WorkoutSaveAdversarialTests {
         await store.save()
         // G2 S7b (F10-S7b-1): this save was asked for in this cover, so its receipt shows (criterion 25),
         // whichever of the answer and the ending update comes first; "Done" then closes the cover.
-        guard await eventually("the receipt or the cover's exit", { store.saved != nil || store.exit != nil }) else {
+        guard await observed("the receipt or the cover's exit", { store.saved != nil || store.exit != nil }) else {
             return
         }
         #expect(store.saved?.id == running.id, "the receipt of the save made in this cover")

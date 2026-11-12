@@ -24,7 +24,7 @@ struct WorkoutUpdatesAdversarialTests {
             WorkoutStore()
         }
         let task = Task { await store.follow() }
-        await eventually("the store to subscribe") { store.onScreen != nil || store.exit != nil }
+        await observed("the store to subscribe") { store.onScreen != nil || store.exit != nil }
         return (store, task)
     }
 
@@ -66,7 +66,7 @@ struct WorkoutUpdatesAdversarialTests {
         defer { task.cancel() }
         let other = workout(2)
         await session.publish(other)
-        await eventually("the second workout") { store.onScreen?.id == other.id }
+        await observed("the second workout") { store.onScreen?.id == other.id }
         #expect(store.exit == nil)
     }
 
@@ -79,7 +79,7 @@ struct WorkoutUpdatesAdversarialTests {
         var ended = first
         ended.phase = .discarded
         await session.publish(ended)
-        await eventually("the cover to close") { store.exit != nil }
+        await observed("the cover to close") { store.exit != nil }
         #expect(store.exit == .route(.discarded))
         var finished = workout(2)
         finished.phase = .finished
@@ -99,7 +99,7 @@ struct WorkoutUpdatesAdversarialTests {
         finished.phase = .finished
         finished.endedAt = first.startedAt.addingTimeInterval(60)
         await session.publish(finished)
-        await eventually("the cover to close") { store.exit != nil }
+        await observed("the cover to close") { store.exit != nil }
         #expect(store.exit == .route(.saved(first.id)))
     }
 
@@ -113,7 +113,7 @@ struct WorkoutUpdatesAdversarialTests {
             state.name = "Update \(index)"
             await session.publish(state)
         }
-        await eventually("the last update") { store.onScreen?.name == "Update 499" }
+        await observed("the last update") { store.onScreen?.name == "Update 499" }
         #expect(store.model.drawnHeader?.title == "Update 499")
     }
 }

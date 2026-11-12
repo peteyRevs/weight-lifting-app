@@ -167,11 +167,8 @@
 
         /// The rows of `image` that hold a pixel of the accent: saturated orange, as `LedgerColor.accentText`
         /// is in either appearance (`#B2390E` on paper, `#FF5B22` on ink).
-        static func orangeRows(of image: CGImage) -> [Int] {
-            guard let buffer = PixelBuffer(image) else {
-                return []
-            }
-            return (0 ..< buffer.height).filter { line in
+        static func orangeRows(of buffer: PixelBuffer) -> [Int] {
+            (0 ..< buffer.height).filter { line in
                 buffer.pixels[line * buffer.width ..< (line + 1) * buffer.width].contains { pixel in
                     let (red, green, blue) = (Int(pixel.red), Int(pixel.green), Int(pixel.blue))
                     return red >= 150 && green * 2 <= red && blue * 3 <= red
@@ -199,8 +196,14 @@
                 dynamicTypeSize: .large
             ))
             let scale = CGFloat(image.width) / width
-            let orange = Self.orangeRows(of: image).map { CGFloat($0) / scale }
-            #expect(!orange.isEmpty, "the check cannot see orange in this appearance")
+            let buffer = try #require(PixelBuffer(image), "the picture, \(image.width)×\(image.height), was not read")
+            let orange = Self.orangeRows(of: buffer).map { CGFloat($0) / scale }
+            // The picture's size, corner pixel and whether it is one colour: a render with no orange was seen
+            // once on CI (run 43194184785, `.dropSet` light), as a blank one was in onboarding's pill test.
+            let isOneColour = buffer.pixels.allSatisfy { $0 == buffer.pixels.first }
+            let corner = buffer.pixel(column: 0, row: 0)
+            let picture = "\(buffer.width)×\(buffer.height), corner \(corner), one colour \(isOneColour)"
+            #expect(!orange.isEmpty, "the check cannot see orange in this appearance; \(picture)")
             // Where orange may be: the shown row (with the rule over it) and the rows that are logged.
             let allowed = rows.filter { $0.state != .pending }.map(\.summary) + current
             // The reader hosts the page wherever it likes: a marker over the page says where its top is.

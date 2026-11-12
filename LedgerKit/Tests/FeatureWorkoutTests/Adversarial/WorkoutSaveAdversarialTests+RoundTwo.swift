@@ -38,7 +38,7 @@ extension WorkoutSaveAdversarialTests {
         let store = scene.store(WorkoutStoreSaveTests.moving(date))
         let following = Task { await store.follow() }
         defer { following.cancel() }
-        guard await eventually("the cover to show the workout", { store.shown != nil }) else {
+        guard await observed("the cover to show the workout", { store.shown != nil }) else {
             return
         }
         store.send(.finish)
@@ -46,7 +46,7 @@ extension WorkoutSaveAdversarialTests {
         store.send(.discard)
         let work = Task { await store.discard() }
         await SaveCover.ended([work], "the discard")
-        guard await eventually("the cover to close", { store.exit != nil }) else {
+        guard await observed("the cover to close", { store.exit != nil }) else {
             return
         }
         let stored = try await scene.stores.workouts.workout(id: running.id)

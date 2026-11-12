@@ -34,6 +34,22 @@ nonisolated struct RestProbeClock: Clock {
         TestClock<Duration>.Instant().duration(to: base.now)
     }
 
+    /// Whether a sleep is registered with `base`, so that moving time to its end wakes it. `due` is set a
+    /// moment before: on the task's own thread, which can be pre-empted before `TestClock.sleep` registers
+    /// the sleep, and an `advance(to: due)` in that gap wakes nothing. `checkSuspension()` throws exactly
+    /// when a sleep is registered (swift-clocks 82440fa: `megaYield`, then `suspensions.isEmpty`); the
+    /// rest's task is the only sleeper on this clock.
+    var isAsleep: Bool {
+        get async {
+            do {
+                try await base.checkSuspension()
+                return false
+            } catch {
+                return true
+            }
+        }
+    }
+
     func sleep(until deadline: TestClock<Duration>.Instant, tolerance: Duration?) async throws {
         due.setValue(deadline)
         sleeps.withValue { $0 += 1 }
@@ -134,12 +150,25 @@ final class RestCover {
             await store.keepRestTime()
             self.isKeeperDone = true
         }
-        await eventually("the rest's task asleep or ended") { self.isKeeperDone || self.clock.sleeps.value > mark }
+        await eventually("the rest's task asleep or ended") {
+            if self.isKeeperDone {
+                return true
+            }
+            return self.clock.sleeps.value > mark ? await self.clock.isAsleep : false
+        }
     }
 
+    /// Returns with the rest's task ended, or asleep in a wait that ends later than now and is registered
+    /// with the clock (`RestProbeClock.isAsleep`), so that `run` and `endPendingWait` wake it.
     private func asleepOrDone() async {
         await eventually("the rest's task asleep again or ended") {
-            self.isKeeperDone || (self.clock.due.value.map { $0 > self.clock.base.now } ?? true)
+            if self.isKeeperDone {
+                return true
+            }
+            guard let due = self.clock.due.value else {
+                return true
+            }
+            return due > self.clock.base.now ? await self.clock.isAsleep : false
         }
     }
 
@@ -163,9 +192,20 @@ final class RestCover {
 
     // MARK: Time
 
-    /// `seconds` go by with the phone awake.
+    /// `seconds` go by with the phone awake: the rest's task wakes at each of its waits on time. So time
+    /// moves to the end of the wait it is asleep in, the task is let read the date and sleep again, and
+    /// only then does time move on. A single `advance` over all of it would also wake the task at each
+    /// wait, but would move on as soon as its few yields ran out: on a loaded machine the task then reads a
+    /// date seconds after its wait ended (a buzz the app rightly holds back, the walk's seeds 102964 and
+    /// 158397), or starts its next wait from a date read before the jump (a panel seconds behind until it
+    /// next wakes, seed 142559). Neither is a phone that is awake.
     func run(_ seconds: Double) async {
-        await clock.base.advance(by: .seconds(seconds))
+        let end = clock.base.now.advanced(by: .seconds(seconds))
+        while !isKeeperDone, let due = clock.due.value, due > clock.base.now, due < end {
+            await clock.base.advance(to: due)
+            await asleepOrDone()
+        }
+        await clock.base.advance(to: end)
         await asleepOrDone()
     }
 
@@ -204,7 +244,7 @@ final class RestCover {
     func settle() async {
         await eventually("the taps to be applied") { self.store.queue.isEmpty && !self.store.isDraining }
         let truth = await truth()
-        await eventually("the page to show the session's workout") {
+        await observed("the page to show the session's workout") {
             self.store.shown == truth || self.store.exit != nil
         }
         await sync()
