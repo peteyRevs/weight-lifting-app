@@ -146,14 +146,18 @@ extension WorkoutAnnouncementAdversarialTests {
     @Test("The walk is not vacuous: rests begin, are extended, end on time, and covers reopen on running rests")
     func walk_isNotVacuous() async throws {
         var (starts, over, reopened, seconds) = (0, 0, 0, 0)
-        for seed in RestSeeds.all.prefix(40) {
+        // 25 seeds, not 40: `RestCover.run` wakes the rest's task at each of its waits (`chore(test)`), which
+        // made 40 walks take 21 s on a Mac and past the PR lane's 60 s on the runner. The first 25 give 369
+        // rests said, 22 under a minute, 23 Rest over and 56 covers reopened, clearing every floor below
+        // (measured 2026-11-12; the 40 gave 582, 36, 31 and 87).
+        for seed in RestSeeds.all.prefix(25) {
             let heard = try await Self.walk(seed: seed)
             starts += heard.owed.count
             over += heard.said.count { $0 == "Rest over" }
             reopened += heard.reopened
             seconds += heard.owed.count { $0.hasSuffix("seconds remaining") && !$0.contains("minute") }
         }
-        print("announcement walk, first 40 seeds: rests said \(starts), under a minute \(seconds),"
+        print("announcement walk, first 25 seeds: rests said \(starts), under a minute \(seconds),"
             + " Rest over \(over), covers reopened \(reopened)")
         #expect(starts >= 200)
         #expect(seconds >= 20)
