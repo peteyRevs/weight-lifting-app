@@ -95,13 +95,21 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
           SHARD: ${{ matrix.leg }}/${{ matrix.legs }}
         run: scripts/check.sh --nightly "--$PLATFORM-only" --skip-lint --shard "$SHARD"
+      # A red watch leg keeps the simulator logs: run 43250355937's watch simulator shut down mid-test four
+      # times ("Test crashed with signal kill"), and its bundles do not say why.
+      - name: Collect the simulator logs
+        if: ${{ failure() && matrix.platform == 'watch' }}
+        run: |
+          mkdir -p .derivedData/SimulatorLogs
+          cp -R ~/Library/Logs/CoreSimulator/. .derivedData/SimulatorLogs/CoreSimulator 2>/dev/null || true
+          cp -R ~/Library/Logs/DiagnosticReports/. .derivedData/SimulatorLogs/DiagnosticReports 2>/dev/null || true
       # On a red or interrupted leg too. A bundle is ~35,000 small files, which download-artifact failed to
       # extract on the macOS runner (pr.yml); one tar file round-trips.
       - name: Pack the result bundles and snapshot diffs
         if: ${{ !cancelled() }}
         run: | # whichever exists: a leg that failed before its build has neither
           kept=()
-          for dir in Results SnapshotArtifacts; do
+          for dir in Results SnapshotArtifacts SimulatorLogs; do
             if [[ -d ".derivedData/$dir" ]]; then kept+=("$dir"); fi
           done
           if [[ ${#kept[@]} -gt 0 ]]; then tar -cf nightly-results.tar -C .derivedData "${kept[@]}"; fi
