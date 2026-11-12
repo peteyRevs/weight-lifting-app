@@ -5,36 +5,40 @@
 # Every target the plan enables is whole in exactly one leg, and each suite entry names a suite of a target whole
 # in another leg, once (scripts/tests/adversarial/pr-shards.adv.sh, which checks every shards file).
 #
-# Balanced by each entry's test time on the runner, in seconds: run 43170933804 (main 71533ae, the first legs,
-# cold builds of 1,132-1,455 s), from the "Launch <target>" sections of each bundle's action log and the
-# "Suite ... after" (Swift Testing) and "Test Suite ... Executed ... in" (XCTest) lines. Each leg tests for
-# 2,100-2,900 s; with a build of up to ~1,500 s, every leg ends within about 75 min. The rest walk is
-# WorkoutRestAdversarialTests' 1,493 s, about 1.8 times that after the chore(test) branch (~2,690). Rebalance
-# from a newer run's bundles when a leg's total nears 75 min.
-1 FeatureWorkoutTests/WorkoutRestAdversarialTests   # 1,493 (~2,690)
-1 FeatureLibraryTests                               #    80
-1 FeatureHistoryTests                               #    66
-1 FeatureSettingsTests                              #    44
-2 FeatureWorkoutTests/WorkoutSaveAdversarialTests   # 2,061
-2 LedgerTests                                       #    19
-2 LedgerDependenciesTests                           #     8
-2 LedgerHealthTests                                 #     1
-2 LedgerActivityKitTests                            #     1
-3 FeatureWorkoutTests                               # 2,631 without the two suites above (6,185 whole)
-4 LedgerUITests                                     # 1,617 without the classes in leg 5 (3,361 whole)
-4 LedgerDesignTests                                 #   242
-4 FeatureOnboardingTests                            #   151
-4 FeatureTodayTests                                 #   133
-4 LedgerAppKitTests                                 #    95
-5 LedgerUITests/WorkoutFinishAdversarial            #   365
-5 LedgerUITests/LibraryAuditAdversarial             #   270
-5 LedgerUITests/OnboardingAdversarial               #   249
-5 LedgerUITests/DayEditor                           #   239
-5 LedgerUITests/TabsAdversarial                     #   227
-5 LedgerUITests/WorkoutHistory                      #   216
-5 LedgerUITests/Builder                             #   178
-5 LedgerSyncTests                                   # 1,075
-6 LedgerPersistenceTests                            # 2,592 without the suite in leg 8 (3,598 whole)
-7 FeatureProgramTests                               # 2,394
-8 LedgerPersistenceTests/HistoryModelAdversarialTests # 1,006
-8 LedgerDomainTests                                 # 1,148
+# Balanced by each entry's test time on the runner, in seconds: run 43250355937 (this branch at 3b26895, builds
+# of 1,111-2,092 s), from the "Launch <target>" sections of each bundle's action log and, per suite, the log's
+# "Suite ... after" (Swift Testing) lines. With the deadline at 7,800 s, each leg should end at least ~1,500 s
+# short of it. That run's leg 3 held FeatureWorkoutTests without the rest and save walks, 5,904 s, and ended at
+# 7,261 s: WorkoutAnnouncementAdversarialTests alone took 4,365 s of it (1,135 s in run 43170933804, before the
+# chore(test) branch). It now has a leg of its own, and the rest of FeatureWorkoutTests (1,539 s) joins leg 6,
+# the lightest. Each leg now tests for 2,650-4,400 s: with its own build of that run, every leg ends by ~5,750 s;
+# with the slowest build seen (2,092 s), by ~6,500 s. Rebalance from a newer run's bundles when a leg's total
+# nears 6,300 s.
+1 FeatureWorkoutTests/WorkoutRestAdversarialTests   # 3,072
+1 FeatureLibraryTests                               #    84
+1 FeatureHistoryTests                               #    55
+1 FeatureSettingsTests                              #    38
+2 FeatureWorkoutTests/WorkoutSaveAdversarialTests   # 2,736
+2 LedgerTests                                       #    31
+2 LedgerDependenciesTests                           #    15
+2 LedgerHealthTests                                 #     2
+2 LedgerActivityKitTests                            #     2
+3 FeatureWorkoutTests/WorkoutAnnouncementAdversarialTests # 4,365
+4 LedgerUITests                                     # 1,840 without the classes in leg 5
+4 LedgerDesignTests                                 #   301
+4 FeatureOnboardingTests                            #   203
+4 FeatureTodayTests                                 #   166
+4 LedgerAppKitTests                                 #   105
+5 LedgerUITests/WorkoutFinishAdversarial            # these seven classes: 2,244
+5 LedgerUITests/LibraryAuditAdversarial
+5 LedgerUITests/OnboardingAdversarial
+5 LedgerUITests/DayEditor
+5 LedgerUITests/TabsAdversarial
+5 LedgerUITests/WorkoutHistory
+5 LedgerUITests/Builder
+5 LedgerSyncTests                                   # 1,277
+6 LedgerPersistenceTests                            # 2,406 without the suite in leg 8
+6 FeatureWorkoutTests                               # 1,539 without the suites in legs 1, 2 and 3
+7 FeatureProgramTests                               # 2,767
+8 LedgerPersistenceTests/HistoryModelAdversarialTests # 985
+8 LedgerDomainTests                                 # 1,451

@@ -272,10 +272,16 @@ authoritative; the plan differs:
       products handed to the legs' `test-without-building`, would save each leg its build (about 500–1,500 s)
       at the cost of an artifact round trip; a follow-up, not this change.
     - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 7,800 s in every leg; the step's timeout is 132 min, 2 min
-      after it, and the job's 145, for checkout, Xcode, mise and the tar and upload. A leg's tests take at
-      most ~2,900 s, after a build of up to 1,864 s (#94's slowest) and ~100 s of tools, catalogs and boot:
-      about 4,900 s, which leaves room for the one retry above or a runner twice as slow. Minutes are free
-      while the repository is public.
+      after it, and the job's 145, for checkout, Xcode, mise and the tar and upload. An iOS leg's tests take
+      at most ~4,400 s, after a build of up to 2,092 s (run 43250355937's slowest) and ~30 s of tools,
+      catalogs and boot: about 6,500 s at worst, ~5,750 s with each leg's own build in that run. Minutes are
+      free while the repository is public.
+    - *The legs (2026-11-12, round 3).* Run 43250355937 (this branch at 3b26895): iOS leg 3, FeatureWorkoutTests
+      without the rest and save walks, tested for 5,904 s and ended at 7,261 s, 539 s short of the deadline.
+      Its `WorkoutAnnouncementAdversarialTests` took 4,365 s of that (1,135 s in run 43170933804, before the
+      chore(test) branch), more than any lighter leg could take. Leg 3 now runs that suite alone, and the
+      rest of FeatureWorkoutTests (1,539 s) joins LedgerPersistenceTests in leg 6, then the lightest (3,625 s
+      in all). Every leg's entry times in `nightly-shards.txt` are that run's.
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
   `--skip-static` since the split above; step 2 then runs in `Static checks`, and `--shard` since
   2026-11-11; step 5 then runs in `Coverage`): steps 0–3 and 5, no watchOS step, and the coverage gate

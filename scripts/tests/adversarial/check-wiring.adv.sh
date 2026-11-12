@@ -687,9 +687,12 @@ check "W97 a leg holding a target whole runs it, less the suite another leg hold
 0 -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests|\
 0 -only-testing:FeatureProgramTests|\
 0 -only-testing:LedgerPersistenceTests -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests|"
-check "W97 ... and in nightly-shards.txt, leg 7 selects FeatureProgramTests alone, and leg 3 FeatureWorkoutTests less legs 1 and 2's suites" \
-    is "$(selection 7 nightly)|$(selection 3 nightly)" " -only-testing:FeatureProgramTests|\
- -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests"
+check "W97 ... and in nightly-shards.txt, leg 7 selects FeatureProgramTests, leg 3 the announcement walk, leg 6 two targets less 4 suites" \
+    is "$(selection 7 nightly)|$(selection 3 nightly)|$(selection 6 nightly)" " -only-testing:FeatureProgramTests|\
+ -only-testing:FeatureWorkoutTests/WorkoutAnnouncementAdversarialTests|\
+ -only-testing:LedgerPersistenceTests -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests\
+ -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests -skip-testing:FeatureWorkoutTests/WorkoutAnnouncementAdversarialTests\
+ -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests"
 
 # ---- a test runner that never connected (the nightly's watch leg 1, run 43170933804) ----------------------
 # xcodebuild failed with "The test runner hung before establishing connection." and no test ran: check.sh tests

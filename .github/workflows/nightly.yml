@@ -20,7 +20,7 @@ jobs:
     # Legs (docs/ci-cd.md, "Nightly legs"): the first nightly's one iOS job reached its 120 min while testing,
     # and its one watch job lost its runner at 61 min (run 43144335050); neither left a result bundle. Each
     # leg now tests the entries scripts/nightly-shards.txt (iOS) or nightly-watch-shards.txt gives it, balanced
-    # by run 43170933804's runner times to end within about 75 min.
+    # by run 43250355937's runner times to end at least ~1,300 s short of the deadline below.
     name: ${{ matrix.platform }} leg ${{ matrix.leg }}/${{ matrix.legs }}
     runs-on: xcode-27 # a preview image; rolling back to 26.6 means reverting F32 as a whole (pr.yml)
     timeout-minutes: 145 # the step's 132, plus checkout, Xcode, mise, and packing and uploading the bundles
@@ -78,9 +78,10 @@ jobs:
         timeout-minutes: 132 # fails the step before the job times out, so the bundles still upload
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild, which finalizes the bundle.
-          # A leg's tests take at most ~2,900 s on the runner (nightly-shards.txt), after a build of up to
-          # 1,864 s (the slowest seen, #94) and ~100 s of tools, catalogs and boot: about 4,900 s. 7,800 s
-          # leaves room for check.sh's one retry of a runner that never connected, or a runner twice as slow.
+          # An iOS leg's tests take at most ~4,400 s on the runner (nightly-shards.txt), after a build of up to
+          # 2,092 s (the slowest seen, run 43250355937) and ~30 s of tools, catalogs and boot: about 6,500 s at
+          # worst, ~5,750 s with each leg's own build in that run. 7,800 s leaves room for that build's spread
+          # and check.sh's one retry of a runner that never connected, if the hang is short.
           LEDGER_XCODEBUILD_DEADLINE: 7800
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           LEDGER_WATCH_DEST: ${{ steps.watch-sim.outputs.destination }} # empty on an iOS leg: check.sh's default
