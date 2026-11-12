@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PR CI's iOS test shards (docs/ci-cd.md, "Shards"): scripts/pr-shards.txt must place every test target the
-# PR plan enables in exactly one shard, so a target added to the plan later cannot go untested in CI, and
+# PR plan enables in exactly one shard (and each nightly leg list every target of its plan, P12), so a target added to the plan later cannot go untested in CI, and
 # scripts/check-shards.sh (the Coverage job) must check every shard's bundle before it gates their coverage.
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
@@ -22,6 +22,23 @@ check "P01 every test target the PR plan enables is in exactly one shard, and ev
 check "P02 two shards, numbered 1 and 2, each with targets" is "$(shard_numbers "$SHARDS")" "1 2 "
 bad="$(awk '$1 !~ /^#/ && NF && ($1 !~ /^[1-9][0-9]*$/ || $2 !~ /^[A-Za-z]+Tests$/ || (NF > 2 && $3 !~ /^#/))' "$SHARDS")"
 check "P03 each line is \"<shard> <test target>\", with an optional # comment" is "$bad" ""
+
+# Every shards file, the nightly's legs too (docs/ci-cd.md, "Nightly legs"): check.sh --shard reads
+# scripts/<plan, lowercase>-shards.txt for the plan it tests, so each file must place every target of its plan.
+for file in "$ROOT"/scripts/*-shards.txt; do
+    name="$(basename "$file" -shards.txt)" plan=""
+    for candidate in "$ROOT"/TestPlans/*.xctestplan; do
+        if [[ "$(basename "$candidate" .xctestplan | tr '[:upper:]' '[:lower:]')" == "$name" ]]; then plan="$candidate"; fi
+    done
+    check "P12 $(basename "$file") is a test plan's (check.sh --shard reads it for that plan)" is "${plan:+found}" found
+    [[ -n "$plan" ]] || continue
+    check "P12 ... every test target $(basename "$plan") enables is in exactly one of its shards, and no other" \
+        is "$(mismatch "$plan" "$file")" ""
+    check "P12 ... its shards are numbered 1 to their count" \
+        is "$(shard_numbers "$file")" "$(seq "$(awk '$1 !~ /^#/ && NF { print $1 }' "$file" | sort -u | wc -l)" | tr '\n' ' ')"
+    check "P12 ... each line is \"<shard> <test target>\", with an optional # comment" \
+        is "$(awk '$1 !~ /^#/ && NF && ($1 !~ /^[1-9][0-9]*$/ || $2 !~ /^[A-Za-z]+Tests$/ || (NF > 2 && $3 !~ /^#/))' "$file")" ""
+done
 
 # The comparison itself, against a plan and a shards file that drift apart as a later PR could make them.
 jq '.testTargets += [{"target": {"containerPath": "container:LedgerKit", "identifier": "FeatureNewTests", "name": "FeatureNewTests"}}]' \

@@ -69,9 +69,8 @@ $(q pr '.jobs.static.steps[] | select(.run // "" | test("check.sh")) | .env.LINU
 check "WF61 [F32] ... and no job or step name in pr.yml claims watchOS; Check's step names --ios-only" \
     is "$(q pr '[.jobs[] | .name, .steps[].name // empty] | map(select(test("watchOS"))) | length') \
 $(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .name | test("iOS.*check\\.sh --ios-only")')" "0 true"
-check "WF62 [F32] the nightly still tests both platforms, and nothing in it runs --ios-only" \
-    is "$(q nightly '[.jobs.test.strategy.matrix.include[] | .scheme + ":" + .plan] | join(",")') \
-$(grep -c -- '--ios-only' "$WF/nightly.yml")" "Ledger:Nightly,LedgerWatch:Nightly-Watch 0"
+check "WF62 [F32] the nightly still tests both platforms, each in legs (docs/ci-cd.md, \"Nightly legs\")" \
+    is "$(q nightly '[.jobs.test.strategy.matrix.include[].platform] | unique | join(",")')" "ios,watch"
 check "WF09 concurrency is per PR and cancels superseded runs" \
     is "$(q pr '.concurrency.group + " " + (.concurrency["cancel-in-progress"] | tostring)')" \
     'pr-${{ github.event.pull_request.number || github.ref }} true'
@@ -262,9 +261,10 @@ check "WF27 nightly token is empty by default; tests read, report may write issu
     '{} {"contents":"read"} {"contents":"read"} {"issues":"write"}'
 check "WF28 report runs after test and dependencies, on failure() only" \
     is "$(q nightly '(.jobs.report.needs | join(",")) + " " + .jobs.report.if')" "test,dependencies failure()"
-check "WF29 each nightly plan exists and its results are checked" \
-    is "$(for p in $(q nightly '.jobs.test.strategy.matrix.include[].plan'); do [[ -f "$ROOT/TestPlans/$p.xctestplan" ]] && echo -n ok; done) $(q nightly '.jobs.test.steps[] | select(.run // "" | test("xcodebuild test")) | .run | test("check-test-results.sh")')" \
-    "okok true"
+# The leg's own steps are check.sh's (check-wiring W88-W90: the Nightly plans, their results, the boot and pins).
+check "WF29 each nightly leg runs check.sh --nightly on its platform alone, without lint, for its leg" \
+    is "$(q nightly '[.jobs.test.steps[].run // empty | select(test("check\\.sh"))] | join(";")')" \
+    'scripts/check.sh --nightly "--$PLATFORM-only" --skip-lint --shard "$SHARD"'
 
 q nightly '.jobs.report.steps[0].run' >"$T/report.sh"
 mkdir -p "$T/ghbin"
@@ -288,52 +288,52 @@ nightly_report 7
 check "WF31 a later failure comments on the open issue instead of opening another" \
     is "$(grep -c '^issue create' "$GH_LOG") $(grep -c '^issue comment 7 .*actions/runs/99' "$GH_LOG")" "0 1"
 
-# F01's first CI run: a watch destination by name was ambiguous on the runner (exit 70). The second: parallel
-# testing's clones each paid a first boot, and the step timed out. The nightly's test step runs here with
-# the real sim-destination.sh and sim-boot.sh against the xcode-27 image's simulators; xcrun and xcodebuild log to
-# one file, in order.
+# The leg's step, run for each matrix entry with its env against a check.sh that logs its arguments.
 NB="$T/nightly-sandbox"
-mkdir -p "$NB/scripts" "$NB/bin"
-cp "${ADV_SIM_DESTINATION:-$ROOT/scripts/sim-destination.sh}" "$NB/scripts/sim-destination.sh"
-cp "${ADV_SIM_BOOT:-$ROOT/scripts/sim-boot.sh}" "$NB/scripts/sim-boot.sh"
-fake_simctl "$NB/bin"
-cat >"$NB/bin/xcodebuild" <<'SH'
-#!/bin/sh
-action="$1" dest="" parallel="" pinned=no diag=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -destination) dest="$2" ;; -parallel-testing-enabled) parallel="$parallel$2" ;;
-        -parallel-testing-worker-count) parallel="$parallel+workers" ;;
-        -onlyUsePackageVersionsFromResolvedFile) pinned=yes ;; -collect-test-diagnostics) diag="$2" ;;
-    esac
-    shift
-done
-echo "xcodebuild $action $dest parallel=$parallel" >>"$XCRUN_LOG"
-echo "$action pinned=$pinned" >>"$XCRUN_LOG.pins"
-echo "$action diagnostics=$diag" >>"$XCRUN_LOG.diag"
-SH
-printf '#!/bin/sh\ncat\n' >"$NB/bin/mise"
-printf '#!/bin/sh\n' >"$NB/scripts/check-test-results.sh"
-chmod +x "$NB/bin/xcodebuild" "$NB/bin/mise" "$NB/scripts/check-test-results.sh"
-q nightly '.jobs.test.steps[] | select(.run // "" | test("xcodebuild test")) | .run' >"$T/nightly-test.sh"
-export XCRUN_LOG="$T/nightly.log"; : >"$XCRUN_LOG"; : >"$XCRUN_LOG.pins"; : >"$XCRUN_LOG.diag"
-nightly_ok=0
-while IFS='|' read -r plan scheme destination; do
-    (cd "$NB" && PLAN="$plan" SCHEME="$scheme" DESTINATION="$destination" PATH="$NB/bin:$PATH" \
-        bash -eo pipefail "$T/nightly-test.sh" >/dev/null 2>&1) && nightly_ok=$((nightly_ok + 1))
-done < <(q nightly '.jobs.test.strategy.matrix.include[] | [.plan, .scheme, .destination] | join("|")')
-i="46F7C9EA-B38C-445A-BAD9-8A70A603E9E1" w="2416B270-8634-4D4A-9084-2B04B4498921" # the xcode-27 image's
-check "WF48 the nightly boots, builds, waits for the boot and tests serially, each simulator by UDID" \
-    is "$nightly_ok $(grep -E '^(simctl boot|xcodebuild)' "$XCRUN_LOG" | tr '\n' ';')" \
-    "2 simctl boot $i;xcodebuild build-for-testing platform=iOS Simulator,id=$i parallel=;simctl bootstatus $i -b;\
-xcodebuild test-without-building platform=iOS Simulator,id=$i parallel=NO;simctl boot $w;\
-xcodebuild build-for-testing platform=watchOS Simulator,id=$w parallel=;simctl bootstatus $w -b;\
-xcodebuild test-without-building platform=watchOS Simulator,id=$w parallel=NO;"
-check "WF51 [F32] every nightly xcodebuild resolves packages only to the committed Package.resolved" \
-    is "$(tr '\n' ';' <"$XCRUN_LOG.pins")" \
-    "build-for-testing pinned=yes;test-without-building pinned=yes;build-for-testing pinned=yes;test-without-building pinned=yes;"
-check "WF53 [F32] every nightly test run passes -collect-test-diagnostics never (a 600 s simctl diagnose on failure)" \
-    is "$(grep '^test' "$XCRUN_LOG.diag" | tr '\n' ';')" "test-without-building diagnostics=never;test-without-building diagnostics=never;"
+mkdir -p "$NB/scripts"
+printf '#!/bin/sh\necho "$*" >>"$NB_LOG"\n' >"$NB/scripts/check.sh" && chmod +x "$NB/scripts/check.sh"
+q nightly '.jobs.test.steps[] | select(.run // "" | test("check\\.sh")) | .run' >"$T/nightly-test.sh"
+export NB_LOG="$T/nightly.log"; : >"$NB_LOG"
+while IFS='|' read -r platform leg legs; do
+    (cd "$NB" && PLATFORM="$platform" SHARD="$leg/$legs" bash -eo pipefail "$T/nightly-test.sh")
+done < <(q nightly '.jobs.test | .steps[] as $s | select($s.run // "" | test("check\\.sh"))
+    | .strategy.matrix.include[] | [.platform, .leg, .legs] | map(tostring) | join("|")')
+check "WF48 the legs run check.sh on iOS, legs 1-4, and watchOS, legs 1-2, each --nightly without lint" \
+    is "$(tr '\n' ';' <"$NB_LOG")" "--nightly --ios-only --skip-lint --shard 1/4;--nightly --ios-only --skip-lint --shard 2/4;\
+--nightly --ios-only --skip-lint --shard 3/4;--nightly --ios-only --skip-lint --shard 4/4;\
+--nightly --watch-only --skip-lint --shard 1/2;--nightly --watch-only --skip-lint --shard 2/2;"
+check "WF48 ... and the step's env carries the leg from the matrix" \
+    is "$(q nightly '.jobs.test.steps[] | select(.run // "" | test("check\\.sh")) | .env | "\(.PLATFORM) \(.SHARD)"')" \
+    '${{ matrix.platform }} ${{ matrix.leg }}/${{ matrix.legs }}'
+# Each platform's legs are its shards file's, 1 to its count, so a leg added there is added here.
+legs_of() { # <platform> <shards file>: "<legs in the matrix>|<the file's legs>"
+    echo "$(q nightly ".jobs.test.strategy.matrix.include[] | select(.platform == \"$1\") | \"\(.leg)/\(.legs)\"" | paste -sd , -)|$(
+        n="$(awk '$1 !~ /^#/ && NF { print $1 }' "$ROOT/scripts/$2" | sort -u | wc -l | tr -d ' ')"
+        for ((i = 1; i <= n; i++)); do echo "$i/$n"; done | paste -sd , -)"
+}
+ios_legs="$(legs_of ios nightly-shards.txt)" watch_legs="$(legs_of watch nightly-watch-shards.txt)"
+check "WF76 the iOS legs are nightly-shards.txt's, and the watchOS legs nightly-watch-shards.txt's, a red leg cancelling none" \
+    is "$([[ "${ios_legs%|*}" == "${ios_legs#*|}" ]] && echo ios) $([[ "${watch_legs%|*}" == "${watch_legs#*|}" ]] && echo watch) \
+$(q nightly '.jobs.test.strategy."fail-fast"')" "ios watch false"
+check "WF75 a leg's deadline is 2 min before its step's timeout, and its job outlasts the step by the upload's time" \
+    is "$(q nightly '.jobs.test | (.steps[] | select(.run // "" | test("check.sh"))) as $step
+        | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \($step."timeout-minutes") \(."timeout-minutes")
+ \($step."timeout-minutes" * 60 - $step.env.LEDGER_XCODEBUILD_DEADLINE)"')" "7800 132 145
+ 120"
+# A leg that fails or reaches its deadline still uploads its bundles, as one tar (35,000 files did not extract).
+check "WF77 a red or interrupted leg packs its bundles into one tar and uploads it, per leg and attempt (not when cancelled)" \
+    is "$(q nightly '.jobs.test.steps | map(select(.name // "" | test("^Pack|^Upload")) | .if) | join(",")')
+$(q nightly '.jobs.test.steps[] | select(.uses // "" | test("upload-artifact")) | "\(.with.path) \(.with.name)"')" \
+    '${{ !cancelled() }},${{ !cancelled() }}
+nightly-results.tar nightly-${{ matrix.platform }}-leg${{ matrix.leg }}-${{ github.run_id }}-${{ github.run_attempt }}'
+q nightly '.jobs.test.steps[] | select(.name // "" | test("^Pack")) | .run' >"$T/pack.sh"
+PK="$T/pack" && mkdir -p "$PK/.derivedData/Results/Nightly-iOS-shard1.xcresult"
+(cd "$PK" && bash -eo pipefail "$T/pack.sh")
+packed="$(tar -tf "$PK/nightly-results.tar" | sort | tr '\n' ' ')"
+rm -rf "$PK" && mkdir -p "$PK"
+(cd "$PK" && bash -eo pipefail "$T/pack.sh") && empty="$([[ -e "$PK/nightly-results.tar" ]] && echo tar || echo none)"
+check "WF77 ... the tar holds what exists, and a leg that never built packs nothing and does not fail there" \
+    is "$packed|${empty:-failed}" "Results/ Results/Nightly-iOS-shard1.xcresult/ |none"
 check "WF49 Check interrupts xcodebuild 1-5 min before its step's timeout, so its bundle is finalized" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | ."timeout-minutes" * 60 - .env.LEDGER_XCODEBUILD_DEADLINE
         | . >= 60 and . <= 300')" true
@@ -414,8 +414,8 @@ $(q pr '.jobs.coverage.steps[] | select(.name == "Unpack them") | .run | rtrimst
     "PR-iOS-shard* true
 actions/checkout scripts/check-xcode-version.sh actions/download-artifact mkdir -p .derivedData/Results scripts/check-shards.sh
 $unpack"
-check "WF74 ... and the bundles are the ones check.sh --shard writes (its result name)" \
-    grep -qF '"PR-iOS${SHARD:+-shard${SHARD%/*}}"' "$ROOT/scripts/check.sh"
+check "WF74 ... and the bundles are the ones check.sh --shard writes (its result name, in the PR lane)" \
+    is "$(grep -cF '"$LANE-iOS${SHARD:+-shard${SHARD%/*}}"' "$ROOT/scripts/check.sh") $(grep -c '^LANE=PR ' "$ROOT/scripts/check.sh")" "1 1"
 
 # ---- release-please.yml ------------------------------------------------------------------
 check "WF32 release-please runs on push to main only" \

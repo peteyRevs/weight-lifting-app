@@ -1,5 +1,6 @@
-# Nightly (docs/ci-cd.md §3), manual only to save the free macOS minutes (Pete, 2026-09-27): the full
-# Nightly plans and a dependency report; a failure opens (or comments on) an issue labelled "nightly".
+# Nightly (docs/ci-cd.md §3 and "Nightly legs"), manual only to save the free macOS minutes (Pete, 2026-09-27):
+# the full Nightly plans, in legs, and a dependency report; a failure of any job opens (or comments on) an
+# issue labelled "nightly".
 name: Nightly
 
 on:
@@ -16,49 +17,61 @@ defaults:
 
 jobs:
   test:
-    name: ${{ matrix.plan }}
+    # Legs (docs/ci-cd.md, "Nightly legs"): the first nightly's one iOS job reached its 120 min while testing,
+    # and its one watch job lost its runner at 61 min (run 43144335050); neither left a result bundle. Each
+    # leg now tests the targets scripts/nightly-shards.txt (iOS) or nightly-watch-shards.txt gives it.
+    name: ${{ matrix.platform }} leg ${{ matrix.leg }}/${{ matrix.legs }}
     runs-on: xcode-27 # a preview image; rolling back to 26.6 means reverting F32 as a whole (pr.yml)
-    timeout-minutes: 120
+    timeout-minutes: 145 # the step's 132, plus checkout, Xcode, mise, and packing and uploading the bundles
     permissions:
       contents: read
     strategy:
-      fail-fast: false
-      matrix:
+      fail-fast: false # every leg reports
+      matrix: # each shards file's legs, 1 to its count (WF76)
         include:
-          - { plan: Nightly, scheme: Ledger, destination: "platform=iOS Simulator,name=iPhone 17,OS=27.0" }
-          - { plan: Nightly-Watch, scheme: LedgerWatch, destination: "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0" }
+          - { platform: ios, leg: 1, legs: 4 }
+          - { platform: ios, leg: 2, legs: 4 }
+          - { platform: ios, leg: 3, legs: 4 }
+          - { platform: ios, leg: 4, legs: 4 }
+          - { platform: watch, leg: 1, legs: 2 }
+          - { platform: watch, leg: 2, legs: 2 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # as every job that runs check.sh (WF47), though --skip-lint runs no script test
       - name: Select Xcode from .xcode-version
         run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
-      - name: Check the selected Xcode against .xcode-version # pr.yml has check.sh step 0 for this
-        run: scripts/check-xcode-version.sh
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - name: Test the ${{ matrix.plan }} plan
+      # check.sh as the PR shards run it: step 0 checks the Xcode against .xcode-version, then this platform's
+      # build, the simulator's boot and the leg's tests, by UDID and one at a time, and check-test-results.sh
+      # over the leg's targets. No format, lint or coverage gate (the PR lane's).
+      - name: Test one leg of the Nightly plans (check.sh --nightly --skip-lint --shard)
+        timeout-minutes: 132 # fails the step before the job times out, so the bundles still upload
         env:
-          PLAN: ${{ matrix.plan }}
-          SCHEME: ${{ matrix.scheme }}
-          DESTINATION: ${{ matrix.destination }}
-        run: | # as check.sh steps 3–4: by UDID, built while the simulator boots, then tested on it alone
-          dest="$(scripts/sim-destination.sh "$DESTINATION")"
-          scripts/sim-boot.sh "$dest"
-          xcargs=(-project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$dest"
-            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
-            -onlyUsePackageVersionsFromResolvedFile)
-          xcodebuild build-for-testing "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN-build.xcresult" \
-            -quiet | mise exec -- xcbeautify --renderer github-actions
-          scripts/sim-boot.sh --wait "$dest"
-          xcodebuild test-without-building "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN.xcresult" \
-            -collect-test-diagnostics never -parallel-testing-enabled NO -test-timeouts-enabled YES -quiet |
-            mise exec -- xcbeautify --renderer github-actions
-          scripts/check-test-results.sh ".derivedData/Results/$PLAN.xcresult" "TestPlans/$PLAN.xctestplan"
-      - name: Upload the result bundle
+          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild, which finalizes the bundle.
+          # The largest leg, FeatureWorkoutTests alone, tests about 3,150 s on a developer Mac: 4,100-4,700 s
+          # at the 1.3-1.5 times a runner takes, after the runner's slowest build seen, 1,864 s, and about
+          # 100 s of tools, catalogs and boot. 7,800 s leaves about 1,100-1,700 s past that.
+          LEDGER_XCODEBUILD_DEADLINE: 7800
+          PLATFORM: ${{ matrix.platform }}
+          SHARD: ${{ matrix.leg }}/${{ matrix.legs }}
+        run: scripts/check.sh --nightly "--$PLATFORM-only" --skip-lint --shard "$SHARD"
+      # On a red or interrupted leg too. A bundle is ~35,000 small files, which download-artifact failed to
+      # extract on the macOS runner (pr.yml); one tar file round-trips.
+      - name: Pack the result bundles and snapshot diffs
+        if: ${{ !cancelled() }}
+        run: | # whichever exists: a leg that failed before its build has neither
+          kept=()
+          for dir in Results SnapshotArtifacts; do
+            if [[ -d ".derivedData/$dir" ]]; then kept+=("$dir"); fi
+          done
+          if [[ ${#kept[@]} -gt 0 ]]; then tar -cf nightly-results.tar -C .derivedData "${kept[@]}"; fi
+      - name: Upload them
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nightly-${{ matrix.plan }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .derivedData/Results
-          include-hidden-files: true # it lives under .derivedData/
+          name: nightly-${{ matrix.platform }}-leg${{ matrix.leg }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: nightly-results.tar
           if-no-files-found: ignore
           retention-days: 14
 
