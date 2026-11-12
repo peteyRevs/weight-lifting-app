@@ -99,7 +99,9 @@ final class SteppedRoot {
 @Suite("Adversarial F08 S2 · random interleavings of taps, cancellation and slow stores", .timeLimit(.minutes(1)))
 struct OnboardingInterleavingAdversarialTests {
     /// 100 interleavings in the PR lane, 1,500 in the nightly one (testing-strategy §6).
-    static let seeds: Range<UInt64> = 0 ..< (AdversarialLane.isNightly ? 1500 : 100)
+    nonisolated static let seeds: Range<UInt64> = 0 ..< (AdversarialLane.isNightly ? 1500 : 100)
+    /// The seeds a hundred to a case: the suite's one minute is each block's, not the whole range's.
+    nonisolated static let seedBlocks = AdversarialLane.blocks(of: seeds)
     static let moves = 45
 
     static func randomTap(using random: inout SplitMix64) -> OnboardingAction {
@@ -186,13 +188,22 @@ struct OnboardingInterleavingAdversarialTests {
         #expect(scene.programs.saved.count == 1, "seed \(seed)")
     }
 
-    @Test("Seeded interleavings of 45 moves never store two programs, a wrong one, or leave the screen dead")
-    func randomInterleavings_storeAtMostOneAndNeverStick() async throws {
+    @Test(
+        "Seeded interleavings of 45 moves never store two programs, a wrong one, or leave the screen dead",
+        arguments: seedBlocks
+    )
+    func randomInterleavings_storeAtMostOneAndNeverStick(seeds: Range<UInt64>) async throws {
         var coverage: Set<String> = []
-        for seed in Self.seeds {
+        for seed in seeds {
             try await coverage.formUnion(Self.interleave(seed: seed))
         }
-        // Control: the interleavings reached the orders they are meant to attack.
+        // Control: the interleavings reached the orders they are meant to attack. The first block's (the PR
+        // lane's 100 seeds) must reach them all, so the nightly lane's 1,500 do too; a block of later seeds
+        // alone may miss the rarest (a block of 100 from 500 on missed a cancelled save that honours its
+        // cancellation, measured 2026-11-12).
+        guard seeds == Self.seedBlocks.first else {
+            return
+        }
         let attacked: Set = [
             "cancelled settings.load pass", "cancelled exercises.all pass", "cancelled programs.save pass",
             "cancelled programs.save honourCancellation", "cancelled programs.save fail", "cancelled prepare pass",
