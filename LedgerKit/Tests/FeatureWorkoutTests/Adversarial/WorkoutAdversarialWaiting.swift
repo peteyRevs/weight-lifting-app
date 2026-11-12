@@ -45,14 +45,15 @@ func eventually(
     return true
 }
 
-/// Waits until `condition` holds by watching what it reads (Observation), as the hosted root's
-/// `eventually(_:)` (`WorkoutScene.swift`) does, never by polling: for a condition on observable state alone
-/// (a store's `workout`, `exit`, `dialog`, and what is drawn from them). A busy machine runs what it waits for
-/// later, so a wall-clock bound would make the test's verdict the machine's speed (seen as "never came in
-/// 10 s" on a loaded Mac, F13 S3's findings). `hangGuard` is not that verdict: it only turns a wait that
-/// would hang into a failure that says what it waited for, short of the shortest time limit of a suite that
-/// waits here (one minute). A condition on what is not observable (an actor, a `LockIsolated`, the store's
-/// queue) waits by `eventually(_:limit:_:)`, which polls.
+/// Waits until `condition` holds by watching what it reads (Observation), never by polling: for a condition
+/// on observable state alone (a store's `workout`, `exit`, `dialog`, and what is drawn from them). A busy
+/// machine runs what it waits for later, so a wall-clock bound short enough to fail fast makes the machine's
+/// speed the test's verdict (as "never came in 10 s" did on a loaded Mac, F13 S3's findings).
+///
+/// `hangGuard` is not a verdict on how long the condition took. It only ends a wait that would otherwise
+/// last until the suite's time limit, with a failure that names what it waited for, and it is set below the
+/// shortest time limit of a suite that waits here (one minute). A condition on what is not observable (an
+/// actor, a `LockIsolated`, the store's queue) waits by `eventually(_:limit:_:)`, which polls.
 @MainActor
 @discardableResult
 func observed(
@@ -63,7 +64,9 @@ func observed(
 ) async -> Bool {
     let watching = Task { await holds(condition) }
     let guarding = Task {
-        try? await Task.sleep(for: hangGuard)
+        guard await (try? Task.sleep(for: hangGuard)) != nil else {
+            return
+        }
         watching.cancel()
     }
     defer { guarding.cancel() }
