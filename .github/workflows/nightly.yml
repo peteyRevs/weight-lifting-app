@@ -65,11 +65,16 @@ jobs:
       # The image pairs its Series 12 (46mm) with an iPhone 18 Pro Max, and once unpaired xcodebuild still sent
       # the watch's app-hosted tests to that phone (run 43170933804). A watch leg tests on a new simulator of
       # check.sh's default watch, never paired (sim-destination.sh --fresh), and deletes it at the end.
+      # On watchOS 27.2, not check.sh's 27.0: this image mounts the watchOS 27.0 runtime (24R362) twice, from
+      # CoreSimulator/Volumes and from cryptexd, and CoreSimulator shuts it down whenever it switches between
+      # them ("a path is on an unmounting volume"). That took the watch simulator down mid-test ("Test crashed
+      # with signal kill", runs 43250355937 and 43294406441) or out of xcodebuild's destinations before the
+      # tests (exit 70). The 27.2 runtime is cryptex-only, and no 27.2 device was shut down in either run.
       - name: Create a never-paired watch simulator (watch legs)
         id: watch-sim
         if: matrix.platform == 'watch'
         run: |
-          destination="$(scripts/sim-destination.sh --fresh "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0")"
+          destination="$(scripts/sim-destination.sh --fresh "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.2")"
           echo "destination=$destination" | tee -a "$GITHUB_OUTPUT"
       # check.sh as the PR shards run it: step 0 checks the Xcode against .xcode-version, then this platform's
       # build, the simulator's boot and the leg's tests, by UDID and one at a time, and check-test-results.sh
@@ -95,10 +100,11 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
           SHARD: ${{ matrix.leg }}/${{ matrix.legs }}
         run: scripts/check.sh --nightly "--$PLATFORM-only" --skip-lint --shard "$SHARD"
-      # A red watch leg keeps the simulator logs: run 43250355937's watch simulator shut down mid-test four
-      # times ("Test crashed with signal kill"), and its bundles do not say why.
+      # A red leg keeps the simulator logs: the bundles of run 43250355937's watch legs did not say why the
+      # simulator shut down mid-test (these logs did: the runtime's remount, above), nor those of run
+      # 43294406441's iOS leg 3 why its announcement walk ran ~25 times slower than the run before.
       - name: Collect the simulator logs
-        if: ${{ failure() && matrix.platform == 'watch' }}
+        if: ${{ failure() }}
         run: |
           mkdir -p .derivedData/SimulatorLogs
           cp -R ~/Library/Logs/CoreSimulator/. .derivedData/SimulatorLogs/CoreSimulator 2>/dev/null || true

@@ -268,6 +268,12 @@ authoritative; the plan differs:
       watch, of its device type and runtime, never paired or booted (`sim-destination.sh --fresh`, SD30–SD33),
       passes it to `check.sh` as `LEDGER_WATCH_DEST`, and deletes it at the end (`continue-on-error`; WF80).
       The local gate and the PR lane keep the named simulators.
+    - *watchOS 27.2 on the runner (2026-11-12).* The image mounts the watchOS 27.0 runtime twice (from
+      CoreSimulator's Volumes and from cryptexd), and CoreSimulator shuts it down each time it switches between
+      them. That killed the watch simulator mid-test ("Test crashed with signal kill", runs 43250355937 and
+      43294406441), or removed it from xcodebuild's destinations before the tests started (exit 70). The nightly's
+      watch legs therefore create their simulator on watchOS 27.2, which is cryptex-only; the local gate stays on
+      27.0. A red leg uploads `~/Library/Logs/CoreSimulator` and `DiagnosticReports` with its bundles.
     - *Next (deferred).* Every leg builds the same tree for its platform. One build job per platform, its
       products handed to the legs' `test-without-building`, would save each leg its build (about 500–1,500 s)
       at the cost of an artifact round trip; a follow-up, not this change.

@@ -32,11 +32,10 @@ if [[ -z "$udid" ]]; then
     read -r udid type <<<"$found" || true # an empty line: no such simulator, named below
     [[ -n "$udid" ]] || { echo "error: no available simulator matches '$1' (name and OS, or id)" >&2; exit 1; }
     if [[ $fresh -eq 1 ]]; then
-        # Its runtime must be usable: available, with an architecture. On one runner (run 43250355937, watch
-        # leg 2) the watchOS 27.0 devices were listed as available, yet xcodebuild logged "SimDevice native
-        # architecture is nil" for them (a runtime of "(null)", no supported architectures), listed only the
-        # 27.2 watches and exited 70 after the build. That runtime's devices cannot run tests, so a new one
-        # cannot either. Fail here, naming it; the OS is pinned, so never fall back to another.
+        # Its runtime must be usable: available, with an architecture; a new simulator on one that is not cannot
+        # run tests. Fail here, naming it; the OS is pinned, so never fall back to another. (This does not catch
+        # a runtime that goes away later: the image's watchOS 27.0 is remounted mid-run, which is why the
+        # nightly's watch legs ask for 27.2; docs/ci-cd.md.)
         runtimes="$(xcrun simctl list runtimes --json)"
         if ! jq -e --arg runtime "$runtime" \
             'any(.runtimes[]?; .identifier == $runtime and .isAvailable == true and (.supportedArchitectures // [] | length > 0))' \
