@@ -160,8 +160,10 @@ keeping with no PR yet.
   to build after #55); phone references are drawn a few points cut on long pages and their precision lets a
   44 to 74 pt change pass (proposal in the record: one harness change and a `chore(snapshots):` PR). Still
   queued from before: package targets do not yet build with warnings as errors in `check.sh`; `LedgerDesign`'s
-  and the watch's strings are not in catalogs yet; a recording seam for the logger; three tests that fail in the
-  nightly lane on one thread; the hosted run's text-size matrices and build time (the PR-lane record's "Not
+  and the watch's strings are not in catalogs yet; a recording seam for the logger; two overlap-check tests that
+  cannot see their fault on a one-thread pool (`racyClient_isRejectedByThisSuitesOverlapChecks` in
+  `SessionContractBite`/`RoundTwoAdversarialTests`; no lane runs on one thread; the third, the timing test,
+  passes since, `chore(test)` 2026-11-11); the hosted run's text-size matrices and build time (the PR-lane record's "Not
   done").
 
 ## M2 — Apple Watch (target: 3 weeks; real devices required)
