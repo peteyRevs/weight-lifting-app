@@ -82,8 +82,14 @@
                 for scheme in Self.themes {
                     // The hosted PR run keeps the default size alone (F08 S2/S3 port, criterion 25).
                     for size in TestSweep.sizes([.large, .accessibility3]) {
-                        let bands = try Self.bands(Self.drawn(state, scheme, size))
-                        let context: Comment = "\(state.step) \(state.phase) \(scheme) \(size): \(bands.prefix(3))"
+                        let buffer = try Self.drawn(state, scheme, size)
+                        let bands = Self.bands(buffer)
+                        // The picture's size and corner pixel too: a blank render was seen once on CI (run
+                        // 43157142440, attempt 1, its first case) and not reproduced since; they tell an empty
+                        // picture from a transparent or a one-colour one.
+                        let picture = "\(buffer.width)×\(buffer.height), corner \(buffer.pixel(column: 0, row: 0))"
+                        let drawnCase = "\(state.step) \(state.phase) \(scheme) \(size)"
+                        let context: Comment = "\(drawnCase): \(bands.prefix(3)); \(picture)"
                         try #require(bands.count >= 4, context)
                         let back = bands[0].columns.lowerBound
                         let bars = bands[1].columns.lowerBound
