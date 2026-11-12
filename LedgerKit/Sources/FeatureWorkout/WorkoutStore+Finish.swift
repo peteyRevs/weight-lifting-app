@@ -155,14 +155,12 @@ extension WorkoutStore {
             isDiscarding = false
         } catch {
             guard !(error is CancellationError && Task.isCancelled) else {
-                // Asked from a task of its own: this one is cancelled, and a client may answer that alone.
-                isDiscarding = await Task { [session] in
-                    do {
-                        return try await session.current() == nil
-                    } catch {
-                        return false
-                    }
-                }.value
+                // An answer of "cancelled" from this task, which is, counts as not known.
+                do {
+                    isDiscarding = try await session.current() == nil
+                } catch {
+                    isDiscarding = false
+                }
                 return
             }
             isDiscarding = false
