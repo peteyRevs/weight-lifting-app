@@ -348,10 +348,12 @@ check "WF80 ... check.sh tests on it (its LEDGER_WATCH_DEST; empty on an iOS leg
 check "WF80 ... and at the end, unless cancelled, deletes that simulator, never turning the leg red" \
     is "$(grep -E '^simctl (shutdown|delete)' "$WS/xcrun.log" | tr '\n' ';')|$(q nightly '.jobs.test.steps[] | select(.name == "Delete the watch simulator") | "\(.if) \(."continue-on-error")"')" \
     "simctl shutdown C4EA7ED0-0000-4000-8000-000000000001;simctl delete C4EA7ED0-0000-4000-8000-000000000001;|\${{ !cancelled() && steps.watch-sim.outputs.destination != '' }} true"
-# Performance budgets on the runner (testing-strategy §2.2): the nightly's legs alone hold timings to twice them.
-check "WF79 only the nightly's legs set the performance runner factor, 2, for the test runner (a median against twice the budget); no plan sets it" \
+# Performance budgets on the runner (testing-strategy §2.2): the nightly's legs alone hold timings to a multiple of
+# them, 2 on an iOS leg and 3 on a watch leg (whose simulator ran 2.2-3.3 times this Mac's, run 43250355937).
+check "WF79 only the nightly's legs set the performance runner factor for the test runner, 3 on a watch leg and 2 on an iOS leg; no plan sets it" \
     is "$(q nightly '.jobs.test.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR') \
-$(cat "$WF"/*.yml | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR:') $(cat "$ROOT"/TestPlans/*.xctestplan | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR')" "2 1 0"
+$(cat "$WF"/*.yml | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR:') $(cat "$ROOT"/TestPlans/*.xctestplan | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR')" \
+    "\${{ matrix.platform == 'watch' && 3 || 2 }} 1 0"
 # A leg that fails or reaches its deadline still uploads its bundles, as one tar (35,000 files did not extract).
 check "WF77 a red or interrupted leg packs its bundles into one tar and uploads it, per leg and attempt (not when cancelled)" \
     is "$(q nightly '.jobs.test.steps | map(select(.name // "" | test("^Pack|^Upload")) | .if) | join(",")')

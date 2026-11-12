@@ -243,8 +243,10 @@ authoritative; the plan differs:
       concurrent macOS jobs, so some legs queue: the run's wall time grows, no leg's time does. The runner
       took 2.4–3.1 times this Mac's time per target (Domain 1,148 against 369 s, Sync 1,075 against 370),
       not the 1.3–1.5 assumed in round 1. Rebalance from a newer run's bundles when a leg's total nears 75 min.
-    - *Performance budgets.* Each leg sets `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR: 2`: on the runner a
-      timing test holds its median to twice its budget (testing-strategy §2.2, "Budgets and the runner").
+    - *Performance budgets.* Each leg sets `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR`, 2 on an iOS leg and 3
+      on a watch leg: on the runner a timing test holds its median to its budget times that factor
+      (testing-strategy §2.2, "Budgets and the runner"). The watch legs' simulator ran each timed query 2.2-3.3
+      times slower than this Mac's (run 43250355937), so twice the budget failed `historyList` there.
     - *Caches.* Each leg restores `main`'s package checkouts and compilation cache under Check's keys
       (`actions/cache/restore`, WF78) and runs `check.sh` with `LEDGER_COMPILATION_CACHE=YES`; only
       `main-cache.yml` saves them. A dispatch on `main` restores `main`'s newest cache.

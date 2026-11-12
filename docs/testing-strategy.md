@@ -128,9 +128,14 @@ Concrete test names (file = suite = source type; see §6):
     Mac, the local nightly, `swift test`): each test holds its own statistic, its
     95th percentile or its median, to its budget as written, as before.
   - *Runner* (the variable set): every test holds its median to its budget times
-    the factor. Only `nightly.yml` sets it, to 2, as
+    the factor. Only `nightly.yml` sets it, as
     `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR` (`xcodebuild` hands the test
-    runner the variable without the prefix; `workflows.adv.sh` WF79).
+    runner the variable without the prefix; `workflows.adv.sh` WF79): 2 on an
+    iOS leg, 3 on a watch leg. The runner's watch simulator ran every timed
+    query 2.2-3.3 times slower than a developer Mac's (run 43250355937, against
+    three local runs): `historyList`'s fetch had a median of 40.6 ms on it and
+    14.5-15.9 ms here, its budget 20 ms, so twice the budget failed it while the
+    budget held on the reference machine.
   - Every verdict reports the median, the 95th percentile and the runs, in the
     failure message and the attachments. On the runner a 95th percentile over
     the scaled budget is also recorded at the test's line as a warning issue

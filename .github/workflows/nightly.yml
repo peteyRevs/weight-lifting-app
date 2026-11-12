@@ -85,10 +85,12 @@ jobs:
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           LEDGER_WATCH_DEST: ${{ steps.watch-sim.outputs.destination }} # empty on an iOS leg: check.sh's default
           # Each timing budget is the reference machine's, a simulator on a developer Mac. On this shared VM a
-          # timing test holds its median to twice its budget (testing-strategy §2.2, "Budgets and the runner").
+          # timing test holds its median to its budget times this factor (testing-strategy §2.2, "Budgets and the
+          # runner"): 2 on an iOS leg, 3 on a watch leg, whose simulator ran every timed query 2.2-3.3 times
+          # slower than this Mac's watch simulator (run 43250355937; historyList's fetch 40.6 ms against 15 ms).
           # xcodebuild hands a TEST_RUNNER_ variable to the test runner without its prefix. The local nightly and
           # every other job leave it unset.
-          TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR: 2
+          TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR: ${{ matrix.platform == 'watch' && 3 || 2 }}
           PLATFORM: ${{ matrix.platform }}
           SHARD: ${{ matrix.leg }}/${{ matrix.legs }}
         run: scripts/check.sh --nightly "--$PLATFORM-only" --skip-lint --shard "$SHARD"
