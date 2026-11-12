@@ -173,7 +173,10 @@ extension NextScheduledDayPropertyAdversarialTests {
         )
         // Why the walk above asks from `lastSecond(of:in:)`: Saturday's 23:59:59 is already Sunday there.
         let elevenFiftyNine = try Support.moment(saturday, 23, 59, 59, in: zone)
-        #expect(try Support.civilDay(of: elevenFiftyNine, in: zone) == sunday)
+        try #require(
+            Support.civilDay(of: elevenFiftyNine, in: zone) == sunday,
+            "precondition: this tzdata springs America/Nuuk forward from 23:00 on 2026-03-28"
+        )
     }
 
     @Test("A later moment never gets an earlier answer.", arguments: PropertySeed.all)
