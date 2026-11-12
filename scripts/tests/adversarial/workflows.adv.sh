@@ -337,14 +337,14 @@ check "WF53 [F32] every nightly test run passes -collect-test-diagnostics never 
 check "WF49 Check interrupts xcodebuild 1-5 min before its step's timeout, so its bundle is finalized" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | ."timeout-minutes" * 60 - .env.LEDGER_XCODEBUILD_DEADLINE
         | . >= 60 and . <= 300')" true
-# docs/ci-cd.md, "Deadline": a build of up to 1,630 s (cache restored, #72), 165 s of format and script tests, 12 s of
-# catalogs and boot, and a shard's 1,300 s of tests end near 3,110 s; the deadline leaves 490 s past that, 2 min
-# before the step's end.
-check "WF65 the deadline is 3600 s, 2 min before the step's 62 min, and the job outlasts the step (67 min)" \
+# docs/ci-cd.md, "Deadline": a build of up to 1,864 s (cache restored, #94), 165 s of format and script tests, 12 s of
+# catalogs and boot, and a slow runner's ~1,600 s of a shard's tests end near 3,640 s; the deadline leaves 860 s past
+# that, 2 min before the step's end.
+check "WF65 the deadline is 4500 s, 2 min before the step's 77 min, and the job outlasts the step (82 min)" \
     is "$(q pr '.jobs.check | (.steps[] | select(.run // "" | test("check.sh"))) as $step
         | ($step."timeout-minutes" * 60 - $step.env.LEDGER_XCODEBUILD_DEADLINE) as $interrupt
         | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \($step."timeout-minutes") \(."timeout-minutes") \($interrupt)"')" \
-    "3600 62 67 120"
+    "4500 77 82 120"
 # Seeds on the runner (tasks/chores/2026-10-09-pr-lane-time.md): Check alone cuts the seeded properties, by the
 # plan's own variable under xcodebuild's TEST_RUNNER_ prefix. The plans keep their counts, and the nightly sets none.
 check "WF66 Check runs 40 property seeds, fewer than the PR plan's; no other job, and no nightly step, sets a count" \

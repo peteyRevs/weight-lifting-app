@@ -12,9 +12,9 @@
 1 LedgerPersistenceTests   #  289 /  292
 1 LedgerDesignTests        #  185 /  217
 1 LedgerDomainTests        #   85 /  108
+1 FeatureTodayTests        #  144 /  130
 2 FeatureWorkoutTests      #  582 /  494
 2 LedgerUITests            #  158 /  106 (the plan selects Smoke)
-2 FeatureTodayTests        #  144 /  130
 2 LedgerAppKitTests        #  112 /   99
 2 FeatureLibraryTests      #   52 /   35
 2 FeatureHistoryTests      #   52 /   30

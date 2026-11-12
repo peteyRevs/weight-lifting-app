@@ -151,7 +151,7 @@ authoritative; the plan differs:
       log (`xcrun xcresulttool get log --type action`), in the only two full bundles kept (#91's first
       attempt and #88's, failure uploads): shard 1 is FeatureProgramTests, LedgerPersistenceTests,
       LedgerDesignTests and LedgerDomainTests, 1,280 / 1,298 s; shard 2 the other 13 targets, 1,270 / 1,033
-      s. Per shard, then: about 165 s of format and script tests, the build (452–1,630 s), and 1,300 s of
+      s. FeatureTodayTests moved to shard 1 on 2026-11-12 (see "Deadline"). Per shard, then: about 165 s of format and script tests, the build (452–1,630 s), and 1,300 s of
       tests, about 2,000 s warm against one job's 3,128 s. When one shard's tests run clearly longer, move
       a target in `scripts/pr-shards.txt` by a newer bundle's times. A target added to the PR plan fails
       `pr-shards.adv.sh` until it is placed in a shard.
@@ -169,11 +169,13 @@ authoritative; the plan differs:
       in four modules (at most 0.12 points), none more, as the gate's rule says.
     - *Cost.* Two macOS test jobs and a short Coverage job per PR: free while the repository is public; if
       it goes private again, about 1.3 times today's minutes for about half the wall time.
-  - *Deadline (2026-11-11).* `LEDGER_XCODEBUILD_DEADLINE` is 3,600 s per shard; the step's timeout is 62
-    min, 2 min after the deadline, and the job's 67. A shard's worst is the runner's slowest build seen
-    (1,630 s, below), 165 s of format and script tests, 12 s of catalogs and boot and 1,300 s of tests,
-    about 3,110 s; the deadline leaves about 490 s, 38 % more than either shard's tests have taken, for a
-    target's growth before the shards are rebalanced. A cold build (1,424 s) is inside the slowest seen.
+  - *Deadline (2026-11-12).* `LEDGER_XCODEBUILD_DEADLINE` is 4,500 s per shard; the step's timeout is 77
+    min, 2 min after the deadline, and the job's 82. The first day's 3,600 s (step 62, job 67) stopped
+    shard 2 of #94's second run in its tests after a 1,864 s build with the compilation cache restored;
+    the run before built the same tree in 496 and 1,090 s. A shard's worst is then that build, 165 s of
+    format and script tests, 12 s of catalogs and boot and a slow runner's ~1,600 s of tests, about
+    3,640 s; 4,500 s leaves about 860 s. A green run still takes about 35 minutes. FeatureTodayTests moved
+    to shard 1 the same day: shard 2 had tested for 1,303 s against shard 1's 928 s.
   - *Deadline until 2026-11-11 (one Check job).* `LEDGER_XCODEBUILD_DEADLINE` was 4,500 s; the step's
     timeout 77 min, 2 min after the deadline, and the job's 82. #72 (F12 S2) restored its compilation
     cache and still built for 1,062 s, then 1,630 s on a re-run (646–920 s on the four PRs before it), and

@@ -92,7 +92,7 @@ jobs:
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 67 # the step's 62, plus checkout, Xcode, mise, both caches and the uploads
+    timeout-minutes: 82 # the step's 77, plus checkout, Xcode, mise, both caches and the uploads
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,16 +132,16 @@ jobs:
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
       # macOS run here.
       - name: Format, macOS script tests, iOS build, one shard's tests (check.sh --ios-only --skip-static --shard)
-        timeout-minutes: 62 # fails the step before the job times out, so the bundles still upload
+        timeout-minutes: 77 # fails the step before the job times out, so the bundles still upload
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). Since
-          # 2026-11-11 each shard tests about half: by each target's runner time in #91's and #88's bundles
-          # (scripts/pr-shards.txt), 1,280-1,298 s and 1,033-1,270 s. A shard's worst is then the runner's
-          # slowest build seen (1,630 s, #72, cache restored), 165 s of format and script tests, 12 s of
-          # catalogs and boot, and 1,300 s of tests: about 3,110 s. 3,600 s leaves about 490 s, 38 % more
-          # test time than either half has taken, for a target's growth before scripts/pr-shards.txt is
-          # rebalanced. A cold build (1,424 s) is inside the slowest one. Until 2026-11-11, one job: 4,500.
-          LEDGER_XCODEBUILD_DEADLINE: 3600
+          # 2026-11-11 each shard tests about half (scripts/pr-shards.txt): 928 and 1,303 s in #94's first
+          # run. The runner's build varies far more than the tests: 496 to 1,864 s with the compilation cache
+          # restored (#94, 2026-11-12), and a 3,600 s deadline stopped a shard after that 1,864 s build. Its
+          # worst, 1,864 s of build, 165 s of format and script tests, 12 s of catalogs and boot and a slow
+          # runner's ~1,600 s of tests, is about 3,640 s; 4,500 s, the one job's deadline until then, leaves
+          # about 860 s. A green run still takes about 35 minutes; only a slow runner uses the rest.
+          LEDGER_XCODEBUILD_DEADLINE: 4500
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a
           # TEST_RUNNER_ variable to the test runner without the prefix, where it replaces the plan's value.
