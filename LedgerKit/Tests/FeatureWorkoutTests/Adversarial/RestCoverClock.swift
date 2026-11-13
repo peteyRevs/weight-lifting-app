@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import Testing
 
 /// The rest cover's clock (`RestCover`): time moves only when the cover moves it, and the clock says the
 /// moment the rest's task's sleep is registered, so the cover can wait for that rather than poll for it.
@@ -25,8 +26,6 @@ final nonisolated class RestCoverClock: Clock, Sendable {
         var now = Instant()
         var sleeps = 0
         var sleepers: [Int: Sleeper] = [:]
-        /// The sleep registered last.
-        var newest: Int?
         /// Sleeps cancelled before they were registered.
         var cancelled: Set<Int> = []
         var watcher: Watcher?
@@ -60,12 +59,15 @@ final nonisolated class RestCoverClock: Clock, Sendable {
         state.value.sleeps
     }
 
-    /// When the sleep registered last ends, so that `advance(to: due)` wakes it; nil once it has been woken
-    /// or cancelled. (A second task sleeping on the clock, as in `twoWaits_oneBuzz`, may have registered a
-    /// wait before it; `advance(to: due)` wakes that one too.)
+    /// How many sleeps are registered: one for each task asleep on the clock.
+    var asleep: Int {
+        state.value.sleepers.count
+    }
+
+    /// When the first registered sleep ends, so that `advance(to: due)` wakes it (and any other that ends
+    /// then); nil while none is registered.
     var due: Instant? {
-        let current = state.value
-        return current.newest.flatMap { current.sleepers[$0]?.deadline }
+        state.value.sleepers.values.map(\.deadline).min()
     }
 
     /// As `TestClock.sleep(until:tolerance:)`: a deadline already past returns at once; any other waits until
@@ -86,7 +88,6 @@ final nonisolated class RestCoverClock: Clock, Sendable {
                         return (.success(()), nil)
                     }
                     state.sleepers[id] = Sleeper(deadline: deadline, wake: wake)
-                    state.newest = id
                     return (nil, state.takeWatcher())
                 }
                 if let answer {
@@ -106,7 +107,10 @@ final nonisolated class RestCoverClock: Clock, Sendable {
         }
     }
 
-    /// Moves time to `deadline` (never back) and wakes every sleep that ends by then, in order.
+    /// Moves time to `deadline` (never back) and wakes every sleep that ends by then, by its deadline and
+    /// then in the order the sleeps began. Unlike `TestClock`, which steps `now` through each deadline, `now`
+    /// jumps to `deadline` before anything is woken, so every task woken here reads `deadline`: the cover
+    /// moves time one wait at a time, so a wait ends exactly at `deadline` there.
     func advance(to deadline: Instant) {
         let woken = state.withValue { state in
             state.now = max(state.now, deadline)
@@ -114,7 +118,7 @@ final nonisolated class RestCoverClock: Clock, Sendable {
             for id in ending.keys {
                 state.sleepers[id] = nil
             }
-            return ending.values.sorted { $0.deadline < $1.deadline }.map(\.wake)
+            return ending.sorted { ($0.value.deadline, $0.key) < ($1.value.deadline, $1.key) }.map(\.value.wake)
         }
         for wake in woken {
             wake.resume()
@@ -122,10 +126,11 @@ final nonisolated class RestCoverClock: Clock, Sendable {
     }
 
     /// Returns once a sleep has been registered, or `signal()` called, since it last returned: at once if one
-    /// has. One caller waits at a time.
+    /// has. One caller waits at a time: a second is a misuse, and stops the test.
     func changed() async {
         await withCheckedContinuation { (watcher: Watcher) in
             let isChanged = state.withValue { state in
+                precondition(state.watcher == nil, "RestCoverClock.changed() has one waiter at a time")
                 guard state.isChanged else {
                     state.watcher = watcher
                     return false
@@ -142,5 +147,45 @@ final nonisolated class RestCoverClock: Clock, Sendable {
     /// Lets `changed()` return: for a change the clock does not see, such as the rest's task ending.
     func signal() {
         state.withValue { $0.takeWatcher() }?.resume()
+    }
+}
+
+extension RestCover {
+    /// Waits until `condition`, on what the rest's task and the clock do, holds: looked at again each time
+    /// the clock registers a sleep or the task ends (`RestCoverClock.changed()`), never by polling. As
+    /// `eventually`, a wait that has not come in 10 s of the wall clock, or whose task is cancelled (a time
+    /// limit), records an issue that names it and returns.
+    func keeperWait(
+        _ what: String,
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: () -> Bool
+    ) async {
+        guard !condition() else {
+            return
+        }
+        let limit = Duration.seconds(10)
+        let deadline = ContinuousClock.now.advanced(by: limit)
+        let guarding = Task { [clock] in
+            guard await (try? Task.sleep(for: limit)) != nil else {
+                return
+            }
+            clock.signal()
+        }
+        defer { guarding.cancel() }
+        while !condition() {
+            guard !Task.isCancelled else {
+                Issue.record("cancelled while waiting for: \(what)", sourceLocation: sourceLocation)
+                return
+            }
+            guard ContinuousClock.now < deadline else {
+                Issue.record("never came in \(limit): \(what)", sourceLocation: sourceLocation)
+                return
+            }
+            await withTaskCancellationHandler {
+                await clock.changed()
+            } onCancel: { [clock] in
+                clock.signal()
+            }
+        }
     }
 }
