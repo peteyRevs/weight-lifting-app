@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/peteyRevs/weight-lifting-app/compare/v0.21.0...v0.21.1) (2026-11-13)
+
+
+### Fixes
+
+* **domain:** a rest that ends at no time stays hidden on watchOS 27.2, and the watch renders no NavigationStack off-screen ([#101](https://github.com/peteyRevs/weight-lifting-app/issues/101)) ([c92e963](https://github.com/peteyRevs/weight-lifting-app/commit/c92e963eeaa3425b495fd4d69ad47c814ee07f5d))
+
 ## [0.21.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.20.0...v0.21.0) (2026-11-11)
 
 
