@@ -69,6 +69,9 @@ nonisolated struct ModuleCopyTests {
                 // A UI test's program (F08, ruling R2): the two launch arguments, the one value, and what stops a
                 // launch whose value cannot be read. Read by the launch or by the test's author, never drawn.
                 "UITestProgram.swift": ["-LEDGER_UITEST_PROGRAM", "seed", "-LEDGER_UITEST", " takes one value, : "],
+                // A UI test's past workouts (F15 S1): the launch arguments and what stops a launch whose weeks
+                // cannot be read. Read by the launch or by the test's author, never drawn.
+                "UITestHistory.swift": ["-LEDGER_UITEST_HISTORY", "-LEDGER_UITEST", " takes  weeks, beside  seed: "],
                 // Settings' About line (F14 S1, N6): the four Info.plist keys it is read from, never drawn.
                 "AppAbout.swift": [
                     "CFBundleDisplayName",
