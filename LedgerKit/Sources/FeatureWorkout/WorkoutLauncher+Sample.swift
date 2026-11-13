@@ -33,7 +33,7 @@
     }
 
     /// The program the sample starts its workouts in, which the UI tests also open on (F08, ruling R2: the app's
-    /// `-LEDGER_UITEST_PROGRAM seed`).
+    /// `-LEDGER_UITEST_PROGRAM seed`), and its past workouts, which they ask for with `-LEDGER_UITEST_HISTORY` (F15).
     public nonisolated enum SampleProgram {
         /// The active program; with none, the spec's seed program (`Fixtures.seedProgram()`), saved as the active
         /// one first.

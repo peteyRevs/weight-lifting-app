@@ -6,7 +6,7 @@ import Testing
 
 /// F15 S1 criterion 1 (restated, Q1): a UI test's past workouts, `-LEDGER_UITEST_HISTORY <weeks>` beside
 /// `-LEDGER_UITEST` and `-LEDGER_UITEST_PROGRAM seed`, read as `UITestProgram` reads its argument, and saved by the
-/// root's launch call right after the seed program, once, before the gate's first read.
+/// root's launch call right after the seed program, once, in the call `RootGate.follow` awaits before it reads.
 @Suite("UITestHistory", .timeLimit(.minutes(1)))
 struct UITestHistoryTests {
     private static let asked = ["Ledger", "-LEDGER_UITEST", "1", "-LEDGER_UITEST_PROGRAM", "seed"]
@@ -57,7 +57,7 @@ struct UITestHistoryTests {
         defer { follow.cancel() }
         #expect(await gate.answer() == .main)
 
-        // Read once the gate has answered: the launch call stored them before the gate's first read.
+        // Read once the gate has answered: the launch call, which the gate awaits first, has stored them by now.
         let stores = try #require(composition.stores)
         let expected = try Fixtures.history(weeks: 4)
         let stored = try await stores.workouts.recent(limit: 100)

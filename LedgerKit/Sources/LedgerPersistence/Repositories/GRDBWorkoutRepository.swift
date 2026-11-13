@@ -69,24 +69,53 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     /// whole number of 10⁻⁷ g; and `nonFiniteDate` for a date that is not finite. A workout the record replay
     /// cannot read is left out of it and logged; it never fails the write.
     public func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog: Bool) async throws -> Bool {
+        let timestamp = ColumnCodec.timestamp(now())
+        try await queue.write { database in
+            try Self.materialize(
+                workout,
+                slotUpdates: slotUpdates,
+                droppingLog: droppingLog,
+                in: database,
+                at: timestamp
+            )
+        }
+        return droppingLog
+    }
+
+    /// Stores each of the finished `workouts`, in order, as `materialize(_:slotUpdates:)` would, all in one write
+    /// transaction: every one of them or, when any refuses or the write fails, none (F15 S1: a UI test's history,
+    /// which a launch must never leave half stored). Not part of `WorkoutRepository`: no caller of the protocol
+    /// stores more than one workout at a time.
+    public func materialize(_ workouts: [WorkoutState]) async throws {
+        let timestamp = ColumnCodec.timestamp(now())
+        try await queue.write { database in
+            for workout in workouts {
+                try Self.materialize(workout, slotUpdates: [], droppingLog: false, in: database, at: timestamp)
+            }
+        }
+    }
+
+    /// The body of a save, inside the caller's write transaction.
+    private static func materialize(
+        _ workout: WorkoutState,
+        slotUpdates: [Slot],
+        droppingLog: Bool,
+        in database: Database,
+        at timestamp: String
+    ) throws {
         guard workout.phase == .finished, workout.endedAt != nil else {
             throw LedgerPersistenceError.notFinished("workout \(ColumnCodec.text(workout.id))")
         }
-        let rows = WorkoutRows(workout)
-        let timestamp = ColumnCodec.timestamp(now())
-        try await queue.write { database in
-            let isFirstSave = try !Self.holdsWorkout(workout.id, in: database)
-            var scope = try RecordReplay.Scope(ofStored: workout.id, in: database)
-            try scope.include(workout)
-            try rows.write(database, at: timestamp)
-            try RecordReplay.redetect(scope, in: database, at: timestamp)
-            try Self.writeMisses(of: slotUpdates, in: database, at: timestamp)
-            try Self.writeProgramUpdates(of: workout, in: database, at: timestamp, isFirstSave: isFirstSave)
-            if droppingLog {
-                try GRDBWorkoutEventStore.deleteLog(of: workout.id, in: database)
-            }
+        let isFirstSave = try !holdsWorkout(workout.id, in: database)
+        var scope = try RecordReplay.Scope(ofStored: workout.id, in: database)
+        try scope.include(workout)
+        try WorkoutRows(workout).write(database, at: timestamp)
+        try RecordReplay.redetect(scope, in: database, at: timestamp)
+        try writeMisses(of: slotUpdates, in: database, at: timestamp)
+        try writeProgramUpdates(of: workout, in: database, at: timestamp, isFirstSave: isFirstSave)
+        if droppingLog {
+            try GRDBWorkoutEventStore.deleteLog(of: workout.id, in: database)
         }
-        return droppingLog
     }
 
     /// The workout `id`, or `nil`. Its live-only fields are reset (`WorkoutRecord`). A workout this app cannot

@@ -116,10 +116,10 @@ struct UITestHistoryAdversarialTests {
         #expect(raced.map(\.prCount) == alone.map(\.prCount), "the records of one save, not of two")
     }
 
-    /// G2-1 (medium): the workouts are saved one transaction each, and the pass is skipped once any workout is
-    /// stored. A first pass cancelled between two of them (a phase change, which `saveUITestProgramIfAsked` says
-    /// "does not count: the next pass makes it") leaves part of the history, and the next pass, finding a workout,
-    /// stores nothing more: the test then reads a history without its newest workouts.
+    /// G2-1 (medium), fixed: the workouts were saved one transaction each, and the pass is skipped once any workout
+    /// is stored, so a first pass cancelled between two of them (a phase change, which `saveUITestProgramIfAsked`
+    /// says "does not count: the next pass makes it") left part of the history for good. They are now saved in one
+    /// write: the cancelled pass leaves all of them or none, and the next pass, over none, stores them whole.
     @Test("A pass cancelled midway through the history: the next pass leaves the whole history")
     func cancelledMidway_theNextPassMakesItWhole() async throws {
         let harness = Harness()
@@ -152,13 +152,11 @@ struct UITestHistoryAdversarialTests {
         await composition.saveUITestProgramIfAsked()
         let expected = try Fixtures.history(weeks: 2).reversed().map(\.id)
         let stored = try await stores.workouts.recent(limit: 100).map(\.id)
-        withKnownIssue("G2-1: a cancelled pass leaves part of the history, and the next pass adds nothing") {
-            #expect(stored == expected, "\(stored.count) of \(expected.count) workouts stored")
-        }
+        #expect(stored == expected, "\(stored.count) of \(expected.count) workouts stored")
     }
 
-    /// G2-1 again, through a save that fails: the log says the save failed, yet the workouts before the failure
-    /// stay, so a test reads part of a history that no launch completes.
+    /// G2-1 again, through a save that fails: the log says the save failed, and the one write leaves none of the
+    /// workouts before the failure, where they used to stay as part of a history no launch completes.
     @Test("A save that fails at the second workout leaves no history behind")
     func failedMidway_leavesNoPartOfTheHistory() async throws {
         let harness = Harness()
@@ -173,8 +171,6 @@ struct UITestHistoryAdversarialTests {
         composition.boot()
         #expect(await harness.gate(following: composition).destination == .main)
         let stored = try await #require(composition.stores).workouts.recent(limit: 100)
-        withKnownIssue("G2-1: a failed history save keeps the workouts saved before the failure") {
-            #expect(stored.isEmpty, "\(stored.count) workout(s) left by a save that was logged as failed")
-        }
+        #expect(stored.isEmpty, "\(stored.count) workout(s) left by a save that was logged as failed")
     }
 }

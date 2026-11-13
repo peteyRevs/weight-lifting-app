@@ -176,7 +176,9 @@ public final class AppComposition {
                 }
                 isUITestProgramDone = true
                 let reason = String(describing: error)
-                environment.logger.log.error("The UI test's program was not saved: \(reason, privacy: .public)")
+                environment.logger.log.error(
+                    "The UI test's program or its history was not saved: \(reason, privacy: .public)"
+                )
             }
         #endif
     }
