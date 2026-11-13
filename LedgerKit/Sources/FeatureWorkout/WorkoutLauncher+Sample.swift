@@ -46,6 +46,12 @@
             try await programs.save(seed)
             return seed
         }
+
+        /// The seed program's finished workouts of the last `weeks` weeks (`Fixtures.history(weeks:)`), which a UI
+        /// test's `-LEDGER_UITEST_HISTORY` stores (F15 S1).
+        public static func history(weeks: Int) throws -> [WorkoutState] {
+            try Fixtures.history(weeks: weeks)
+        }
     }
 
     nonisolated enum WorkoutSample {
