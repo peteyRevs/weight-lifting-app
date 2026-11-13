@@ -154,20 +154,21 @@ public final class AppComposition {
 
     /// A UI test's program (`UITestProgram`, F08 ruling R2): once the launch's pass has run, and before the
     /// root's gate first reads the active program, saves the spec's seed program as the active one when there
-    /// is none, as the Debug menu's sample does. Once in a process, and only when the launch asked for it (two
-    /// calls that overlap may both save, and leave one program only because the seed program's id is fixed); a
-    /// failure is logged, and the test then finds onboarding. A call whose task is cancelled (the scene's phase
-    /// changed during the launch's first pass) does not count: the next pass makes it. A Release build does
-    /// nothing here.
+    /// is none, as the Debug menu's sample does, then its past workouts when asked (`UITestHistory`, F15 S1). Once
+    /// in a process, and only when the launch asked for it (two calls that overlap may both save, and leave one
+    /// program only because the seed program's id is fixed); a failure is logged, and the test then finds
+    /// onboarding, or no history. A call whose task is cancelled (the scene's phase changed during the launch's
+    /// first pass) does not count: the next pass makes it. A Release build does nothing here.
     func saveUITestProgramIfAsked() async {
         #if DEBUG
-            guard environment.seedsUITestProgram, !isUITestProgramDone, !Task.isCancelled,
-                  let programs = stores?.programs
-            else {
+            guard environment.seedsUITestProgram, !isUITestProgramDone, !Task.isCancelled, let stores else {
                 return
             }
             do {
-                try await SampleProgram.activeOrSeed(in: programs)
+                try await SampleProgram.activeOrSeed(in: stores.programs)
+                if let weeks = environment.uiTestHistoryWeeks {
+                    try await UITestHistory.saveIfEmpty(weeks: weeks, in: stores.workouts)
+                }
                 isUITestProgramDone = true
             } catch {
                 guard !Task.isCancelled else {
@@ -175,7 +176,9 @@ public final class AppComposition {
                 }
                 isUITestProgramDone = true
                 let reason = String(describing: error)
-                environment.logger.log.error("The UI test's program was not saved: \(reason, privacy: .public)")
+                environment.logger.log.error(
+                    "The UI test's program or its history was not saved: \(reason, privacy: .public)"
+                )
             }
         #endif
     }
@@ -246,6 +249,8 @@ extension AppComposition {
         var failedFinishes: Int?
         /// Whether a UI test asked for the seed program (`UITestProgram`).
         var seedsUITestProgram = false
+        /// The weeks of the seed program's workouts a UI test asked for (`UITestHistory`), saved after it.
+        var uiTestHistoryWeeks: Int?
         /// What a new install's settings start from (decision #15): the region's in the app, a US iPhone's under a UI
         /// test (`UITestRegion`). Nil seeds nothing, so a test's composition keeps `Settings.default` unless it asks
         /// for a region.
@@ -284,6 +289,7 @@ extension AppComposition {
                 clockOffset: offset,
                 failedFinishes: UITestSaveFailures.liveCount(arguments: arguments),
                 seedsUITestProgram: UITestProgram.liveSeeds(arguments: arguments),
+                uiTestHistoryWeeks: UITestHistory.liveWeeks(arguments: arguments),
                 regionalSettings: UITestRegion.liveSettings(isUITest: isUITest)
             )
         }

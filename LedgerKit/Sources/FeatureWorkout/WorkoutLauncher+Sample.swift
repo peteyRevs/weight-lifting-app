@@ -33,7 +33,7 @@
     }
 
     /// The program the sample starts its workouts in, which the UI tests also open on (F08, ruling R2: the app's
-    /// `-LEDGER_UITEST_PROGRAM seed`).
+    /// `-LEDGER_UITEST_PROGRAM seed`), and its past workouts, which they ask for with `-LEDGER_UITEST_HISTORY` (F15).
     public nonisolated enum SampleProgram {
         /// The active program; with none, the spec's seed program (`Fixtures.seedProgram()`), saved as the active
         /// one first.
@@ -45,6 +45,12 @@
             let seed = try Fixtures.seedProgram()
             try await programs.save(seed)
             return seed
+        }
+
+        /// The seed program's finished workouts of the last `weeks` weeks (`Fixtures.history(weeks:)`), which a UI
+        /// test's `-LEDGER_UITEST_HISTORY` stores (F15 S1).
+        public static func history(weeks: Int) throws -> [WorkoutState] {
+            try Fixtures.history(weeks: weeks)
         }
     }
 

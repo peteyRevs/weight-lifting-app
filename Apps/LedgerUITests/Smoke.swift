@@ -1,8 +1,9 @@
 import XCTest
 
-/// Selected by the `PR` test plan as `LedgerUITests/Smoke` (docs/testing-strategy.md §8). F07 criterion 1 and F08
-/// criteria 12 and 14: the app launches on a fresh database (`-LEDGER_UITEST`) to onboarding, full screen, and
-/// "Skip setup" lands on Today, with the tabs. The other tests launch with the seed program
+/// Selected by the `PR` test plan as `LedgerUITests/Smoke` (docs/testing-strategy.md §8). F07 criterion 1, F08
+/// criteria 12 and 14, and F15 criterion 2: the app launches on a fresh database (`-LEDGER_UITEST`) to onboarding,
+/// full screen; "Skip setup" lands on Today, with the tabs, whose "Start workout" starts the day, and a logged set
+/// brings up the rest panel. The other tests launch with the seed program
 /// (`-LEDGER_UITEST_PROGRAM seed`, F08) and open on Today. F10 S4 criterion 10: the workout's cover in the
 /// running app, and criterion 18: the conflict with a workout that is running; both reached through the Debug
 /// menu's sample rows until Today starts workouts (F09). F10 S7a: a workout is saved and Today shows it logged.
@@ -11,19 +12,30 @@ final class Smoke: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// F15 criterion 2 (question 3, A; the sanctioned edit of `test_freshInstall_skipsSetupToToday`, whose checks it
+    /// keeps): a lifter's first minute, through Today's own "Start workout", not the Debug menu. The clock is moved
+    /// to a Monday, the default program's Upper A (Skip setup saves 4 days of Both, honestly, from this week).
     @MainActor
-    func test_freshInstall_skipsSetupToToday() {
-        let app = XCUIApplication.fresh()
-        app.launch()
+    func test_onboardToFirstSet() {
+        let steps = Steps(launching: ["-LEDGER_UITEST_NOW", Flows.monday], for: self)
+        let app = steps.app
         let onboarding = app.staticTexts["onboarding.title"]
         XCTAssertTrue(onboarding.waitForExistence(timeout: 10))
         XCTAssertEqual(onboarding.label, "What are you training for?")
         XCTAssertFalse(app.tabBars.firstMatch.exists, "onboarding is full screen: no tab bar")
-        XCTAssertFalse(app.staticTexts["today.title"].exists)
+        XCTAssertFalse(steps.todayTitle.exists)
 
         XCTAssertTrue(app.skipSetupToToday())
         XCTAssertTrue(app.tabBars.buttons["Today"].isSelected)
         XCTAssertFalse(onboarding.exists)
+        XCTAssertEqual(steps.todayTitle.label, "Upper A", "Monday is the default program's Upper A")
+
+        steps.startFromToday()
+        XCTAssertEqual(app.staticTexts["workout.header.title"].label, "Upper A — Push focus")
+        steps.logSet("1")
+        XCTAssertTrue(steps.skip.waitForExistence(timeout: 5), "the logged set starts a rest: its panel is up")
+        steps.attachScreenshot(named: "The first set logged, resting")
+        steps.discard()
     }
 
     /// The sample workout starts and its cover goes up over the tabs with no more than a second or two on

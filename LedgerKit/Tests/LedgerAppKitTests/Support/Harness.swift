@@ -40,12 +40,14 @@ final class Harness {
     }
 
     /// A composition over `databaseURL`, not yet booted. Its new device ids are `deviceUUID`; its process started at
-    /// `processStart`. `seedsUITestProgram` is a UI test's `-LEDGER_UITEST_PROGRAM seed` (F08).
+    /// `processStart`. `seedsUITestProgram` is a UI test's `-LEDGER_UITEST_PROGRAM seed` (F08), and
+    /// `uiTestHistoryWeeks` its `-LEDGER_UITEST_HISTORY <weeks>` (F15).
     func composition(
         now: Date = Harness.now,
         processStart: Date? = nil,
         failedFinishes: Int? = nil,
-        seedsUITestProgram: Bool = false
+        seedsUITestProgram: Bool = false,
+        uiTestHistoryWeeks: Int? = nil
     ) -> AppComposition {
         AppComposition(
             AppComposition.Environment(
@@ -62,7 +64,8 @@ final class Harness {
                 preparesDependencies: false,
                 processStart: processStart,
                 failedFinishes: failedFinishes,
-                seedsUITestProgram: seedsUITestProgram
+                seedsUITestProgram: seedsUITestProgram,
+                uiTestHistoryWeeks: uiTestHistoryWeeks
             )
         )
     }
