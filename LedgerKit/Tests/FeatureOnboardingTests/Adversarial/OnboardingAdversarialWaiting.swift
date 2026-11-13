@@ -13,6 +13,14 @@ nonisolated enum AdversarialLane {
     /// The nightly lane, or a run by hand that asks for the whole of a matrix (`LEDGER_ADVERSARIAL_FULL=1`; for
     /// `xcodebuild`, `TEST_RUNNER_LEDGER_ADVERSARIAL_FULL=1`): a test plan sets its own lane.
     static let runsEverything = isNightly || ProcessInfo.processInfo.environment["LEDGER_ADVERSARIAL_FULL"] == "1"
+
+    /// `seeds` in blocks of `size`, in order, for a seeded test that takes a block per case: the suite's time
+    /// limit then holds for each block, not for the whole range, and a failing case names its block.
+    static func blocks(of seeds: Range<UInt64>, size: Int = 100) -> [Range<UInt64>] {
+        stride(from: seeds.lowerBound, to: seeds.upperBound, by: size).map { start in
+            start ..< min(start + UInt64(size), seeds.upperBound)
+        }
+    }
 }
 
 /// One wait of a test: it ends when it is woken, or when its task is cancelled, so a wait for something that
