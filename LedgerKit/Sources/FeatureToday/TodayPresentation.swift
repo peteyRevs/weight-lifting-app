@@ -163,7 +163,8 @@ nonisolated extension TodayPresentation {
     static func withFinishedSession(_ stored: [WorkoutState], _ session: WorkoutState?) -> [WorkoutState] {
         var workouts = stored.filter { $0.phase == .finished }
         if let session, session.phase == .finished, !workouts.contains(where: { $0.id == session.id }) {
-            let place = workouts.firstIndex { $0.startedAt <= session.startedAt } ?? workouts.endIndex
+            // Not `<=`, which newer Foundations (watchOS 27.2 on) answer false for a `Date` that is not a number.
+            let place = workouts.firstIndex { !(session.startedAt < $0.startedAt) } ?? workouts.endIndex
             workouts.insert(session, at: place)
         }
         return workouts

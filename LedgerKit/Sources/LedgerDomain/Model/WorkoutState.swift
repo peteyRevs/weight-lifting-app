@@ -142,8 +142,9 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
         guard phase == .live, let rest else {
             return nil
         }
+        // Not `>=`, which newer Foundations (watchOS 27.2 on) answer false for a `Date` that is not a number.
         let isOverAndDone = exercises.contains { exercise in
-            exercise.sets.contains { set in set.doneAt.map { $0 >= rest.endsAt } ?? false }
+            exercise.sets.contains { set in set.doneAt.map { !($0 < rest.endsAt) } ?? false }
         }
         return isOverAndDone ? nil : rest
     }
