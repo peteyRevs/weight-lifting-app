@@ -157,3 +157,13 @@ the build. The two failures are known, outside S1, and recorded earlier: `TabsAd
 | WorkoutSaveFailureAdversarial.test_failuresAcrossACoverOpenedAgain_eachShowsTheAlert | passed | 31.733 |
 | WorkoutSuperset.test_superset_loggedRoundByRound | passed | 20.248 |
 | WorkoutSwap.test_swapTheFirstExercise_logFinish_receiptListsTheReplacement | passed | 21.449 |
+
+## Follow-up from fix/tabs-audit (2026-11-13)
+
+- `LedgerKit/Sources/LedgerAppKit/AppComposition.swift` is at 300 lines, the lint's warning limit, after
+  `Environment.colorScheme` (`-LEDGER_UITEST_APPEARANCE`). The next addition moves `Environment.live(arguments:)`
+  out to a file of its own (e.g. `AppComposition+Environment.swift`) first.
+- A UI test in light or dark launches with `LaunchAppearance` and checks it with `assertDrawn(in:_:)`
+  (`Apps/LedgerUITests/Support/Appearance.swift`); the iOS 27.0 simulator does not apply
+  `XCUIDevice.shared.appearance`. `assertDrawn` reads the top of the screen, so it holds on paper-ground screens
+  only: S2a's audits of dark-by-design screens (the workout cover) need another signal.

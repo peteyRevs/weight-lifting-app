@@ -25,6 +25,11 @@ enum LaunchAppearance: String, CaseIterable {
 extension XCTestCase {
     /// Fails unless the screen's top tenth, which is the ground under the status bar on every root and step, is
     /// `appearance`'s ground: a launch that did not take its appearance fails as that, not as what it measured.
+    /// The level measured is kept with the result, as an activity named with it.
+    ///
+    /// Valid only on a screen whose top stands on the paper ground in light (the tab roots, onboarding). A screen
+    /// that is dark by design, such as the workout cover, passes as "dark" in either appearance: its caller must
+    /// sample a region that is paper in light, or prove the appearance another way.
     @MainActor
     func assertDrawn(
         in appearance: LaunchAppearance,
@@ -33,6 +38,7 @@ extension XCTestCase {
         line: UInt = #line
     ) throws {
         let level = try app.screenshot().topTenthLevel()
+        XCTContext.runActivity(named: "\(appearance): the ground's level is \(level)") { _ in }
         XCTAssertTrue(
             appearance.isGround(level),
             "\(appearance): the ground's level is \(level)",

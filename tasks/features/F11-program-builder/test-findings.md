@@ -1619,7 +1619,10 @@ Found by F08 S2/S3's seed program (`-LEDGER_UITEST_PROGRAM seed`), 2026-10-20, a
      caption note (12 pt) and the caption-titled pill, all drawn whole on the screen's picture, with descenders
      below the role's line (F09-S5-3/4); the 5 contrast issues are the second day's row at y 796-833, inside the
      tab bar's 791-874 (scrolled to its end, "+ Add training day" stands above the bar at the default size and
-     at Accessibility XXXL: `test_lastControl_scrollsClearOfTheTabBar`). No token or view changed.
+     at Accessibility XXXL: `test_lastControl_scrollsClearOfTheTabBar`, which also runs the contrast audit there
+     and finds nothing). Not a token's fault: the first day's row, clear of the bar, uses the same roles and colours
+     (`DayCard.swift:53-55, 68-70`: `.label` in `inkMuted`, `.eyebrow` in `inkSecondary`) and is not reported. No
+     token or view changed.
 2. **F11-S14-6 — flaky: `Builder.test_wrappedName_takesTheFocus_andABlankDraftShowsThePlaceholder` (`:80`), seen
    once.** "XCTAssertEqual failed: ("Optional("A l")") is not equal to ("Optional("A")") - a blank name is not
    stored": the name cleared letter by letter stored "A l" as its last value before the field went blank, instead

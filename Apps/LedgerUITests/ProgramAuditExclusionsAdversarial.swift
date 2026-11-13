@@ -17,6 +17,11 @@ enum ProgramAuditExclusions {
             || patterns.contains { label.range(of: $0, options: .regularExpression) != nil }
     }
 
+    /// The eyebrows the audit measured as clipped: two headings, not the chips or the week chips' lines.
+    private static func isClippedEyebrow(_ label: String) -> Bool {
+        label == "TRAINING DAYS" || label.range(of: #"^BLOCK · \d+ WEEKS?$"#, options: .regularExpression) != nil
+    }
+
     /// The exercise chips of the seed program's first two days, which the page shows at its top.
     private static let seedChips: Set = ["BENCH", "INCLINE", "CS ROW", "PULLDOWN", "SQUAT", "RDL", "LEG PRESS", "CALF"]
 
@@ -42,15 +47,18 @@ enum ProgramAuditExclusions {
             // As Today's F09-S5-3 and 4: texts whose line is as tall as their size, the eyebrow (10 pt frames)
             // and the caption (the section's note, 12 pt; the pill's title, whose button is the 44 pt target).
             // Archivo's ascent and descent are 1.088 of the size, so a descender is drawn below the frame; the
-            // whole screen shows each text whole ("4 days · 58 sets a week", "Apply to later weeks").
-            (type == .staticText && (isEyebrow(label) || isWeekSummary(label)))
+            // whole screen shows each text whole ("4 days · 58 sets a week", "Apply to later weeks"). Only the
+            // texts measured: "TRAINING DAYS" and "BLOCK · 8 WEEKS" of the eyebrows, the note, the pill.
+            (type == .staticText && (isClippedEyebrow(label) || isWeekSummary(label)))
                 || (type == .button && label == "Apply to later weeks")
         case "Contrast failed":
             // As Today's fourth and the Library's: the second day's row, resting under the floating tab bar while
             // the page is at its top (measured: its line and chips at y 796-833, inside the bar's 791-874, and
-            // nothing above it). Scrolled to its end the page stands clear
+            // nothing above it). Not a token's fault: the first day's row, clear of the bar, sets its line and chips
+            // in the same roles and colours (`DayCard`: `.label` in `inkMuted`, `.eyebrow` in `inkSecondary`) and
+            // is not reported. Scrolled to its end the page stands clear, and passes the contrast audit there
             // (`ProgramAuditExclusionsAdversarial.test_lastControl_scrollsClearOfTheTabBar`).
-            frame.intersects(tabBar) && !tabs.contains(label)
+            type == .staticText && frame.intersects(tabBar) && !tabs.contains(label)
         default:
             false
         }
@@ -111,6 +119,10 @@ final class ProgramAuditExclusionsAdversarial: XCTestCase {
             Finding(issue: "Text clipped", type: text, label: "Copy week 4"), // not measured
             Finding(issue: "Text clipped", type: text, label: "Apply to later weeks"), // the button was, not a text
             Finding(issue: "Text clipped", type: text, label: "Shared by every week."),
+            Finding(issue: "Text clipped", type: text, label: "SQUAT"), // an eyebrow not measured clipped
+            Finding(issue: "Text clipped", type: text, label: "4 DAYS"),
+            Finding(issue: "Text clipped", type: text, label: "+1"),
+            Finding(issue: "Contrast failed", type: button, label: "+ Add training day", frame: Self.underBar),
             Finding(issue: "Contrast failed", type: text, label: "4 exercises · 15 sets · ~38 min"), // clear of the bar
             Finding(issue: "Contrast failed", type: button, label: "Program", frame: Self.underBar), // the bar's tab
             Finding(issue: "Contrast nearly passed", type: text, label: "SQUAT", frame: Self.underBar),
@@ -122,9 +134,10 @@ final class ProgramAuditExclusionsAdversarial: XCTestCase {
 
     /// The audit's "Contrast failed" under the floating tab bar is a false positive only if every row can be
     /// brought clear of the bar: scrolled to its end, the page's last control, "+ Add training day", stands whole
-    /// above the bar, at the default size and at the largest.
+    /// above the bar, at the default size and at the largest; and there the system's contrast audit reports nothing
+    /// on the training days' rows, so they pass once clear of the glass.
     @MainActor
-    func test_lastControl_scrollsClearOfTheTabBar() {
+    func test_lastControl_scrollsClearOfTheTabBar() throws {
         for textSize in [nil, "UICTContentSizeCategoryAccessibilityXXXL"] {
             let app = XCUIApplication.fresh(["-LEDGER_UITEST_PROGRAM", "seed"])
             app.launchArguments += ["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z"]
@@ -149,6 +162,23 @@ final class ProgramAuditExclusionsAdversarial: XCTestCase {
             add(shot)
             XCTAssertTrue(addDay.exists)
             XCTAssertLessThanOrEqual(addDay.frame.maxY, barFrame.minY, "\(textSize ?? "default"): under the tab bar")
+            // The rows: from the first day's top down. What the page has scrolled up under the status bar is not a
+            // row, and the system measures the top edge's blur over it (measured: "WEEK 5", "Tap to assign" and the
+            // week chips' lines, at y -3 to 63), as it measures the bar's glass at the bottom.
+            let firstRow = app.buttons["Upper A — Push focus"]
+            XCTAssertTrue(firstRow.exists)
+            let rowsTop = firstRow.frame.minY
+            var contrast: [String] = []
+            try app.performAccessibilityAudit(for: .contrast) { issue in
+                if let element = issue.element, element.frame.minY >= rowsTop {
+                    contrast.append("\(issue.compactDescription) [\(element.label) \(element.frame)]")
+                } else {
+                    let element = issue.element.map { "\($0.label) \($0.frame)" } ?? "no element"
+                    XCTContext.runActivity(named: "above the rows: \(issue.compactDescription) [\(element)]") { _ in }
+                }
+                return true
+            }
+            XCTAssertEqual(contrast, [], "\(textSize ?? "default size"), scrolled to the end")
             app.terminate()
         }
     }
