@@ -77,17 +77,17 @@ final class TabsAdversarial: XCTestCase {
         XCTAssertTrue(app.buttons["debug.menu.designGallery"].exists)
     }
 
+    /// Sanctioned edit (fix/tabs-audit): the appearance is the app's (`LaunchAppearance`), not the device's, which
+    /// the iOS 27.0 simulator does not apply: the dark half measured a light bar ("Today is not in the accent").
     @MainActor
     func test_selectedTab_isDrawnInTheAccent_andNoOtherIs_lightAndDark() throws {
-        let before = XCUIDevice.shared.appearance
-        defer { XCUIDevice.shared.appearance = before }
-        for appearance in [XCUIDevice.Appearance.light, .dark] {
-            XCUIDevice.shared.appearance = appearance
-            let app = launch()
+        for appearance in LaunchAppearance.allCases {
+            let app = launch(appearance.launchArguments)
+            try assertDrawn(in: appearance, app)
             for tab in Self.tabs {
                 app.tabBars.buttons[tab].tap()
                 XCTAssertTrue(app.tabBars.buttons[tab].isSelected)
-                attach(app.tabBars.firstMatch.screenshot(), named: "\(tab)-\(appearance == .dark ? "dark" : "light")")
+                attach(app.tabBars.firstMatch.screenshot(), named: "\(tab)-\(appearance)")
                 for other in Self.tabs {
                     let share = try accentShare(of: app.tabBars.buttons[other], in: appearance)
                     if other == tab {
@@ -173,7 +173,8 @@ final class TabsAdversarial: XCTestCase {
 
 private extension TabsAdversarial {
     /// Whether the audit's `issue` on `element` is one of the measured false positives of `tab`'s root: Today's
-    /// (`TodayAuditExclusions`) or the Library's (`LibraryAuditExclusions`, F12-S1-2), each on its own tab alone.
+    /// (`TodayAuditExclusions`), the Library's (`LibraryAuditExclusions`, F12-S1-2) or the builder's
+    /// (`ProgramAuditExclusions`, F11-S14-5), each on its own tab alone.
     @MainActor
     static func isKnownFalsePositive(on tab: String, _ issue: String, _ element: XCUIElement, tabBar: CGRect) -> Bool {
         let (label, frame) = (element.label, element.frame)
@@ -187,6 +188,11 @@ private extension TabsAdversarial {
         case "Library":
             // F12 S1 round 4 (review M1): the Library's exclusions read the element itself.
             LibraryAuditExclusions.isKnownFalsePositive(issue: issue, element: element, tabBar: tabBar)
+        case "Program":
+            // fix/tabs-audit (F11-S14-5): the builder's, measured over the seed program at week 5.
+            ProgramAuditExclusions.isKnownFalsePositive(
+                issue: issue, type: element.elementType, label: label, frame: frame, tabBar: tabBar
+            )
         default: false
         }
     }
@@ -195,26 +201,8 @@ private extension TabsAdversarial {
     /// review S6): the accent, `#FF5B22`, in dark and the deep accent, `#B2390E`, in light, give or take the
     /// display's rendering (measured on the iPhone 17 simulator: `#FF682F` and `#A73107`).
     @MainActor
-    func accentShare(of element: XCUIElement, in appearance: XCUIDevice.Appearance) throws -> Double {
-        let image = try XCTUnwrap(element.screenshot().image.cgImage)
-        let width = image.width
-        let height = image.height
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
-        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
-            let context = CGContext(
-                data: buffer.baseAddress,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: width * 4,
-                space: space,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )
-            context?.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return context != nil
-        }
-        XCTAssertTrue(drawn)
+    func accentShare(of element: XCUIElement, in appearance: LaunchAppearance) throws -> Double {
+        let bytes = try element.screenshot().rgbaPixels()
         var accent = 0
         for pixel in stride(from: 0, to: bytes.count, by: 4) {
             let red = Int(bytes[pixel])
@@ -227,7 +215,7 @@ private extension TabsAdversarial {
                 accent += 1
             }
         }
-        return Double(accent) / Double(max(width * height, 1))
+        return Double(accent) / Double(max(bytes.count / 4, 1))
     }
 
     @MainActor

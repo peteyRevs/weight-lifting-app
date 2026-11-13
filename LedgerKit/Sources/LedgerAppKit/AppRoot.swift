@@ -30,6 +30,8 @@ public struct AppRoot: View {
     /// is tried again. SwiftUI cancels the task with the view.
     public var body: some View {
         content
+            // A UI test's appearance (`UITestAppearance`); nil, in every other launch, follows the device.
+            .preferredColorScheme(composition.environment.colorScheme)
             .onAppear { composition.rootAppeared() }
             .task(id: scenePhase) {
                 await gate.follow(composition, in: scenePhase)

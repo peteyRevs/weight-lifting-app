@@ -378,6 +378,11 @@ Concrete test names (file = suite = source type; see §6):
   2026-09-16), so pair it with `-LEDGER_UITEST_NOW` in that week. Every launch is a
   fresh database, a relaunch too, so what needs the same database twice is not
   a UI test until F15's test mode.
+- A UI test in light or dark launches with `-LEDGER_UITEST_APPEARANCE light|dark`
+  (Debug builds only; `LaunchAppearance` in `Apps/LedgerUITests/Support/Appearance.swift`
+  adds it) and checks that the app drew in it (`assertDrawn(in:_:)`), never with
+  `XCUIDevice.shared.appearance`: the iOS 27.0 simulator reads that back as set but
+  goes on drawing light, so a "dark" audit of it audits light.
 
 ### 2.8 Device protocol (manual, scripted) — `tasks/features/F20-device-protocol/`
 
