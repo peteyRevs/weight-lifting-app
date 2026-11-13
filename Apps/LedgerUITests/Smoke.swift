@@ -17,7 +17,7 @@ final class Smoke: XCTestCase {
     /// to a Monday, the default program's Upper A (Skip setup saves 4 days of Both, honestly, from this week).
     @MainActor
     func test_onboardToFirstSet() {
-        let steps = Steps(launching: ["-LEDGER_UITEST_NOW", "2026-09-14T12:00:00Z"], for: self)
+        let steps = Steps(launching: ["-LEDGER_UITEST_NOW", Flows.monday], for: self)
         let app = steps.app
         let onboarding = app.staticTexts["onboarding.title"]
         XCTAssertTrue(onboarding.waitForExistence(timeout: 10))

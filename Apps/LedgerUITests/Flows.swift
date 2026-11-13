@@ -27,9 +27,13 @@ final class Flows: XCTestCase {
 
         steps.startFromToday()
         XCTAssertTrue(steps.reads(steps.cardTitle, "Barbell Bench Press"))
+        // Each set's rest is skipped before the next set, so each rest proven is that set's own.
         for set in 1 ... 3 {
             steps.logSet("\(set)")
             XCTAssertTrue(steps.skip.waitForExistence(timeout: 5), "set \(set) starts a rest")
+            if set < 3 {
+                steps.skipRest()
+            }
         }
         steps.attachScreenshot(named: "Three sets of the bench press, resting")
         steps.skipRest()
@@ -98,7 +102,7 @@ final class Flows: XCTestCase {
         XCTAssertTrue(block.waitForExistence(timeout: 5), "the superset is drawn as one block")
         XCTAssertTrue(steps.reads(block, "Round 1 of 3"))
         steps.logSet("A1")
-        XCTAssertFalse(steps.skip.exists, "a member that ends no round starts no rest")
+        XCTAssertFalse(steps.skip.waitForExistence(timeout: 2), "a member that ends no round starts no rest")
         steps.logSet("B1")
         XCTAssertTrue(steps.skip.waitForExistence(timeout: 5), "the round's last member starts the group's rest")
         steps.attachScreenshot(named: "Superset, the group's rest")
@@ -109,7 +113,10 @@ final class Flows: XCTestCase {
     /// The receipt: its volume tile in pounds, and a row for each exercise logged, the replacement's among them.
     @MainActor
     private func expectTheReceipt(listing swapped: String, _ steps: Steps) {
-        XCTAssertTrue(steps.element(saying: " lb moved").exists, "the volume tile")
+        // The receipt's tile reads "6,282 lb moved" exactly; Today's tile under the cover reads otherwise.
+        let moved = NSPredicate(format: "label MATCHES %@", "^[0-9,]+ lb moved$")
+        XCTAssertTrue(steps.app.descendants(matching: .any).matching(moved).firstMatch.exists, "the volume tile")
+        XCTAssertTrue(steps.app.staticTexts["LB MOVED"].exists, "the volume tile's caption")
         let logged = steps.app.buttons.matching(NSPredicate(format: "label CONTAINS ', Logged '"))
         XCTAssertEqual(logged.count, 4, "the bench press, the replacement and the superset's two members")
         XCTAssertTrue(steps.element(startingWith: "\(swapped), ").exists, "the receipt lists the replacement")

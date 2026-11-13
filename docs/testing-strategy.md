@@ -370,7 +370,12 @@ Concrete test names (file = suite = source type; see §6):
   the spec's seed program (`Fixtures.seedProgram()`, a block from Monday
   2026-08-17) is saved as the active one after the launch's pass, before the
   root first reads it, so the app opens on Today. A new UI test that waits for
-  `today.title` on a fresh launch needs one or the other. Every launch is a
+  `today.title` on a fresh launch needs one or the other. A test that needs
+  past workouts adds `-LEDGER_UITEST_HISTORY <1–16>` beside
+  `-LEDGER_UITEST_PROGRAM seed` (Debug builds only; F15): the seed program's
+  finished workouts of that many weeks (`Fixtures.history(weeks:)`) are saved
+  with it, in one write. They are anchored to the fixture's own week (Wednesday
+  2026-09-16), so pair it with `-LEDGER_UITEST_NOW` in that week. Every launch is a
   fresh database, a relaunch too, so what needs the same database twice is not
   a UI test until F15's test mode.
 

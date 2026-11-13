@@ -76,14 +76,11 @@ extension Flows {
         XCTAssertTrue(app.buttons["4, \(exercise)"].firstMatch.exists, "\(exercise) is the day's last row")
     }
 
-    /// The Day editor's own "Program", not the tab bar's, back to the builder; then the Today tab.
+    /// The Day editor's "Done", back to the builder (as `Builder` leaves it); then the Today tab.
     @MainActor
     private func backToToday(_ steps: Steps) {
         let app = steps.app
-        let bar = app.tabBars.firstMatch.frame
-        let backs = app.buttons.matching(NSPredicate(format: "label == 'Program'")).allElementsBoundByIndex
-        let back = backs.first { !bar.intersects($0.frame) } ?? app.buttons["Program"].firstMatch
-        back.tap()
+        app.buttons["Done"].tap()
         XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "back on the builder")
         app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(steps.becomesHittable(steps.todayTitle), "on Today")

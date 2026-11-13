@@ -118,6 +118,7 @@ struct Steps {
         for _ in 0 ..< 10 where !(element.exists && element.isHittable) {
             app.scrollViews.firstMatch.swipeUp(velocity: .slow)
         }
+        XCTAssertTrue(element.exists, "\(element) is not on the screen")
         XCTAssertTrue(element.isHittable, "\(element) cannot be reached")
     }
 

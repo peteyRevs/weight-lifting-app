@@ -31,13 +31,7 @@ extension Flows {
         XCTAssertTrue(bench.label.contains(" lb, Logged "), "the row reads in pounds: \(bench.label)")
         steps.attachScreenshot(named: "The workout's detail, in pounds")
 
-        app.tabBars.buttons["Today"].tap()
-        app.buttons["Settings"].tap()
-        let kilograms = app.buttons["kilograms"]
-        XCTAssertTrue(kilograms.waitForExistence(timeout: 5), "Settings")
-        kilograms.tap()
-        XCTAssertTrue(kilograms.isSelected)
-        app.navigationBars.buttons.firstMatch.tap()
+        switchToKilograms(steps)
         XCTAssertTrue(steps.element(saying: "kg moved").waitForExistence(timeout: 5), "Today's volume tile")
 
         app.tabBars.buttons["History"].tap()
@@ -49,6 +43,37 @@ extension Flows {
             "\(bench.label) does not log \(converted)"
         )
         steps.attachScreenshot(named: "The same detail, in kilograms")
+        expectTheBenchPressChart(steps)
+    }
+
+    /// Today's gear, then KG in Settings, then back to Today.
+    @MainActor
+    private func switchToKilograms(_ steps: Steps) {
+        let app = steps.app
+        app.tabBars.buttons["Today"].tap()
+        app.buttons["Settings"].tap()
+        let kilograms = app.buttons["kilograms"]
+        XCTAssertTrue(kilograms.waitForExistence(timeout: 5), "Settings")
+        kilograms.tap()
+        let isSelected = NSPredicate(format: "isSelected == true")
+        let selected = XCTNSPredicateExpectation(predicate: isSelected, object: kilograms)
+        XCTAssertEqual(XCTWaiter().wait(for: [selected], timeout: 5), .completed, "KG is chosen")
+        app.navigationBars.buttons["BackButton"].tap()
+    }
+
+    /// The seeded weeks reach the exercise's chart too: drawn, and with a value VoiceOver reads (its change).
+    @MainActor
+    private func expectTheBenchPressChart(_ steps: Steps) {
+        let app = steps.app
+        app.tabBars.buttons["Library"].tap()
+        let recent = NSPredicate(format: "label == 'Barbell Bench Press' AND value CONTAINS ' sessions'")
+        let row = app.buttons.matching(recent).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the bench press is in RECENTLY LOGGED")
+        row.tap()
+        let chart = app.otherElements["Estimated 1RM by week"]
+        XCTAssertTrue(chart.waitForExistence(timeout: 10), "the chart is drawn")
+        XCTAssertFalse((chart.value as? String ?? "").isEmpty, "the chart reads its change over the weeks")
+        steps.attachScreenshot(named: "The bench press's chart over the seeded weeks")
     }
 
     /// The first chip of a receipt row as VoiceOver reads it: "5 × 200×5" of "Barbell Bench Press, Prescribed 5 × 5 @
@@ -67,7 +92,8 @@ extension Flows {
 
     /// The Domain's rule for a weight in kilograms (`Weight.shownValue(in:)`): pounds × 0.45359237 exactly, rounded
     /// to hundredths half away from zero; printed so when that is a whole number of quarters (a plate's value), and
-    /// to one decimal otherwise, trailing zeros dropped and "." the point. 185 lb is 83.91458845 kg: "83.9".
+    /// to one decimal otherwise, trailing zeros dropped and "." the point. 185 lb is 83.91458845 kg: "83.9". It is
+    /// the rule exactly for the weights the seed program's plate steps give; it is not a general converter.
     static func kilograms(fromPounds text: String) throws -> String {
         let pounds = try XCTUnwrap(Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")), text)
         let kilograms = pounds * Decimal(sign: .plus, exponent: -8, significand: 45_359_237)
