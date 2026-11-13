@@ -45,6 +45,16 @@ struct Steps {
         XCTAssertTrue(minimize.waitForExistence(timeout: 10), "the workout's cover is up")
     }
 
+    /// The Debug menu's sample workout (the seed's Upper A), as the older workout tests start it: the cover goes up.
+    func startSampleWorkout() {
+        XCTAssertTrue(todayTitle.waitForExistence(timeout: 10), "on Today")
+        todayTitle.press(forDuration: 1)
+        let sample = app.buttons["debug.menu.startSampleWorkout"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5), "the Debug menu")
+        sample.tap()
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10), "the workout's cover is up")
+    }
+
     /// The check of the shown exercise's row `set` ("1", "A1"): the row reads logged.
     func logSet(_ set: String) {
         let check = app.buttons["Log set \(set)"]
@@ -113,10 +123,14 @@ struct Steps {
         return XCTWaiter().wait(for: [hittable], timeout: 5) == .completed
     }
 
-    /// Swipes the screen's first scroll view up until `element` can be tapped, at most ten times.
-    func scrollUntilHittable(_ element: XCUIElement) {
+    /// Swipes the screen's first scroll view up (or, `back`, down) until `element` can be tapped, at most ten times.
+    func scrollUntilHittable(_ element: XCUIElement, back: Bool = false) {
         for _ in 0 ..< 10 where !(element.exists && element.isHittable) {
-            app.scrollViews.firstMatch.swipeUp(velocity: .slow)
+            if back {
+                app.scrollViews.firstMatch.swipeDown(velocity: .slow)
+            } else {
+                app.scrollViews.firstMatch.swipeUp(velocity: .slow)
+            }
         }
         XCTAssertTrue(element.exists, "\(element) is not on the screen")
         XCTAssertTrue(element.isHittable, "\(element) cannot be reached")
