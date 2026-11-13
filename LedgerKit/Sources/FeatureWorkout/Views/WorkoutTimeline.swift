@@ -21,7 +21,8 @@ nonisolated struct WorkoutTimeline: Equatable, Sendable {
     ///
     /// A start that is not a finite time, or that no calendar holds, counts from the far future, and so reads
     /// "0:00": a range cannot be made from it, and SwiftUI traps on a timer that starts at no time at all.
-    /// Finiteness is asked first, of the number: every comparison of a `Date` that is not a number holds.
+    /// Finiteness is asked first, of the number: what `>=` and `<=` answer for a `Date` that is not a number
+    /// depends on the OS's Foundation (newer ones, from watchOS 27.2, say false).
     func elapsed(since start: Date) -> Text {
         let isCountable = start.timeIntervalSinceReferenceDate.isFinite
             && start >= .distantPast && start <= .distantFuture
