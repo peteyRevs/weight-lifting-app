@@ -75,7 +75,9 @@ nonisolated struct BriefModel {
 @Suite("Adversarial F08 S2 · random walks against the brief's model", .timeLimit(.minutes(1)))
 struct OnboardingModelAdversarialTests {
     /// 100 walks in the PR lane, 2,000 in the nightly one (testing-strategy §6).
-    static let seeds: Range<UInt64> = 0 ..< (AdversarialLane.isNightly ? 2000 : 100)
+    nonisolated static let seeds: Range<UInt64> = 0 ..< (AdversarialLane.isNightly ? 2000 : 100)
+    /// The seeds a hundred to a case: the suite's one minute is each block's, not the whole range's.
+    nonisolated static let seedBlocks = AdversarialLane.blocks(of: seeds)
     static let taps = 40
 
     /// The model and the screen agree: the step, the picks, the texts of the state, and what is stored.
@@ -159,9 +161,9 @@ struct OnboardingModelAdversarialTests {
         try await scene.expectOneProgram(goal: saved.goal, days: saved.days, offered: scene.programs.offered.count)
     }
 
-    @Test("Seeded walks of 40 taps agree with the brief's model after every tap")
-    func randomWalks_agreeWithTheBriefsModel() async throws {
-        for seed in Self.seeds {
+    @Test("Seeded walks of 40 taps agree with the brief's model after every tap", arguments: seedBlocks)
+    func randomWalks_agreeWithTheBriefsModel(seeds: Range<UInt64>) async throws {
+        for seed in seeds {
             try await Self.walk(seed: seed)
         }
     }

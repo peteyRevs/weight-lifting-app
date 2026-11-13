@@ -126,4 +126,20 @@ struct WorkoutRestAdversarialTests {
         #expect(ends >= 10)
         #expect(covers >= 20)
     }
+
+    @Test("A wait on the rest's task that is cancelled (a time limit) says so and returns, not 10 s later")
+    func keeperWait_cancelled_returnsAtOnce() async throws {
+        let cover = try await RestCover(Fixtures.seedSession())
+        let start = ContinuousClock.now
+        await withKnownIssue("the cancelled wait records that it was cancelled") {
+            let waiting = Task { await cover.keeperWait("a condition that never holds") { false } }
+            await giveWay()
+            waiting.cancel()
+            await waiting.value
+        } matching: { issue in
+            issue.comments.contains { $0.rawValue.contains("cancelled while waiting for") }
+        }
+        #expect(ContinuousClock.now - start < .seconds(5), "the wait ran on towards its 10 s bound")
+        await cover.close()
+    }
 }

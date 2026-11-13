@@ -21,7 +21,7 @@ extension WorkoutRestAdversarialTests {
     @Test("Two waits on the same rest (a task started again before the first ended) are one buzz at zero")
     func twoWaits_oneBuzz() async throws {
         let (cover, _) = try await Self.resting()
-        let second = Task { [store = cover.store] in await store.keepRestTime() }
+        let second = await cover.keepRestTimeAgain()
         await giveWay()
         await cover.run(150)
         await second.value
