@@ -1,5 +1,6 @@
-# Nightly (docs/ci-cd.md §3), manual only to save the free macOS minutes (Pete, 2026-09-27): the full
-# Nightly plans and a dependency report; a failure opens (or comments on) an issue labelled "nightly".
+# Nightly (docs/ci-cd.md §3 and "Nightly legs"), manual only to save the free macOS minutes (Pete, 2026-09-27):
+# the full Nightly plans, in legs, and a dependency report; a failure of any job opens (or comments on) an
+# issue labelled "nightly".
 name: Nightly
 
 on:
@@ -16,51 +17,125 @@ defaults:
 
 jobs:
   test:
-    name: ${{ matrix.plan }}
+    # Legs (docs/ci-cd.md, "Nightly legs"): the first nightly's one iOS job reached its 120 min while testing,
+    # and its one watch job lost its runner at 61 min (run 43144335050); neither left a result bundle. Each
+    # leg now tests the entries scripts/nightly-shards.txt (iOS) or nightly-watch-shards.txt gives it, balanced
+    # by run 43250355937's runner times to end at least ~1,300 s short of the deadline below.
+    name: ${{ matrix.platform }} leg ${{ matrix.leg }}/${{ matrix.legs }}
     runs-on: xcode-27 # a preview image; rolling back to 26.6 means reverting F32 as a whole (pr.yml)
-    timeout-minutes: 120
+    timeout-minutes: 145 # the step's 132, plus checkout, Xcode, mise, and packing and uploading the bundles
     permissions:
       contents: read
     strategy:
-      fail-fast: false
-      matrix:
+      fail-fast: false # every leg reports
+      matrix: # each shards file's legs, 1 to its count (WF76)
         include:
-          - { plan: Nightly, scheme: Ledger, destination: "platform=iOS Simulator,name=iPhone 17,OS=27.0" }
-          - { plan: Nightly-Watch, scheme: LedgerWatch, destination: "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0" }
+          - { platform: ios, leg: 1, legs: 8 }
+          - { platform: ios, leg: 2, legs: 8 }
+          - { platform: ios, leg: 3, legs: 8 }
+          - { platform: ios, leg: 4, legs: 8 }
+          - { platform: ios, leg: 5, legs: 8 }
+          - { platform: ios, leg: 6, legs: 8 }
+          - { platform: ios, leg: 7, legs: 8 }
+          - { platform: ios, leg: 8, legs: 8 }
+          - { platform: watch, leg: 1, legs: 3 }
+          - { platform: watch, leg: 2, legs: 3 }
+          - { platform: watch, leg: 3, legs: 3 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # as every job that runs check.sh (WF47), though --skip-lint runs no script test
       - name: Select Xcode from .xcode-version
         run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
-      - name: Check the selected Xcode against .xcode-version # pr.yml has check.sh step 0 for this
-        run: scripts/check-xcode-version.sh
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - name: Test the ${{ matrix.plan }} plan
+      # main's caches, restored as Check restores them and never saved here: main-cache.yml saves them on each
+      # code push to main, under these keys (docs/ci-cd.md, "Compilation cache"). A dispatch on main restores
+      # main's newest compilation cache; cold, run 43170933804's legs built for 1,132-1,455 s.
+      - name: Restore Swift package checkouts
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/SourcePackages
+          key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      - name: Restore compiled output (Xcode compilation cache)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/CompilationCache.noindex
+          key: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ github.sha }}
+          restore-keys: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
+      # The image pairs its Series 12 (46mm) with an iPhone 18 Pro Max, and once unpaired xcodebuild still sent
+      # the watch's app-hosted tests to that phone (run 43170933804). A watch leg tests on a new simulator of
+      # check.sh's default watch, never paired (sim-destination.sh --fresh), and deletes it at the end.
+      # On watchOS 27.2, not check.sh's 27.0: this image mounts the watchOS 27.0 runtime (24R362) twice, from
+      # CoreSimulator/Volumes and from cryptexd, and CoreSimulator shuts it down whenever it switches between
+      # them ("a path is on an unmounting volume"). That took the watch simulator down mid-test ("Test crashed
+      # with signal kill", runs 43250355937 and 43294406441) or out of xcodebuild's destinations before the
+      # tests (exit 70). The 27.2 runtime is cryptex-only, and no 27.2 device was shut down in either run.
+      - name: Create a never-paired watch simulator (watch legs)
+        id: watch-sim
+        if: matrix.platform == 'watch'
+        run: |
+          destination="$(scripts/sim-destination.sh --fresh "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.2")"
+          echo "destination=$destination" | tee -a "$GITHUB_OUTPUT"
+      # check.sh as the PR shards run it: step 0 checks the Xcode against .xcode-version, then this platform's
+      # build, the simulator's boot and the leg's tests, by UDID and one at a time, and check-test-results.sh
+      # over the leg's targets. No format, lint or coverage gate (the PR lane's).
+      - name: Test one leg of the Nightly plans (check.sh --nightly --skip-lint --shard)
+        timeout-minutes: 132 # fails the step before the job times out, so the bundles still upload
         env:
-          PLAN: ${{ matrix.plan }}
-          SCHEME: ${{ matrix.scheme }}
-          DESTINATION: ${{ matrix.destination }}
-        run: | # as check.sh steps 3–4: by UDID, built while the simulator boots, then tested on it alone
-          dest="$(scripts/sim-destination.sh "$DESTINATION")"
-          scripts/sim-boot.sh "$dest"
-          xcargs=(-project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$dest"
-            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
-            -onlyUsePackageVersionsFromResolvedFile)
-          xcodebuild build-for-testing "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN-build.xcresult" \
-            -quiet | mise exec -- xcbeautify --renderer github-actions
-          scripts/sim-boot.sh --wait "$dest"
-          xcodebuild test-without-building "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN.xcresult" \
-            -collect-test-diagnostics never -parallel-testing-enabled NO -test-timeouts-enabled YES -quiet |
-            mise exec -- xcbeautify --renderer github-actions
-          scripts/check-test-results.sh ".derivedData/Results/$PLAN.xcresult" "TestPlans/$PLAN.xctestplan"
-      - name: Upload the result bundle
+          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild, which finalizes the bundle.
+          # An iOS leg's tests take at most ~4,400 s on the runner (nightly-shards.txt), after a build of up to
+          # 2,092 s (the slowest seen, run 43250355937) and ~30 s of tools, catalogs and boot: about 6,500 s at
+          # worst, ~5,750 s with each leg's own build in that run. 7,800 s leaves room for that build's spread
+          # and check.sh's one retry of a runner that never connected, if the hang is short.
+          LEDGER_XCODEBUILD_DEADLINE: 7800
+          LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
+          LEDGER_WATCH_DEST: ${{ steps.watch-sim.outputs.destination }} # empty on an iOS leg: check.sh's default
+          # Each timing budget is the reference machine's, a simulator on a developer Mac. On this shared VM a
+          # timing test holds its median to its budget times this factor (testing-strategy §2.2, "Budgets and the
+          # runner"): 2 on an iOS leg, 3 on a watch leg, whose simulator ran every timed query 2.2-3.3 times
+          # slower than this Mac's watch simulator (run 43250355937; historyList's fetch 40.6 ms against 15 ms).
+          # xcodebuild hands a TEST_RUNNER_ variable to the test runner without its prefix. The local nightly and
+          # every other job leave it unset.
+          TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR: ${{ matrix.platform == 'watch' && 3 || 2 }}
+          PLATFORM: ${{ matrix.platform }}
+          SHARD: ${{ matrix.leg }}/${{ matrix.legs }}
+        run: scripts/check.sh --nightly "--$PLATFORM-only" --skip-lint --shard "$SHARD"
+      # A red leg keeps the simulator logs: the bundles of run 43250355937's watch legs did not say why the
+      # simulator shut down mid-test (these logs did: the runtime's remount, above), nor those of run
+      # 43294406441's iOS leg 3 why its announcement walk ran ~25 times slower than the run before.
+      - name: Collect the simulator logs
+        if: ${{ failure() }}
+        run: |
+          mkdir -p .derivedData/SimulatorLogs
+          cp -R ~/Library/Logs/CoreSimulator/. .derivedData/SimulatorLogs/CoreSimulator 2>/dev/null || true
+          cp -R ~/Library/Logs/DiagnosticReports/. .derivedData/SimulatorLogs/DiagnosticReports 2>/dev/null || true
+      # On a red or interrupted leg too. A bundle is ~35,000 small files, which download-artifact failed to
+      # extract on the macOS runner (pr.yml); one tar file round-trips.
+      - name: Pack the result bundles and snapshot diffs
+        if: ${{ !cancelled() }}
+        run: | # whichever exists: a leg that failed before its build has neither
+          kept=()
+          for dir in Results SnapshotArtifacts SimulatorLogs; do
+            if [[ -d ".derivedData/$dir" ]]; then kept+=("$dir"); fi
+          done
+          if [[ ${#kept[@]} -gt 0 ]]; then tar -cf nightly-results.tar -C .derivedData "${kept[@]}"; fi
+      - name: Upload them
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nightly-${{ matrix.plan }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .derivedData/Results
-          include-hidden-files: true # it lives under .derivedData/
+          name: nightly-${{ matrix.platform }}-leg${{ matrix.leg }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: nightly-results.tar
           if-no-files-found: ignore
           retention-days: 14
+      - name: Delete the watch simulator
+        if: ${{ !cancelled() && steps.watch-sim.outputs.destination != '' }}
+        continue-on-error: true # cleanup on a VM that is discarded anyway: it never turns a leg red
+        env:
+          DESTINATION: ${{ steps.watch-sim.outputs.destination }}
+        run: |
+          udid="${DESTINATION##*,id=}"
+          xcrun simctl shutdown "$udid" 2>/dev/null || true # already shut down, if the tests never booted it
+          xcrun simctl delete "$udid"
 
   dependencies:
     name: Dependency report

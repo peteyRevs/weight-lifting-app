@@ -136,7 +136,7 @@ authoritative; the plan differs:
     compilation-cache restore as before. Each runs `check.sh --ios-only --skip-static --shard <n>/2`: steps
     0–2 as before, the same iOS build (`--build-only`'s arguments, its result bundle's name aside, so both
     shards and `main-cache.yml` share cache keys; check-wiring W84), then the tests of the targets `scripts/pr-shards.txt` gives shard
-    `<n>`, the other shard's passed to `xcodebuild` as `-skip-testing`. `check-test-results.sh` then checks
+    `<n>`, passed to `xcodebuild` as `-only-testing`. `check-test-results.sh` then checks
     that the bundle ran exactly those targets and they passed; step 5 is skipped. Each green shard packs
     its bundle into one tar (download-artifact failed to extract a bundle's ~35,000 files on the macOS runner)
     and uploads it as the artifact `PR-iOS-shard<n>` (overwritten by a re-run, since "Re-run failed jobs" does
@@ -206,7 +206,88 @@ authoritative; the plan differs:
     cache on: 546 → 422 compile tasks, 75 → 59 modules, 81 → 63 links; compile task time 824–945 → 706–805
     s; wall 116–142 → 107–114 s cold, 29–57 → 23–28 s warm; the cache 1.5 → 1.25 GB. Every simulator here
     is Apple silicon (the `xcode-27` image is arm64); an Intel Mac could no longer run the gate. The
-    nightly's own `xcodebuild` calls still build both: slower, but it is manual and tests the same arm64 slices.
+    nightly built both until 2026-11-12; its legs now run `check.sh` too ("Nightly legs").
+  - *Nightly legs (2026-11-12).* The first nightly on the runner
+    (run 43144335050, `main` 71533ae) left nothing: its one iOS job reached the job's 120 min while testing,
+    which also skipped the upload, and its one watch job lost its runner at 61 min ("The hosted runner lost
+    communication with the server"), with no log. `nightly.yml`'s `test` job is now a matrix of legs
+    (`fail-fast: false`), each running `check.sh --nightly --<ios|watch>-only --skip-lint --shard <n>/<count>`:
+    step 0 (the Xcode against `.xcode-version`, the tools), that platform's build, boot and the leg's tests,
+    then `check-test-results.sh` over the leg's targets, as a PR shard; no format, lint or coverage gate.
+    `--nightly` makes steps 3 and 4 test the Nightly plans (bundles `Nightly-iOS…`, `Nightly-watchOS…`, a test
+    without its own allowance 600 s, the plans' maximum, against the PR plans' 60) and skips step 5;
+    `--watch-only` is `--ios-only`'s other half. `--shard` reads the tested plan's file,
+    `scripts/<plan, lowercase>-shards.txt`: `nightly-shards.txt` (eight iOS legs) and `nightly-watch-shards.txt`
+    (three). `pr-shards.adv.sh` holds every shards file to its plan (every enabled target in exactly one leg),
+    and `workflows.adv.sh` the matrix to the files (WF76). The leg's own bundles and snapshot diffs are packed
+    into one tar and uploaded as `nightly-<platform>-leg<n>-<run>-<attempt>` on a red or interrupted leg too
+    (`!cancelled()`). The report job still needs `test`, so any red leg opens or comments on the issue.
+    - *The legs (2026-11-12, round 2).* By run 43170933804's runner times (`main` 71533ae, the first legs;
+      each leg's total 4,589–7,672 s with cold builds of 1,132–1,455 s): the "Launch <target>" sections of
+      each bundle's action log, and per suite the log's "Suite … after" (Swift Testing) and "Test Suite …
+      Executed … in" (XCTest) lines. iOS leg 1 tested FeatureWorkoutTests alone for 6,185 s and ended 128 s
+      short of its deadline, and the chore(test) branch makes its rest walk about 1.8 times slower. So an
+      entry may now be one suite of a target, `<target>/<suite>`: the leg holding the target whole skips
+      it (`-skip-testing:<target>/<suite>`), and every leg runs exactly its entries (`-only-testing`; check-wiring
+      W88, W97: a leg of whole targets that skipped every other leg's entries also ran the split targets, since
+      xcodebuild reads a skipped suite as selecting the rest of its target, run 43204045964). `pr-shards.adv.sh` P12–P14 hold every target whole in exactly one leg, and each suite entry to
+      a suite its target declares, of a target whole in another leg, once; P13 keeps the PR shards whole
+      (`check-shards.sh` reads entries as targets). Eight iOS legs now test for about 2,100–2,900 s each
+      (`nightly-shards.txt` lists each entry's time): FeatureWorkoutTests' rest (1,493 s, ~2,690 after
+      chore(test)) and save (2,061) walks, the rest of FeatureWorkoutTests (2,631), LedgerUITests in two
+      (seven classes, 1,744 s, and the rest, 1,617), LedgerPersistenceTests' history-model suite (1,006)
+      apart from the rest of it (2,592), and FeatureProgramTests (2,394) alone; the smaller targets fill
+      them. With a build of up to ~1,500 s every leg ends within about 75 min. Three watch legs:
+      LedgerPersistenceTests without its two longest suites (1,945 s on iOS), those two suites, and the
+      other seven targets (about 3,230 s after a 505 s build). Eleven macOS jobs exceed the account's
+      concurrent macOS jobs, so some legs queue: the run's wall time grows, no leg's time does. The runner
+      took 2.4–3.1 times this Mac's time per target (Domain 1,148 against 369 s, Sync 1,075 against 370),
+      not the 1.3–1.5 assumed in round 1. Rebalance from a newer run's bundles when a leg's total nears 75 min.
+    - *Performance budgets.* Each leg sets `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR`, 2 on an iOS leg and 3
+      on a watch leg: on the runner a timing test holds its median to its budget times that factor
+      (testing-strategy §2.2, "Budgets and the runner"). The watch legs' simulator ran each timed query 2.2-3.3
+      times slower than this Mac's (run 43250355937), so twice the budget failed `historyList` there.
+    - *Caches.* Each leg restores `main`'s package checkouts and compilation cache under Check's keys
+      (`actions/cache/restore`, WF78) and runs `check.sh` with `LEDGER_COMPILATION_CACHE=YES`; only
+      `main-cache.yml` saves them. A dispatch on `main` restores `main`'s newest cache.
+    - *A runner that never connects.* Watch leg 1 of that run failed after 561 s with "xctest encountered
+      an error (The test runner hung before establishing connection.)" and no test run. `check.sh` now tests
+      again once when a test run fails and its bundle shows no test passed or skipped and every failure is
+      exactly that message (`runner_never_connected`, checked against that bundle; W93–W95): it shuts the
+      simulator down, boots it and waits for it (`sim-boot.sh`), and tests again, unless the deadline has
+      passed. The first bundle is kept as `<bundle>-runner-hung.xcresult`, and the next run removes it. Any
+      other failure, or a second hang, fails as before.
+    - *The watch job's lost runner (round 1).* No cause was found in the code. The watch plan runs the same
+      seeded targets as iOS at 2,000 seeds, plus the nightly-only `.performance` and `.slow` suites (20,000-set
+      databases in files under the temporary directory); nothing in them grows without bound, and the tests run
+      one at a time. Split into legs, no runner was lost in run 43170933804. In that run both watch legs'
+      `xcodebuild` reported the image's iPhone 18 Pro Max, the phone the image pairs with the watch, though
+      `sim-destination.sh` had unpaired it; leg 2's app-hosted targets failed "Cannot test target … on
+      'iPhone 18 Pro Max'", and the watch's `TodaySnapshotTests` reported "no cell to draw on iOS". Locally the
+      same watch is unpaired and passes. So each watch leg now creates a new simulator of `check.sh`'s default
+      watch, of its device type and runtime, never paired or booted (`sim-destination.sh --fresh`, SD30–SD33),
+      passes it to `check.sh` as `LEDGER_WATCH_DEST`, and deletes it at the end (`continue-on-error`; WF80).
+      The local gate and the PR lane keep the named simulators.
+    - *watchOS 27.2 on the runner (2026-11-12).* The image mounts the watchOS 27.0 runtime twice (from
+      CoreSimulator's Volumes and from cryptexd), and CoreSimulator shuts it down each time it switches between
+      them. That killed the watch simulator mid-test ("Test crashed with signal kill", runs 43250355937 and
+      43294406441), or removed it from xcodebuild's destinations before the tests started (exit 70). The nightly's
+      watch legs therefore create their simulator on watchOS 27.2, which is cryptex-only; the local gate stays on
+      27.0. A red leg uploads `~/Library/Logs/CoreSimulator` and `DiagnosticReports` with its bundles.
+    - *Next (deferred).* Every leg builds the same tree for its platform. One build job per platform, its
+      products handed to the legs' `test-without-building`, would save each leg its build (about 500–1,500 s)
+      at the cost of an artifact round trip; a follow-up, not this change.
+    - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 7,800 s in every leg; the step's timeout is 132 min, 2 min
+      after it, and the job's 145, for checkout, Xcode, mise and the tar and upload. An iOS leg's tests take
+      at most ~4,400 s, after a build of up to 2,092 s (run 43250355937's slowest) and ~30 s of tools,
+      catalogs and boot: about 6,500 s at worst, ~5,750 s with each leg's own build in that run. Minutes are
+      free while the repository is public.
+    - *The legs (2026-11-12, round 3).* Run 43250355937 (this branch at 3b26895): iOS leg 3, FeatureWorkoutTests
+      without the rest and save walks, tested for 5,904 s and ended at 7,261 s, 539 s short of the deadline.
+      Its `WorkoutAnnouncementAdversarialTests` took 4,365 s of that (1,135 s in run 43170933804, before the
+      chore(test) branch), more than any lighter leg could take. Leg 3 now runs that suite alone, and the
+      rest of FeatureWorkoutTests (1,539 s) joins LedgerPersistenceTests in leg 6, then the lightest (3,625 s
+      in all). Every leg's entry times in `nightly-shards.txt` are that run's.
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
   `--skip-static` since the split above; step 2 then runs in `Static checks`, and `--shard` since
   2026-11-11; step 5 then runs in `Coverage`): steps 0–3 and 5, no watchOS step, and the coverage gate

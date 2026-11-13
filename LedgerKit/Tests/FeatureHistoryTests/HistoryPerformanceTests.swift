@@ -35,10 +35,13 @@ struct HistoryPerformanceTests {
         let work = { built = HistoryPresentation.make(input) }
         work()
         let clock = ContinuousClock()
-        let timings = (0 ..< Self.runs).map { _ in clock.measure(work) }.sorted()
-        let median = timings[Self.runs / 2]
+        let timings = (0 ..< Self.runs).map { _ in clock.measure(work) }
         #expect(built?.rows.count == 1000)
-        #expect(median < Self.model, "\(median)")
-        Attachment.record("HistoryPresentation.make over 1,000 workouts: median \(median)", named: "history-list.txt")
+        let verdict = PerformanceRunner.verdict(timings, budget: Self.model, statistic: .median)
+        #expect(verdict.isWithinBudget, "\(verdict)")
+        Attachment.record(
+            "HistoryPresentation.make over 1,000 workouts: median \(verdict.median)",
+            named: "history-list.txt"
+        )
     }
 }

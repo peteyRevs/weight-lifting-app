@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Performance verdicts (docs/testing-strategy.md §2.2, "Budgets and the runner"): every test that times code against
+# a budget reaches its verdict through PerformanceRunner.verdict, the one place the hosted nightly's runner factor
+# swaps the statistic (median × factor) and scales the budget. A test that compared a timing itself would hold the
+# runner to the reference machine's budget, or its own statistic, and nothing would say so.
+set -uo pipefail
+source "$(dirname "$0")/lib.sh"
+
+T="$ADV_TMP"
+# Files that time code but hold no budget: a bound that only proves a loop ends (seconds, not a performance claim).
+EXEMPT="ExercisePickerModelAdversarialTests.swift WrapLayoutAdversarialTests.swift"
+
+# faults <tests dir>: each file that measures a time with no verdict through PerformanceRunner, or that has an
+# #expect comparing with < or <= of its own: a timing against a budget, an inline Duration or a local variable alike.
+# A bound that is not a timing says so on its line ("// not a timing"). One "<file>: <why>" per line.
+faults() {
+    grep -rlE 'clock\.measure|\.measure \{' "$1" --include='*.swift' | sort | while read -r file; do
+        name="$(basename "$file")"
+        [[ " $EXEMPT " == *" $name "* ]] && continue
+        grep -q 'PerformanceRunner\.verdict' "$file" || echo "$name: times code with no PerformanceRunner.verdict"
+        if grep -E '#expect\(.*[^<]<=? ' "$file" | grep -qv 'not a timing'; then
+            echo "$name: compares a timing to a budget itself"
+        fi
+    done
+}
+
+measured="$(grep -rlE 'clock\.measure|\.measure \{' "$ROOT/LedgerKit/Tests" --include='*.swift' | wc -l | tr -d ' ')"
+check "V01 every test that times code against a budget reaches its verdict through PerformanceRunner ($measured files time code)" \
+    is "$(faults "$ROOT/LedgerKit/Tests")" ""
+check "V02 ... and no budget is scaled anywhere else (the verdict scales it once)" \
+    is "$(grep -rlE 'PerformanceRunner\.factor *\*|\* *PerformanceRunner\.factor|PerformanceRunner\.budget' "$ROOT/LedgerKit/Tests" \
+        --include='*.swift' | grep -v '/PerformanceRunnerTests.swift$' || true)" ""
+for name in $EXEMPT; do
+    file="$(find "$ROOT/LedgerKit/Tests" -name "$name")"
+    check "V03 the exempt $name still bounds a loop in seconds, with no budget" \
+        is "$([[ -n "$file" ]] && grep -cE 'PerformanceBudget|budget' "$file")" "0"
+done
+
+# The rule itself, against tests that break it as a later edit could.
+mkdir -p "$T/Tests/A"
+cat >"$T/Tests/A/OwnMedianTests.swift" <<'SWIFT'
+let timings = (0 ..< 5).map { _ in clock.measure { work() } }.sorted()
+#expect(timings[2] < PerformanceBudget.statsQuery, "median")
+SWIFT
+cat >"$T/Tests/A/InlineTests.swift" <<'SWIFT'
+let timings = (0 ..< 5).map { _ in clock.measure { work() } }
+let verdict = PerformanceRunner.verdict(timings, budget: .milliseconds(5))
+#expect(verdict.isWithinBudget, "\(verdict)")
+#expect(timings[2] < .milliseconds(5), "median \(timings[2])")
+SWIFT
+cat >"$T/Tests/A/StaticBudgetTests.swift" <<'SWIFT'
+let time = Self.median { _ = clock.measure { work() } }
+let verdict = PerformanceRunner.verdict([time], budget: Self.keystroke)
+#expect(time < Self.keystroke, "\(time)")
+SWIFT
+cat >"$T/Tests/A/LocalBudgetTests.swift" <<'SWIFT'
+let limit = Duration.milliseconds(5)
+let taken = clock.measure { work() }
+let verdict = PerformanceRunner.verdict([taken], budget: limit)
+#expect(taken <= limit)
+SWIFT
+cat >"$T/Tests/A/GoodTests.swift" <<'SWIFT'
+let timings = (0 ..< 5).map { _ in clock.measure { work() } }
+let verdict = PerformanceRunner.verdict(timings, budget: Self.budget, statistic: .median)
+#expect(verdict.isWithinBudget, "\(verdict)")
+#expect(added < Self.memoryBudget, "\(added) bytes") // bytes, not a timing
+#expect(verdict.runs.count == 5)
+SWIFT
+check "V04 a test that times code and compares its own statistic, a static, inline or local budget, is named; a verdict passes" \
+    is "$(faults "$T/Tests")" "InlineTests.swift: compares a timing to a budget itself
+LocalBudgetTests.swift: compares a timing to a budget itself
+OwnMedianTests.swift: times code with no PerformanceRunner.verdict
+OwnMedianTests.swift: compares a timing to a budget itself
+StaticBudgetTests.swift: compares a timing to a budget itself"
+
+finish

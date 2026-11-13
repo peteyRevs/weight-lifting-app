@@ -27,8 +27,16 @@
 #                                       the others are skipped), and step 5 is left to
 #                                       scripts/check-shards.sh, which checks and gates every shard's
 #                                       bundle. PR CI's Check jobs, one per shard (docs/ci-cd.md,
-#                                       "Shards"). Needs --ios-only; combines with --skip-lint and
-#                                       --skip-static
+#                                       "Shards"). Needs --ios-only or --watch-only; combines with
+#                                       --skip-lint, --skip-static and --nightly
+#   scripts/check.sh --watch-only       steps 0–2 and 4: the watchOS step alone, and no coverage gate (it
+#                                       reads both platforms). Combines with --skip-lint, --skip-static,
+#                                       --nightly and --shard
+#   scripts/check.sh --nightly          steps 3 and 4 test the Nightly plans (Nightly, Nightly-Watch), and
+#                                       step 5 is skipped: coverage is the PR lane's gate. The nightly's
+#                                       legs run --nightly --skip-lint with --ios-only or --watch-only and
+#                                       --shard (docs/ci-cd.md, "Nightly legs"). Takes no --fast,
+#                                       --lint-only, --static-only or --record-snapshots
 #
 # Step 3 also checks every String Catalog against the keys its iOS build extracted
 # (scripts/check-string-catalogs.sh), in every mode that builds iOS, --record-snapshots too.
@@ -47,6 +55,7 @@ RESULTS=".derivedData/Results"
 
 ALL_FLAGS="$*" FLAG_COUNT=$#
 FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0 IOS_ONLY=0 STATIC_ONLY=0 SKIP_STATIC=0 BUILD_ONLY=0 SHARD=""
+WATCH_ONLY=0 NIGHTLY=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --fast) FAST=1 ;;
@@ -54,6 +63,8 @@ while [[ $# -gt 0 ]]; do
         --skip-lint) SKIP_LINT=1 ;;
         --record-snapshots) RECORD_SNAPSHOTS=1 ;;
         --ios-only) IOS_ONLY=1 ;;
+        --watch-only) WATCH_ONLY=1 ;;
+        --nightly) NIGHTLY=1 ;;
         --static-only) STATIC_ONLY=1 ;;
         --skip-static) SKIP_STATIC=1 ;;
         --build-only) BUILD_ONLY=1 ;;
@@ -67,8 +78,10 @@ while [[ $# -gt 0 ]]; do
 done
 # --lint-only and --static-only exclude every other flag, and --fast runs no simulator: no snapshots to
 # record, no platform to pick. --skip-static runs part of what --skip-lint skips, and none of --lint-only.
-if (( (LINT_ONLY || STATIC_ONLY) && (SKIP_LINT || FAST || RECORD_SNAPSHOTS || IOS_ONLY || SKIP_STATIC)
-    || LINT_ONLY && STATIC_ONLY || FAST && (RECORD_SNAPSHOTS || IOS_ONLY) || SKIP_STATIC && SKIP_LINT )); then
+# --watch-only is --ios-only's other half; --nightly picks the plans that steps 3 and 4 test.
+if (( (LINT_ONLY || STATIC_ONLY) && (SKIP_LINT || FAST || RECORD_SNAPSHOTS || IOS_ONLY || SKIP_STATIC || WATCH_ONLY || NIGHTLY)
+    || LINT_ONLY && STATIC_ONLY || FAST && (RECORD_SNAPSHOTS || IOS_ONLY || WATCH_ONLY || NIGHTLY) || SKIP_STATIC && SKIP_LINT
+    || IOS_ONLY && WATCH_ONLY || NIGHTLY && RECORD_SNAPSHOTS )); then
     echo "error: contradictory flags: $ALL_FLAGS" >&2
     exit 2
 fi
@@ -77,15 +90,33 @@ if (( BUILD_ONLY && FLAG_COUNT > 1 )); then
     exit 2
 fi
 
-# --shard <n>/<count> (PR CI's Check jobs): the tests of shard <n> in scripts/pr-shards.txt, every other
-# shard's targets skipped. The build passes the unsharded build's arguments (its result bundle's name aside),
-# so every shard and main-cache.yml share compilation cache keys (check-wiring W84). A shard measures only part of the coverage, so step 5 is
-# scripts/check-shards.sh's, over every shard's bundle. Only an iOS-only test run can be sharded.
-SHARDS_FILE="scripts/pr-shards.txt"
-SHARD_TARGETS=() SKIP_TESTING=()
+# The lane's plans and result bundles: the PR plans by default, the Nightly plans with --nightly. A test
+# that has no time allowance of its own gets the plan's maximum (check-wiring W88).
+LANE=PR IOS_PLAN=PR WATCH_PLAN=PR-Watch TEST_ALLOWANCE=60
+if [[ $NIGHTLY -eq 1 ]]; then LANE=Nightly IOS_PLAN=Nightly WATCH_PLAN=Nightly-Watch TEST_ALLOWANCE=600; fi
+
+# --shard <n>/<count> (PR CI's Check jobs, the nightly's legs): the tests of shard <n> in the tested plan's
+# shards file, scripts/<plan, lowercase>-shards.txt (pr-shards.txt, nightly-shards.txt, nightly-watch-shards.txt).
+# An entry may be one suite of a target, "<target>/<suite>", when the target is too long for one shard (the
+# nightly's FeatureWorkoutTests). Every shard runs exactly its own entries (-only-testing), less the suites other
+# shards hold of a target it holds whole (-skip-testing:<target>/<suite>). It never skips another shard's whole
+# targets: xcodebuild reads -skip-testing:<target>/<suite> as selecting the rest of <target>, so a shard of whole
+# targets skipping every other shard's entries ran the targets split across legs as well (run 43204045964's legs
+# 3, 4, 6 and 7 ran other legs' LedgerPersistenceTests, FeatureWorkoutTests and LedgerUITests and hit their
+# deadline). -only-testing leaves no target out: pr-shards.adv.sh P01 and P12 hold every target each shards
+# file's plan enables in exactly one shard. The build passes the unsharded build's arguments (its result bundle's
+# name aside), so every shard and main-cache.yml share compilation cache keys (check-wiring W84). A shard
+# measures only part of the coverage, so step 5 is scripts/check-shards.sh's, over every shard's bundle. Only a
+# run that tests one platform can be sharded.
+SHARD_TARGETS=() TEST_SELECTION=()
 if [[ -n "$SHARD" ]]; then
-    if (( !IOS_ONLY || FAST || LINT_ONLY || STATIC_ONLY || RECORD_SNAPSHOTS )); then
-        echo "error: --shard needs --ios-only, and takes no --fast, --lint-only, --static-only or --record-snapshots: $ALL_FLAGS" >&2
+    if (( !(IOS_ONLY || WATCH_ONLY) || FAST || LINT_ONLY || STATIC_ONLY || RECORD_SNAPSHOTS )); then
+        echo "error: --shard needs --ios-only or --watch-only, and takes no --fast, --lint-only, --static-only or --record-snapshots: $ALL_FLAGS" >&2
+        exit 2
+    fi
+    SHARDS_FILE="scripts/$(tr '[:upper:]' '[:lower:]' <<<"$([[ $IOS_ONLY -eq 1 ]] && echo "$IOS_PLAN" || echo "$WATCH_PLAN")")-shards.txt"
+    if [[ ! -f "$SHARDS_FILE" ]]; then
+        echo "error: --shard: this plan has no shards ($SHARDS_FILE is missing): $ALL_FLAGS" >&2
         exit 2
     fi
     shard_count="$(awk '$1 !~ /^#/ && NF { print $1 }' "$SHARDS_FILE" | sort -u | wc -l | tr -d ' ')"
@@ -93,10 +124,21 @@ if [[ -n "$SHARD" ]]; then
         echo "error: --shard takes <n>/$shard_count, <n> from 1 to $shard_count ($SHARDS_FILE has $shard_count shards), not $SHARD" >&2
         exit 2
     fi
-    while read -r shard target _; do
+    other_suites=()
+    while read -r shard entry _; do
         if [[ -z "$shard" || "$shard" == \#* ]]; then continue; fi
-        if [[ "$shard" == "${SHARD%/*}" ]]; then SHARD_TARGETS+=("$target"); else SKIP_TESTING+=("-skip-testing:$target"); fi
+        if [[ "$shard" != "${SHARD%/*}" ]]; then
+            if [[ "$entry" == */* ]]; then other_suites+=("$entry"); fi
+            continue
+        fi
+        TEST_SELECTION+=("-only-testing:$entry")
+        if [[ " ${SHARD_TARGETS[*]-} " != *" ${entry%%/*} "* ]]; then SHARD_TARGETS+=("${entry%%/*}"); fi
     done <"$SHARDS_FILE"
+    # Another shard's suite is skipped only where this shard holds its target whole (xcodebuild applies
+    # -skip-testing after -only-testing); a suite of a target this shard does not run needs no skip.
+    for entry in ${other_suites[@]+"${other_suites[@]}"}; do
+        if [[ " ${TEST_SELECTION[*]} " == *" -only-testing:${entry%%/*} "* ]]; then TEST_SELECTION+=("-skip-testing:$entry"); fi
+    done
 fi
 # --build-only is the iOS half of the gate without its static steps; the rest of the script reads these.
 if [[ $BUILD_ONLY -eq 1 ]]; then IOS_ONLY=1 SKIP_LINT=1; fi
@@ -195,9 +237,9 @@ if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
 fi
 
 # In record mode a plan run fails by design; keep going so both simulators record.
-run_plan() { # <result bundle> <plan file> <xcodebuild args…>
-    local result="$1" plan="$2"
-    shift 2
+run_plan() { # <result bundle> <plan file> <destination> <xcodebuild args…>
+    local result="$1" plan="$2" destination="$3"
+    shift 3
     if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
         xcodebuild "$@" | beautify || true
         # A failed build or simulator boot also fails the run: it is a recording only if tests ran.
@@ -209,9 +251,30 @@ run_plan() { # <result bundle> <plan file> <xcodebuild args…>
             exit 1
         fi
     else
-        xcodebuild "$@" | beautify
+        local status=0
+        xcodebuild "$@" | beautify || status=$?
+        if [[ $status -ne 0 ]]; then
+            # Once, and only for the simulator's own failure: the test runner never connected, so no test ran
+            # (the nightly's watch leg 1, run 43170933804), and only before the deadline, on a restarted
+            # simulator. The first bundle is kept.
+            if ! runner_never_connected "$result"; then return "$status"; fi
+            if [[ -n "${LEDGER_XCODEBUILD_DEADLINE:-}" && $SECONDS -ge $LEDGER_XCODEBUILD_DEADLINE ]]; then return "$status"; fi
+            echo "warning: the test runner hung before it connected, and no test ran: restarting the simulator, testing again once" >&2
+            mv "$result" "${result%.xcresult}-runner-hung.xcresult"
+            xcrun simctl shutdown "${destination##*id=}" || true # already shut down: nothing to stop
+            scripts/sim-boot.sh "$destination"
+            scripts/sim-boot.sh --wait "$destination"
+            xcodebuild "$@" | beautify
+        fi
         scripts/check-test-results.sh "$result" "$plan" ${SHARD_TARGETS[@]+"${SHARD_TARGETS[@]}"}
     fi
+}
+# <result bundle>: whether its run failed only because the test runner never connected: no test passed or was
+# skipped, and every failure is xcodebuild's "The test runner hung before establishing connection."
+runner_never_connected() {
+    xcrun xcresulttool get test-results summary --path "$1" 2>/dev/null | jq -e '.passedTests == 0
+        and .skippedTests == 0 and (.testFailures | length) > 0
+        and all(.testFailures[]; .failureText == "The test runner hung before establishing connection.")' >/dev/null
 }
 
 # ---- fast tier: host-side package tests, no simulator -----------------------
@@ -226,7 +289,8 @@ if [[ $FAST -eq 1 ]]; then
 fi
 
 mkdir -p "$RESULTS"
-IOS_DEST="$(scripts/sim-destination.sh "$IOS_DEST")" # resolve each to one simulator by UDID and unpair it
+# resolve each tested platform's to one simulator by UDID, and unpair it
+if [[ $WATCH_ONLY -eq 0 ]]; then IOS_DEST="$(scripts/sim-destination.sh "$IOS_DEST")"; fi
 if [[ $IOS_ONLY -eq 0 ]]; then WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"; fi
 
 # ---- 3. iOS, 4. watchOS: build while the simulator boots, then test on it alone ----------
@@ -252,7 +316,7 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
         step "$1 · $2 build (the simulator boots meanwhile)"
         scripts/sim-boot.sh "$5"
     fi
-    rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"
+    rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult" "$RESULTS/$6-runner-hung.xcresult"
     xcodebuild build-for-testing "${xcargs[@]}" ${CACHE_SETTINGS[@]+"${CACHE_SETTINGS[@]}"} \
         -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
     done_step "$2 build"
@@ -268,13 +332,18 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     step "$1 · $2 $4 test plan${SHARD:+, shard $SHARD (${#SHARD_TARGETS[@]} test targets)}"
     # On a failure Xcode 27 runs `simctl diagnose`, which times out after 600 s here (F32 notes); the
     # result bundle still holds every failure, log and attachment.
-    run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" \
+    run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" "$5" \
         test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" -collect-test-diagnostics never \
-        -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -quiet \
-        ${SKIP_TESTING[@]+"${SKIP_TESTING[@]}"}
+        -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance "$TEST_ALLOWANCE" -quiet \
+        ${TEST_SELECTION[@]+"${TEST_SELECTION[@]}"}
     done_step "$2 tests"
 }
-test_platform 3 iOS Ledger PR "$IOS_DEST" "PR-iOS${SHARD:+-shard${SHARD%/*}}"
+if [[ $WATCH_ONLY -eq 1 ]]; then
+    step "3 · iOS skipped (--watch-only)"
+    done_step "iOS skipped (--watch-only)"
+else
+    test_platform 3 iOS Ledger "$IOS_PLAN" "$IOS_DEST" "$LANE-iOS${SHARD:+-shard${SHARD%/*}}"
+fi
 if [[ $BUILD_ONLY -eq 1 ]]; then
     summary
     printf '\n\033[32mcheck.sh (--build-only) OK\033[0m\n' # built, not tested
@@ -285,7 +354,7 @@ if [[ $IOS_ONLY -eq 1 ]]; then
     done_step "watchOS skipped (--ios-only)"
     coverage=(--ios-only "$RESULTS/PR-iOS.xcresult")
 else
-    test_platform 4 watchOS LedgerWatch PR-Watch "$WATCH_DEST" PR-watchOS
+    test_platform 4 watchOS LedgerWatch "$WATCH_PLAN" "$WATCH_DEST" "$LANE-watchOS${SHARD:+-shard${SHARD%/*}}"
     coverage=("$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult")
 fi
 
@@ -296,9 +365,15 @@ if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
 fi
 
 # ---- 5. coverage gate -------------------------------------------------------
-if [[ -n "$SHARD" ]]; then
+if [[ $NIGHTLY -eq 1 ]]; then
+    step "5 · coverage gate skipped (--nightly): coverage is the PR lane's gate"
+    done_step "coverage skipped (--nightly)"
+elif [[ -n "$SHARD" ]]; then
     step "5 · coverage gate skipped (--shard): scripts/check-shards.sh gates every shard's bundle"
     done_step "coverage skipped (--shard)"
+elif [[ $WATCH_ONLY -eq 1 ]]; then
+    step "5 · coverage gate skipped (--watch-only): the gate reads both platforms"
+    done_step "coverage skipped (--watch-only)"
 else
     step "5 · coverage gate"
     scripts/coverage-gate.sh "${coverage[@]}"
@@ -306,10 +381,10 @@ else
 fi
 
 summary
-if [[ -n "$SHARD" ]]; then
-    printf '\n\033[32mcheck.sh (--ios-only --shard %s) OK\033[0m\n' "$SHARD" # one shard's tests, no coverage
-elif [[ $IOS_ONLY -eq 1 ]]; then
-    printf '\n\033[32mcheck.sh (--ios-only) OK\033[0m\n' # not the full gate: that one tests watchOS too
-else
-    printf '\n\033[32mcheck.sh OK\033[0m\n'
-fi
+# Only the plain run is the full gate; any other names what it left out: a platform, the PR plans, shards.
+mode=""
+if [[ $NIGHTLY -eq 1 ]]; then mode+=" --nightly"; fi
+if [[ $IOS_ONLY -eq 1 ]]; then mode+=" --ios-only"; fi # not the full gate: that one tests watchOS too
+if [[ $WATCH_ONLY -eq 1 ]]; then mode+=" --watch-only"; fi
+if [[ -n "$SHARD" ]]; then mode+=" --shard $SHARD"; fi # one shard's tests, no coverage
+printf '\n\033[32mcheck.sh%s OK\033[0m\n' "${mode:+ (${mode# })}"

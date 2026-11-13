@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import LedgerDomain
 @testable import LedgerPersistence
+import LedgerTestSupport
 import Testing
 
 /// F05 records follow-up, adversarial round 1: product decision #27's replay in shapes worse than the
@@ -121,9 +122,11 @@ struct RecordReplayWorstCaseAdversarialTests {
             #expect(records == Self.records(shape, change: change), "run \(run)")
         }
         timings.removeFirst()
-        let sorted = timings.sorted()
-        let p95 = sorted[sorted.count * 95 / 100 - 1]
-        Attachment.record("\(shape): p95 \(p95), median \(sorted[sorted.count / 2])", named: "replay-\(shape).txt")
-        #expect(p95 < PerformanceBudget.historyWrite, "\(shape): \(timings)")
+        let verdict = PerformanceRunner.verdict(timings, budget: PerformanceBudget.historyWrite)
+        Attachment.record(
+            "\(shape): p95 \(verdict.percentile95), median \(verdict.median)",
+            named: "replay-\(shape).txt"
+        )
+        #expect(verdict.isWithinBudget, "\(shape): \(verdict)")
     }
 }

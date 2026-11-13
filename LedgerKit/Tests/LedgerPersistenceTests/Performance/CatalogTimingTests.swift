@@ -32,8 +32,8 @@ struct CatalogTimingTests {
             })
             #expect(try await repository.all().count == 214)
         }
-        let median = Self.median(of: all, named: "catalog-seed.txt")
-        #expect(median < PerformanceBudget.catalogSeed, "median \(median); runs \(all)")
+        let verdict = Self.verdict(of: all, budget: PerformanceBudget.catalogSeed, named: "catalog-seed.txt")
+        #expect(verdict.isWithinBudget, "\(verdict)")
     }
 
     @Test("Searching 214 seeded entries plus custom ones takes under 10 ms (median of 5)")
@@ -50,15 +50,14 @@ struct CatalogTimingTests {
                 _ = try await repository.search("press", equipment: nil, muscle: nil)
             })
         }
-        let median = Self.median(of: all, named: "exercise-search.txt")
-        #expect(median < PerformanceBudget.exerciseSearch, "median \(median); runs \(all)")
+        let verdict = Self.verdict(of: all, budget: PerformanceBudget.exerciseSearch, named: "exercise-search.txt")
+        #expect(verdict.isWithinBudget, "\(verdict)")
     }
 
     /// The median of `all` after its first (warm-up) run, recorded in the result bundle as `name`.
-    static func median(of all: [Duration], named name: String) -> Duration {
-        let timings = all.dropFirst().sorted()
-        let median = timings[timings.startIndex + timings.count / 2]
-        Attachment.record("median \(median); warm-up \(all[0]); runs \(timings)", named: name)
-        return median
+    static func verdict(of all: [Duration], budget: Duration, named name: String) -> PerformanceRunner.Verdict {
+        let verdict = PerformanceRunner.verdict(Array(all.dropFirst()), budget: budget, statistic: .median)
+        Attachment.record("median \(verdict.median); warm-up \(all[0]); runs \(verdict.runs)", named: name)
+        return verdict
     }
 }

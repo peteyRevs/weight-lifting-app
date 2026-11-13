@@ -80,8 +80,8 @@ struct RecordReplayPerformanceTests {
             ("materialize a new workout at the end", additions, PerformanceBudget.recordNewWorkout)
         ]
         for (name, timings, budget) in timed {
-            let runs = Array(timings.dropFirst())
-            #expect(Self.percentile95(runs) < budget, "\(name): \(runs)")
+            let verdict = PerformanceRunner.verdict(Array(timings.dropFirst()), budget: budget)
+            #expect(verdict.isWithinBudget, "\(name): \(verdict)")
         }
         let report = timed.map { Self.line($0.0, Array($0.1.dropFirst())) }.joined(separator: "\n")
         Attachment.record(report, named: "record-replay.txt")
@@ -129,18 +129,16 @@ struct RecordReplayPerformanceTests {
         #expect(try await events.uncompactedWorkoutIDs() == [kept])
         #expect(try await queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM workout") } == 421)
         let finishes = Array(zip(saves, looks).map { $0 + $1 }.dropFirst())
-        #expect(Self.percentile95(finishes) < PerformanceBudget.recordNewWorkout, "the save and the look: \(finishes)")
+        let verdict = PerformanceRunner.verdict(finishes, budget: PerformanceBudget.recordNewWorkout)
+        #expect(verdict.isWithinBudget, "the save and the look: \(verdict)")
         let save = "materialize a new workout at the end, with 2 program updates, 5 misses and a log of 60 dropped"
         let look = "the host's look after it, uncompactedWorkoutIDs() beside a kept log of 200"
         let report = [Self.line(save, Array(saves.dropFirst())), Self.line(look, Array(looks.dropFirst()))]
         Attachment.record(report.joined(separator: "\n"), named: "finish-save.txt")
     }
 
-    static func percentile95(_ timings: [Duration]) -> Duration {
-        timings.sorted()[timings.count * 95 / 100 - 1]
-    }
-
     static func line(_ name: String, _ timings: [Duration]) -> String {
-        "\(name): p95 \(percentile95(timings)), median \(timings.sorted()[timings.count / 2])"
+        let (median, percentile95) = PerformanceRunner.statistics(timings)
+        return "\(name): p95 \(percentile95), median \(median)"
     }
 }

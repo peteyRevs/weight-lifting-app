@@ -1,5 +1,5 @@
 /// LedgerPersistence's performance budgets (architecture §15, testing-strategy §2.2): kept here, never
-/// inline in a test.
+/// inline in a test. Each is the reference machine's; a test reaches its verdict through `PerformanceRunner.verdict`.
 enum PerformanceBudget {
     /// F05 risk "watchOS first-launch migration": `LedgerDatabase.open(at:)` creating and migrating a new
     /// file. Above it, F07 opens the database after the first frame.

@@ -13,7 +13,7 @@ cp "${ADV_SIM_DESTINATION:-$ROOT/scripts/sim-destination.sh}" "$SB/scripts/sim-d
 cp "${ADV_SIM_BOOT:-$ROOT/scripts/sim-boot.sh}" "$SB/scripts/sim-boot.sh"                         # the real one
 cp "${ADV_CHECK_XCODE:-$ROOT/scripts/check-xcode-version.sh}" "$SB/scripts/check-xcode-version.sh" # the real one
 cp "${ADV_BOOTSTRAP:-$ROOT/scripts/bootstrap.sh}" "$SB/scripts/bootstrap.sh"                     # the real one (W41)
-cp "$ROOT/scripts/pr-shards.txt" "$SB/scripts/pr-shards.txt"                                       # the real one (W79)
+cp "$ROOT"/scripts/*-shards.txt "$SB/scripts/"                                                     # the real ones (W79, W88)
 echo 27.0 >"$SB/.xcode-version" # the stub xcodebuild reports $XCODE_REPORTS, 27.0 by default
 fake_simctl "$SB/bin" # ... against the runner's simulators, logging to $LOG too: one ordered log
 export LOG="$ADV_TMP/calls.log" XCRUN_LOG="$ADV_TMP/calls.log"
@@ -63,6 +63,7 @@ printf "%s diagnostics=%s\\n" "$action" "$diag" >>"$LOG.diag"
 printf "%s %s\\n" "$action-$scheme" "${TEST_RUNNER_SNAPSHOT_TESTING_RECORD-unset}" >>"$LOG.env"
 mkdir -p "$bundle"
 echo "Test Suite All tests passed"
+if [ "${FAIL_ONCE_AT:-}" = "xcodebuild-$action-$scheme" ] && [ ! -e "$LOG.once" ]; then : >"$LOG.once"; exit 65; fi
 [ "${HANG_AT:-}" != "xcodebuild-$action-$scheme" ] || exec "$(dirname "$0")/../hang/xcodebuild" "$(dirname "$0")/../hang/hang.sh"
 fail_if "xcodebuild-$action-$scheme"'
 stub "$SB/bin/swift" 'log "swift-test $*"; fail_if swift-test'
@@ -85,7 +86,7 @@ stub "$SB/scripts/tests/b.test.sh" 'log script-test-b; echo "${LEDGER_ADV_SUITES
 # run [flags...]: the sandboxed check.sh; sets $code, $out and $calls (ids only; simctl's simulator
 # lookups, list and unpair, are sim-destination.sh's and pinned by W23-W27).
 run() {
-    : >"$LOG"; : >"$LOG.args"; : >"$LOG.env"; : >"$LOG.diag"; : >"$LOG.suites"
+    : >"$LOG"; : >"$LOG.args"; : >"$LOG.env"; : >"$LOG.diag"; : >"$LOG.suites"; rm -f "$LOG.once"
     out="$(PATH="$SB/bin:$PATH" "$SB/scripts/check.sh" "$@" 2>&1)"
     code=$?
     calls="$(awk '$1 == "simctl" { if ($2 != "list" && $2 != "unpair") print "simctl-" $2; next } { print $1 }' "$LOG" |
@@ -122,6 +123,7 @@ for id in $FULL; do
     [[ "$id" == xcbeautify || "$id" == simctl-* ]] && continue # covered below: each appears more than once
     want=" $FULL"; want="${want%%" $id "*} $id "; want="${want# }"
     [[ "$id" == xcodebuild-* ]] && want="${want}xcbeautify "
+    [[ "$id" == xcodebuild-test-* ]] && want="${want}xcresulttool " # did the runner never connect? (W93)
     FAIL_AT="$id" run
     if [[ $code -ne 0 && "$calls" == "$want" ]]; then
         pass "W04 failure at $id stops check.sh (exit $code)"
@@ -380,6 +382,7 @@ for id in $IOS_CALLS; do
     [[ "$id" == xcbeautify || "$id" == simctl-* ]] && continue # as W04
     want=" $IOS_CALLS"; want="${want%%" $id "*} $id "; want="${want# }"
     [[ "$id" == xcodebuild-* ]] && want="${want}xcbeautify "
+    [[ "$id" == xcodebuild-test-* ]] && want="${want}xcresulttool " # did the runner never connect? (W93)
     FAIL_AT="$id" run --ios-only
     check "W53 --ios-only: failure at $id stops check.sh there" is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed $want"
 done
@@ -546,8 +549,16 @@ check "W75 --lint-only, --static-only and --fast build nothing for iOS, so they 
 # ---- --shard (PR CI's Check jobs; docs/ci-cd.md, "Shards") ------------------------------------------
 # Each shard tests its own targets of scripts/pr-shards.txt and skips every other shard's; the build is the
 # unsharded one, so every shard and main-cache.yml share cache keys; coverage is check-shards.sh's.
-targets() { awk -v n="$1" '$1 == n { print $2 }' "$ROOT/scripts/pr-shards.txt" | tr '\n' ' ' | sed 's/ $//'; }
-skips() { awk -v n="$1" '$1 !~ /^#/ && NF && $1 != n { printf " -skip-testing:%s", $2 }' "$ROOT/scripts/pr-shards.txt"; }
+# <n> [file]: shard <n>'s targets, each once (a suite entry's target included), in the file's order
+targets() { awk -v n="$1" '$1 == n { split($2, t, "/"); if (!seen[t[1]]++) print t[1] }' "$ROOT/scripts/${2:-pr}-shards.txt" | tr '\n' ' ' | sed 's/ $//'; }
+# <n> [file]: the test selection shard <n> passes: exactly its own entries, less the suites other shards hold of a
+# target it holds whole; never another shard's whole target
+selection() {
+    awk -v n="$1" '$1 !~ /^#/ && NF { if ($1 == n) { mine = mine " -only-testing:" $2; whole[$2] = 1 }
+        else if ($2 ~ /\//) theirs[++count] = $2 }
+        END { for (i = 1; i <= count; i++) { split(theirs[i], t, "/"); if (t[1] in whole) mine = mine " -skip-testing:" theirs[i] }
+            printf "%s", mine }' "${3:-$ROOT/scripts/${2:-pr}-shards.txt}"
+}
 for n in 1 2; do
     run --ios-only --skip-lint --shard "$n/2"
     check "W79 --ios-only --skip-lint --shard $n/2: tools, the iOS build, catalogs, its tests and results; no coverage gate" \
@@ -556,8 +567,8 @@ simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR "
     check "W80 ... its results are checked against shard $n's targets alone, in its own bundle" \
         is "$(grep '^check-test-results' "$LOG")" "check-test-results-PR .derivedData/Results/PR-iOS-shard$n.xcresult $(targets "$n")"
-    check "W81 ... its test run skips exactly every other shard's targets, after its own bundle path" \
-        is "$(grep '^test-without-building ' "$LOG.args" | grep -o ' -resultBundlePath .*' | grep -o ' -skip-testing:[^ ]*' | tr -d '\n')" "$(skips "$n")"
+    check "W81 ... its test run selects exactly its own targets, after its own bundle path" \
+        is "$(grep '^test-without-building ' "$LOG.args" | grep -o ' -resultBundlePath .*' | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')" "$(selection "$n")"
     check "W82 ... and it says coverage is check-shards.sh's, in the output and the summary, ending \"check.sh (--ios-only --shard $n/2) OK\"" \
         is "$(grep -c '==> 5 · coverage gate skipped (--shard)' <<<"$out") $(grep -cE '^ +[0-9]+s  coverage skipped \(--shard\)$' <<<"$out") \
 $(grep -c "check\.sh (--ios-only --shard $n/2) OK" <<<"$out") $(grep -c 'check\.sh (--ios-only) OK' <<<"$out")" "1 1 1 0"
@@ -590,6 +601,140 @@ for flags in "--shard 1/2" "--skip-lint --shard 1/2" "--ios-only --shard" "--ios
 done
 check "W87 --shard without --ios-only, with a mode that tests nothing or records, or without <n>/2, exits 2 before any step" \
     is "$rejected" "21 21 21 21 21 21 21 21 21 21 21 21 21 21 21 "
+
+# ---- --nightly and --watch-only (the nightly's legs; docs/ci-cd.md, "Nightly legs") ----------------------
+# A leg is a shard of a Nightly plan: --ios-only legs from scripts/nightly-shards.txt, --watch-only legs from
+# nightly-watch-shards.txt, each built, booted, tested and checked as a PR shard is, with no coverage gate.
+plan_args() { grep '^test-without-building ' "$LOG.args" | grep -oE -- '-testPlan [^ ]+|-default-test-execution-time-allowance [0-9]+' | tr '\n' ' '; }
+ios_legs="$(awk '$1 !~ /^#/ && NF { print $1 }' "$ROOT/scripts/nightly-shards.txt" | sort -u | wc -l | tr -d ' ')"
+for ((n = 1; n <= ios_legs; n++)); do
+    run --nightly --ios-only --skip-lint --shard "$n/$ios_legs"
+    check "W88 --nightly --ios-only --skip-lint --shard $n/$ios_legs: tools, the iOS build, catalogs, leg $n's tests and results; no coverage gate" \
+        is "$code $calls|$(grep '^check-test-results' "$LOG")" "0 xcode-version mise-install swiftformat-version swiftlint-version \
+simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
+simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-Nightly \
+|check-test-results-Nightly .derivedData/Results/Nightly-iOS-shard$n.xcresult $(targets "$n" nightly)"
+    check "W88 ... the Nightly plan, at its 600 s allowance, only its own entries (less other legs' suites of its whole targets), and it says so" \
+        is "$(plan_args)$(grep '^test-without-building ' "$LOG.args" | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')|\
+$(grep -c '==> 5 · coverage gate skipped (--nightly)' <<<"$out") $(grep -c "check\.sh (--nightly --ios-only --shard $n/$ios_legs) OK" <<<"$out")" \
+        "-testPlan Nightly -default-test-execution-time-allowance 600 $(selection "$n" nightly)|1 1"
+done
+watch_legs="$(awk '$1 !~ /^#/ && NF { print $1 }' "$ROOT/scripts/nightly-watch-shards.txt" | sort -u | wc -l | tr -d ' ')"
+for ((n = 1; n <= watch_legs; n++)); do
+    run --nightly --watch-only --skip-lint --shard "$n/$watch_legs"
+    check "W89 --nightly --watch-only --skip-lint --shard $n/$watch_legs: tools, then only the watch build, boot, leg $n's tests and results" \
+        is "$code $calls|$(grep '^check-test-results' "$LOG")|$(lifecycle)" "0 xcode-version mise-install swiftformat-version swiftlint-version \
+simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
+simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-test-results-Nightly-Watch \
+|check-test-results-Nightly-Watch .derivedData/Results/Nightly-watchOS-shard$n.xcresult $(targets "$n" nightly-watch)\
+|boot $W;build-for-testing $W;bootstatus $W;test-without-building $W;"
+    check "W89 ... the Nightly-Watch plan, at its 600 s allowance, with its leg's selection" \
+        is "$(plan_args)$(grep '^test-without-building ' "$LOG.args" | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')" \
+        "-testPlan Nightly-Watch -default-test-execution-time-allowance 600 $(selection "$n" nightly-watch)"
+done
+run --nightly --skip-lint
+check "W90 --nightly --skip-lint: both platforms' Nightly plans, whole, at 600 s; no coverage gate" \
+    is "$code ${calls##*xcbeautify }|$(plan_args)|$(grep -c -- '-skip-testing' "$LOG.args")" \
+    "0 check-test-results-Nightly-Watch |-testPlan Nightly -default-test-execution-time-allowance 600 -testPlan Nightly-Watch -default-test-execution-time-allowance 600 |0"
+run --skip-lint; pr_allowance="$(plan_args)"
+run --watch-only --skip-lint
+check "W91 --watch-only --skip-lint: the PR-Watch plan alone, no coverage gate (it reads both platforms)" \
+    is "$code $calls|$(plan_args)|$(grep -c 'check\.sh (--watch-only) OK' <<<"$out")" "0 xcode-version mise-install swiftformat-version swiftlint-version \
+simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
+simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-test-results-PR-Watch \
+|-testPlan PR-Watch -default-test-execution-time-allowance 60 |1"
+plan_max() { jq -r '.defaultOptions.maximumTestExecutionTimeAllowance' "$ROOT/TestPlans/$1.xctestplan"; }
+check "W88 a test with no allowance of its own gets its plan's maximum (PR 60 s, Nightly 600 s), in every plan check.sh runs" \
+    is "$pr_allowance" "-testPlan PR -default-test-execution-time-allowance $(plan_max PR) -testPlan PR-Watch -default-test-execution-time-allowance $(plan_max PR-Watch) "
+check "W88 ... the Nightly plans' maximum is the 600 s check.sh passes" is "$(plan_max Nightly) $(plan_max Nightly-Watch)" "600 600"
+rejected=""
+for flags in "--ios-only --watch-only" "--nightly --record-snapshots" "--nightly --fast" "--watch-only --fast" "--nightly --lint-only" \
+    "--watch-only --static-only" "--build-only --nightly" "--watch-only --shard 1/2" "--nightly --ios-only --shard 1/2" \
+    "--nightly --watch-only --shard 3/2" "--nightly --shard 1/4"; do
+    run $flags
+    rejected="$rejected$code$(grep -c '^error: ' <<<"$out")${calls:+ $calls} "
+done
+check "W92 both platforms' --only, --nightly or --watch-only with a mode that tests nothing or records, a plan with no shards or a leg count not its file's: exit 2 before any step" \
+    is "$rejected" "21 21 21 21 21 21 21 21 21 21 21 "
+
+# A shard holding both suites and a whole target whose suite another shard holds (SF1, G3's review): that suite is
+# skipped there too, or it would run twice. The shards file is swapped for one shaped so, then restored.
+cp "$SB/scripts/nightly-shards.txt" "$ADV_TMP/nightly-shards.saved"
+printf '%s\n' "1 FeatureWorkoutTests" "1 LedgerPersistenceTests/HistoryModelAdversarialTests" \
+    "2 FeatureWorkoutTests/WorkoutSaveAdversarialTests" "2 LedgerPersistenceTests" >"$SB/scripts/nightly-shards.txt"
+run --nightly --ios-only --skip-lint --shard 1/2
+mixed="$(grep '^test-without-building ' "$LOG.args" | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')"
+cp "$ADV_TMP/nightly-shards.saved" "$SB/scripts/nightly-shards.txt"
+check "W96 a shard of suites and a whole target skips the suites other shards hold of it, so none runs twice" \
+    is "$code$mixed" "0 -only-testing:FeatureWorkoutTests -only-testing:LedgerPersistenceTests/HistoryModelAdversarialTests\
+ -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests"
+
+# A leg of whole targets only, in a file with suites elsewhere (run 43204045964): it skipped every other leg's
+# entries, and xcodebuild read a skipped suite, -skip-testing:<target>/<suite>, as selecting the rest of <target>, so
+# legs 3, 4, 6 and 7 also ran the targets split across other legs, and hit their deadline. Each now selects only
+# its own targets, and skips only the suites other legs hold of a target it holds whole. The real file's legs too.
+printf '%s\n' "1 FeatureWorkoutTests/WorkoutRestAdversarialTests" "1 FeatureLibraryTests" "2 FeatureWorkoutTests" \
+    "3 FeatureProgramTests" "4 LedgerPersistenceTests/HistoryModelAdversarialTests" "4 LedgerDomainTests" \
+    "5 LedgerPersistenceTests" >"$SB/scripts/nightly-shards.txt"
+legs=""
+for n in 1 2 3 5; do
+    run --nightly --ios-only --skip-lint --shard "$n/5"
+    legs="$legs$code$(grep '^test-without-building ' "$LOG.args" | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')|"
+done
+cp "$ADV_TMP/nightly-shards.saved" "$SB/scripts/nightly-shards.txt"
+check "W97 a leg holding a target whole runs it, less the suite another leg holds; a leg of whole targets skips no other leg's target" \
+    is "$legs" "0 -only-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests -only-testing:FeatureLibraryTests|\
+0 -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests|\
+0 -only-testing:FeatureProgramTests|\
+0 -only-testing:LedgerPersistenceTests -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests|"
+check "W97 ... and in nightly-shards.txt, leg 7 selects FeatureProgramTests, leg 3 the announcement walk, leg 6 two targets less 4 suites" \
+    is "$(selection 7 nightly)|$(selection 3 nightly)|$(selection 6 nightly)" " -only-testing:FeatureProgramTests|\
+ -only-testing:FeatureWorkoutTests/WorkoutAnnouncementAdversarialTests|\
+ -only-testing:LedgerPersistenceTests -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests\
+ -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests -skip-testing:FeatureWorkoutTests/WorkoutAnnouncementAdversarialTests\
+ -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests"
+
+# ---- a test runner that never connected (the nightly's watch leg 1, run 43170933804) ----------------------
+# xcodebuild failed with "The test runner hung before establishing connection." and no test ran: check.sh tests
+# again, once, inside the same deadline, keeping the first bundle. Any other failed run is not repeated.
+printf '%s' '{"passedTests": 0, "skippedTests": 0, "testFailures": [{"testName": "xctest (17417) encountered an error",
+    "failureText": "The test runner hung before establishing connection."}]}' >"$ADV_TMP/hung.json"
+printf '%s' '{"passedTests": 0, "skippedTests": 0, "testFailures": [{"testName": "a test",
+    "failureText": "Expectation failed"}]}' >"$ADV_TMP/failed.json"
+tests_run() { grep -c '^xcodebuild-test-without-building' "$LOG"; }
+R=".derivedData/Results"
+rm -rf "$SB/$R"
+XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W93 a watch leg whose runner never connected restarts its simulator, tests again once, keeps the first bundle, and passes" \
+    is "$code $(tests_run) ${calls##*xcodebuild-test-without-building-LedgerWatch xcbeautify }|$(grep -c 'testing again once' <<<"$out")\
+|$(cd "$SB/$R" && ls -d Nightly-watchOS-shard1*.xcresult | tr '\n' ' ')" \
+    "0 2 check-test-results-Nightly-Watch |1|Nightly-watchOS-shard1-build.xcresult Nightly-watchOS-shard1-runner-hung.xcresult Nightly-watchOS-shard1.xcresult "
+hung_lifecycle="$(lifecycle)"
+check "W93 ... the restart: shut down, boot and wait, by UDID, between the two test runs" \
+    is "${hung_lifecycle#*test-without-building $W;}" "shutdown $W;boot $W;bootstatus $W;test-without-building $W;"
+run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W93 ... and the next run of that leg removes the stale hung bundle with its own" \
+    is "$code $(cd "$SB/$R" && ls -d Nightly-watchOS-shard1*.xcresult | tr '\n' ' ')" \
+    "0 Nightly-watchOS-shard1-build.xcresult Nightly-watchOS-shard1.xcresult "
+XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_ONCE_AT=xcodebuild-test-without-building-Ledger run --ios-only --skip-lint
+check "W93 ... an iOS run too (check.sh, not the workflow, retries)" is "$code $(tests_run)" "0 2"
+XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W94 ... only once: a runner that hangs again fails the leg, before its results are read" \
+    is "$([[ $code -ne 0 ]] && echo failed) $(tests_run) $(grep -c '^check-test-results' "$LOG")" "failed 2 0"
+XCRUN_SUMMARY="$ADV_TMP/failed.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+XCRUN_SUMMARY="$ADV_TMP/hung.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch LEDGER_XCODEBUILD_DEADLINE=0 \
+    run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W94 ... and not at all once the deadline has passed" is "$([[ $code -ne 0 ]] && echo failed) $(tests_run)" "failed 1"
+check "W95 a run that failed any other way is not repeated" is "$([[ $code -ne 0 ]] && echo failed) $(tests_run)" "failed 1"
+jq '.testFailures += [{"testName": "a test", "failureText": "Expectation failed"}]' "$ADV_TMP/hung.json" >"$ADV_TMP/mixed.json"
+XCRUN_SUMMARY="$ADV_TMP/mixed.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W95 ... nor one where a test also failed, or one where a test passed" \
+    is "$([[ $code -ne 0 ]] && echo failed) $(tests_run)" "failed 1"
+jq '.passedTests = 3' "$ADV_TMP/hung.json" >"$ADV_TMP/passed.json"
+XCRUN_SUMMARY="$ADV_TMP/passed.json" FAIL_ONCE_AT=xcodebuild-test-without-building-LedgerWatch run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W95 ... (a test passed)" is "$([[ $code -ne 0 ]] && echo failed) $(tests_run)" "failed 1"
+FAIL_ONCE_AT=xcodebuild-build-for-testing-LedgerWatch XCRUN_SUMMARY="$ADV_TMP/hung.json" run --nightly --watch-only --skip-lint --shard "1/$watch_legs"
+check "W95 ... nor a failed build" is "$([[ $code -ne 0 ]] && echo failed) $(grep -c '^xcodebuild' "$LOG")" "failed 1"
 
 # ---- round 2: this suite is part of the gate ---------------------------------------
 # check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be

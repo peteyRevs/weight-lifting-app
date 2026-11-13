@@ -131,6 +131,16 @@
         "state": "Shutdown",
         "name": "Apple Watch Ultra 4 (49mm)"
       }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.watchOS-27-2": [
+      {
+        "lastBootedAt": null,
+        "udid": "BB504ECE-7BB3-43DB-A862-11699B1BC8B5",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-12-46mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 12 (46mm)"
+      }
     ]
   },
   "pairs": {
@@ -173,5 +183,37 @@
       },
       "state": "(active, disconnected)"
     }
-  }
+  },
+  "runtimes": [
+    {
+      "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+      "name": "iOS 27.0",
+      "platform": "iOS",
+      "version": "27.0",
+      "isAvailable": true,
+      "supportedArchitectures": [
+        "arm64"
+      ]
+    },
+    {
+      "identifier": "com.apple.CoreSimulator.SimRuntime.watchOS-27-0",
+      "name": "watchOS 27.0",
+      "platform": "watchOS",
+      "version": "27.0",
+      "isAvailable": true,
+      "supportedArchitectures": [
+        "arm64"
+      ]
+    },
+    {
+      "identifier": "com.apple.CoreSimulator.SimRuntime.watchOS-27-2",
+      "name": "watchOS 27.2",
+      "platform": "watchOS",
+      "version": "27.2",
+      "isAvailable": true,
+      "supportedArchitectures": [
+        "arm64"
+      ]
+    }
+  ]
 }

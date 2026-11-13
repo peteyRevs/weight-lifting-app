@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import LedgerDomain
 import LedgerFakes
+import LedgerTestSupport
 import Testing
 
 /// F14 S2, N17 (amended): 10,000 sets written to the export's file in under 200 ms, the median of 5 runs, and the
@@ -69,8 +70,8 @@ struct ExportPerformanceTests {
         }
         // A smoke figure (N17 as amended): what the writes retain, not their peak.
         let added = Self.footprint() - before
-        let median = runs.sorted()[2]
-        #expect(median < Self.budget, "\(runs)")
-        #expect(added < Self.memoryBudget, "\(added) bytes")
+        let verdict = PerformanceRunner.verdict(runs, budget: Self.budget, statistic: .median)
+        #expect(verdict.isWithinBudget, "\(verdict)")
+        #expect(added < Self.memoryBudget, "\(added) bytes") // bytes, not a timing
     }
 }

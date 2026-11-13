@@ -50,30 +50,34 @@ struct LibraryPerformanceTests {
     }
 
     /// The median of `runs` timings of `work`, after one untimed run.
-    static func median(_ work: () -> Void) -> Duration {
+    /// `work`, held to `budget` by its median of `runs` runs after one warm-up (`PerformanceRunner`).
+    static func verdict(_ budget: Duration, _ work: () -> Void) -> PerformanceRunner.Verdict {
         work()
         let clock = ContinuousClock()
-        let timings = (0 ..< runs).map { _ in clock.measure(work) }.sorted()
-        return timings[runs / 2]
+        return PerformanceRunner.verdict(
+            (0 ..< runs).map { _ in clock.measure(work) },
+            budget: budget,
+            statistic: .median
+        )
     }
 
     @Test("N4. The first model over 250 exercises takes under 100 ms")
     func firstModel_underBudget() {
         let input = Self.input()
         #expect(input.exercises.count == 250)
-        let time = Self.median {
+        let verdict = Self.verdict(Self.firstModel) {
             _ = LibraryPresentation.make(LibraryPresentation.rows(input), filter: LibraryFilter())
         }
-        #expect(time < Self.firstModel, "\(time)")
+        #expect(verdict.isWithinBudget, "\(verdict)")
     }
 
     @Test("N4. One keystroke over 250 exercises takes under 10 ms")
     func keystroke_underBudget() {
         let rows = LibraryPresentation.rows(Self.input())
-        let time = Self.median {
+        let verdict = Self.verdict(Self.keystroke) {
             _ = LibraryPresentation.make(rows, filter: LibraryFilter(query: "ro", muscle: .back))
         }
-        #expect(time < Self.keystroke, "\(time)")
+        #expect(verdict.isWithinBudget, "\(verdict)")
     }
 
     @Test("F12-S2-R1-2. An exercise's history over 2,000 sets in 400 sessions is a model in under 16 ms")
@@ -89,10 +93,10 @@ struct LibraryPerformanceTests {
         let records = Set(sessions.prefix(40).map(\.workoutID))
         let input = try HistoryFixtures.input(sessions, records: records, now: EventBuilders.start)
         var model: ExerciseHistoryModel?
-        let time = Self.median { model = ExerciseHistoryPresentation.make(input) }
+        let verdict = Self.verdict(Self.historyModel) { model = ExerciseHistoryPresentation.make(input) }
         #expect(model?.log.entries.count == 400)
-        #expect(time < Self.historyModel, "\(time)")
-        let report = "ExerciseHistoryPresentation.make over 2,000 sets: median \(time)"
+        #expect(verdict.isWithinBudget, "\(verdict)")
+        let report = "ExerciseHistoryPresentation.make over 2,000 sets: median \(verdict.median)"
         Attachment.record(report, named: "history-model.txt")
     }
 }

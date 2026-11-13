@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import LedgerDomain
 @testable import LedgerPersistence
+import LedgerTestSupport
 import Testing
 
 /// F05 S3 adversarial round 1, criterion 9: the same 20,000 sets in 400 workouts as the implementer's timing
@@ -70,9 +71,9 @@ struct StatsWorstCaseAdversarialTests {
                 try await timings.append(clock.measure { try await query.run() })
             }
             timings.sort()
-            let percentile95 = timings[timings.count * 95 / 100 - 1]
-            report.append("\(query.name): p95 \(percentile95), median \(timings[timings.count / 2])")
-            #expect(percentile95 < PerformanceBudget.statsQuery, "\(query.name): \(timings)")
+            let verdict = PerformanceRunner.verdict(timings, budget: PerformanceBudget.statsQuery)
+            report.append("\(query.name): p95 \(verdict.percentile95), median \(verdict.median)")
+            #expect(verdict.isWithinBudget, "\(query.name): \(verdict)")
         }
         Attachment.record(report.joined(separator: "\n"), named: "stats-queries-worst-case.txt")
     }

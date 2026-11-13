@@ -41,8 +41,8 @@ $detail}"
 # is <actual> <expected>: for `check`; prints both on a mismatch.
 is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
-# fake_simctl <bin dir>: puts an xcrun there whose `simctl list devices [available] --json` and
-# `simctl list pairs --json` print $SIMCTL_JSON (devices filtered like simctl), and whose `simctl
+# fake_simctl <bin dir>: puts an xcrun there whose `simctl list devices [available] --json`, `simctl list
+# runtimes --json` and `simctl list pairs --json` print $SIMCTL_JSON (devices filtered like simctl), and whose `simctl
 # unpair` chatters on stdout. Each call is appended to $XCRUN_LOG; $XCRUN_FAIL names a failing one.
 # `simctl boot`, `bootstatus`, `shutdown` and `erase` succeed at once, except that:
 #   XCRUN_BOOTED=1         boot answers as simctl does for a booted simulator (exit 149);
@@ -58,6 +58,7 @@ case "$2 $3" in "${XCRUN_FAIL:-none}"*) echo "simctl: $2 $3 failed" >&2; exit 1 
 case "$1 $2 $3" in
     "simctl unpair "*) echo "Unpaired $3." ;;
     "simctl list pairs") jq '{pairs}' "$SIMCTL_JSON" ;;
+    "simctl list runtimes") jq '{runtimes: (.runtimes // [])}' "$SIMCTL_JSON" ;;
     "simctl list devices")
         case " $* " in
             *" available "*) jq '{devices: (.devices | map_values(map(select(.isAvailable))))}' "$SIMCTL_JSON" ;;
@@ -72,9 +73,10 @@ case "$1 $2 $3" in
         esac
         echo "Finished" ;;
     "simctl shutdown "* | "simctl erase "*) ;;
+    "simctl create "*) echo "${XCRUN_CREATED:-C4EA7ED0-0000-4000-8000-000000000001}" ;;
     "xcresulttool get test-results")
         [ "$4" = summary ] || { echo "fake xcrun: unexpected: $*" >&2; exit 64; }
-        echo "{\"totalTestCount\": ${XCRUN_TEST_COUNT:-1}}" ;;
+        if [ -n "${XCRUN_SUMMARY:-}" ]; then cat "$XCRUN_SUMMARY"; else echo "{\"totalTestCount\": ${XCRUN_TEST_COUNT:-1}}"; fi ;;
     *) echo "fake xcrun: unexpected: $*" >&2; exit 64 ;;
 esac
 SH
@@ -85,7 +87,8 @@ SH
 # the UDIDs are made up. Its pairs are UNKNOWN: the README lists none, and no run has logged them yet.
 # The fixture assumes the pairs Xcode 27 made for the default set here when the 27.0 runtimes installed
 # (2026-09-29): Series 12 (46mm) + iPhone 18 Pro Max, Series 12 (42mm) + iPhone Air, Ultra 4 (49mm) +
-# iPhone 17. macos-26's pairs had the same shape. sim-destination.sh unpairs either way.
+# iPhone 17. macos-26's pairs had the same shape. sim-destination.sh unpairs either way. Its two runtimes,
+# available on arm64, are as `simctl list runtimes --json` shows them on this Mac (Xcode 27.0).
 SIMCTL_JSON="$ROOT/scripts/tests/fixtures/simctl/xcode-27.json"
 # SIMCTL_MACOS26, for the resolution cases the 27 image cannot show (same-named watches on three
 # runtimes, an unavailable twin): the macos-26 runner's simulators and the pairs PR #5's first-run log

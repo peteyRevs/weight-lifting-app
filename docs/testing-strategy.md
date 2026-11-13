@@ -115,6 +115,42 @@ Concrete test names (file = suite = source type; see §6):
   times; the 95th percentile (the 19th fastest) must be under 50 ms, as F05
   criterion 9 says (architecture §15). Budgets live in `PerformanceBudget.swift`
   next to the tests, never inline.
+- **Budgets and the runner (2026-11-12; an autopilot decision by the orchestrator,
+  pending Pete's review).** A
+  budget belongs to the reference machine, a simulator on a developer Mac. A
+  shared CI runner's virtual machine is not that machine, and there a 95th
+  percentile of 20 runs measures the neighbours' noise more than our code. Two
+  rules, applied in one place, `PerformanceRunner.verdict` (`LedgerTestSupport`),
+  through which every timed test reaches its verdict
+  (`scripts/tests/adversarial/performance-verdicts.adv.sh` fails a test that
+  compares a timing itself):
+  - *Reference machine* (`LEDGER_PERFORMANCE_RUNNER_FACTOR` unset: a developer
+    Mac, the local nightly, `swift test`): each test holds its own statistic, its
+    95th percentile or its median, to its budget as written, as before.
+  - *Runner* (the variable set): every test holds its median to its budget times
+    the factor. Only `nightly.yml` sets it, as
+    `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR` (`xcodebuild` hands the test
+    runner the variable without the prefix; `workflows.adv.sh` WF79): 2 on an
+    iOS leg, 3 on a watch leg. The runner's watch simulator ran every timed
+    query 2.2-3.3 times slower than a developer Mac's (run 43250355937, against
+    three local runs): `historyList`'s fetch had a median of 40.6 ms on it and
+    14.5-15.9 ms here, its budget 20 ms, so twice the budget failed it while the
+    budget held on the reference machine.
+  - Every verdict reports the median, the 95th percentile and the runs, in the
+    failure message and the attachments. On the runner a 95th percentile over
+    the scaled budget is also recorded at the test's line as a warning issue
+    (Swift Testing's `Issue.record(_:severity: .warning)`), which fails nothing,
+    so the tails stay visible in the result bundle. A value that
+    is not a number of at least 1 counts as 1: the factor can loosen a budget,
+    never tighten or disable one (`PerformanceRunnerTests`).
+  - Why: in the hosted nightly (run 43170933804) the timings missed their
+    budgets by 2-54 % at their own statistics, and `historyList`'s 95th
+    percentile by 271 % (74 ms of 20) while its median was 25 ms. On the median
+    against twice the budget every one of them passes: `historyList` 25 of 40 ms,
+    `historyFold` at most 7.7 of 10, `recordNewWorkout` at most 55 of 100,
+    `historyWrite` at most 298 of 500, the History list's model 40 of 60, an
+    exercise's history model 22.7 of 32, the replay 5.1 of 10 (for the p95
+    tests the p95 bounds the median from above).
 
 ### 2.3 Sync (`LedgerSyncTests`) — target ≥ 90 %
 
@@ -528,7 +564,7 @@ shared between local and CI so cache keys match.
 
 PR CI splits step 3's tests in two (`docs/ci-cd.md`, "Shards"):
 `check.sh --ios-only --shard <n>/2` builds as above, tests the targets that
-`scripts/pr-shards.txt` gives shard `<n>` (`-skip-testing` for the others),
+`scripts/pr-shards.txt` gives shard `<n>` (`-only-testing`),
 checks its bundle against those targets alone, and leaves step 5 to
 `scripts/check-shards.sh`, which checks both bundles together and runs the
 coverage gate over them. Without `--shard`, nothing changes.

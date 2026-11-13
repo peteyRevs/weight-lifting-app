@@ -405,13 +405,14 @@ check "WF57 ... and with a CRLF, or padded with spaces, the same Xcode (no Xcode
 cp "$ROOT/.xcode-version" "$SEL/repo/.xcode-version"
 
 # F32 fix round (T5): every Mac job checks the selected Xcode against the pin before it builds: the nightly's
-# jobs and Coverage in the run step right after Select, and Check and main-cache's build by running check.sh, whose step 0
-# is that check in every mode, --ios-only, --build-only and --shard included (W40, W77, W79).
+# dependency report and Coverage in the run step right after Select, and Check, main-cache's build and the nightly's legs
+# by running check.sh, whose step 0 is that check in every mode, --ios-only, --build-only, --shard and --nightly
+# included (W40, W77, W79, W88). A watch leg's new simulator (step watch-sim) is made before check.sh; it builds nothing.
 checked="$(for w in pr nightly main-cache; do
     jq -r '.jobs | to_entries[] | select(.value."runs-on" | startswith("ubuntu") | not) | .key as $job
-        | [.value.steps[] | select(.run) | .run] as $runs
+        | [.value.steps[] | select(.run and .id != "watch-sim") | .run] as $runs
         | ($runs | map(test("xcode-select -s")) | index(true)) as $sel
-        | "\($job):\($runs[$sel + 1] // "none" | if test("^scripts/check-xcode-version\\.sh$|^scripts/check\\.sh( --[a-z-]+| --shard \\$\\{\\{ matrix\\.shard \\}\\}/[0-9]+)*$")
+        | "\($job):\($runs[$sel + 1] // "none" | if test("^scripts/check-xcode-version\\.sh$|^scripts/check\\.sh( --[a-z-]+| --shard \\$\\{\\{ matrix\\.shard \\}\\}/[0-9]+| \"--\\$PLATFORM-only\"| --shard \"\\$SHARD\")*$")
             then "checked" else "unchecked" end)"' \
         "$T/$w.json"
 done | tr '\n' ' ')"
