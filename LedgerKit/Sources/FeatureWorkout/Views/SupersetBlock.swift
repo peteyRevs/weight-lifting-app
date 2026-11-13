@@ -108,6 +108,13 @@ struct SupersetLegendRow: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// The letter's ink: the accent on the current member's ink fill; on the surface, `inkMuted`, which holds
+    /// 4.5:1 there (`MutedTextContrastAdversarialTests`). F15-S2-1: it was `inkFaint`, a token for what is not
+    /// read, and the system's audit measured the letter at 1.8:1 on the surface.
+    static func letterInk(isCurrent: Bool) -> Color {
+        isCurrent ? LedgerColor.accent : LedgerColor.inkMuted
+    }
+
     /// The letter, the name and the target on the row's fill: side by side, the target under the name at the
     /// accessibility sizes.
     private var label: some View {
@@ -118,7 +125,7 @@ struct SupersetLegendRow: View {
             HStack(alignment: .firstTextBaseline, spacing: LedgerSpacing.m) {
                 Text(row.letter)
                     .ledgerFont(.numeralS)
-                    .foregroundStyle(row.isCurrent ? LedgerColor.accent : LedgerColor.inkFaint)
+                    .foregroundStyle(Self.letterInk(isCurrent: row.isCurrent))
                 Text(row.name)
                     .ledgerFont(.body)
                     .foregroundStyle(row.isCurrent ? LedgerColor.ground : LedgerColor.ink)
