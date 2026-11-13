@@ -35,6 +35,17 @@
         case debugMenu = "DebugMenu"
         case diagnosticsPage = "DiagnosticsPage"
 
+        /// Whether the content builds a `NavigationStack`. The watch's tests do not render these: there
+        /// `renderPreview` draws with `ImageRenderer` in the bare test host, where the stack's
+        /// `PUICNavigationController` traps in SaltUICore on watchOS 27.2 (nightly run 43325369679, watch leg 2).
+        /// The watch app shows them in a scene, and `LedgerWatchUITests/DebugMenu.swift` checks them on screen.
+        nonisolated var hostsNavigationStack: Bool {
+            switch self {
+            case .debugMenu, .diagnosticsPage: true
+            default: false
+            }
+        }
+
         @ViewBuilder var content: some View {
             switch self {
             case .eyebrow: EyebrowGallery().ledgerGalleryPage()

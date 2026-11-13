@@ -21,9 +21,23 @@
                 #expect(Set(names.compactMap(\.self)) == Set(DesignPreview.allCases.map(\.rawValue)))
             }
 
-            @Test("Every preview renders", arguments: DesignPreview.allCases)
+            // Every case, but on watchOS none that builds a `NavigationStack` (`DesignPreview.hostsNavigationStack`).
+            #if os(watchOS)
+                nonisolated static let renderable = DesignPreview.allCases.filter { !$0.hostsNavigationStack }
+            #else
+                nonisolated static let renderable = DesignPreview.allCases
+            #endif
+
+            @Test("Every preview renders (on watchOS, every one without a NavigationStack)", arguments: renderable)
             func preview_renders(_ preview: DesignPreview) {
                 #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+            }
+
+            @Test("The previews that host a NavigationStack are the ones whose source builds one")
+            func hostsNavigationStack_matchesTheSources() throws {
+                let declared = Set(DesignPreview.allCases.filter(\.hostsNavigationStack).map(\.rawValue))
+                let owners = try Self.navigationStackOwners()
+                #expect(owners == declared)
             }
 
             /// A view that reads a store key, as F08–F15's store-driven previews will: drawn as Xcode draws a preview,
@@ -75,6 +89,30 @@
                 #expect(PreviewScan.previews(in: source) == ["Named", "Indented", nil, nil, "Attributed"])
                 let crlf = "#Preview(\"First\") {}\r\n}\r\n#Preview(\"Second\") {}\r\n"
                 #expect(PreviewScan.previews(in: crlf) == ["First", "Second"])
+            }
+
+            /// The previews whose code builds a `NavigationStack` (`NavigationStack(` or `NavigationStack {`), by raw
+            /// value: a registry line (`case .name:`) names its case, any other line the file's `View`. A line naming
+            /// neither is kept as it is, so the comparison fails on it.
+            static func navigationStackOwners() throws -> Set<String> {
+                let module = PreviewScan.sourcesDirectory.appending(path: "LedgerDesign", directoryHint: .isDirectory)
+                let files = FileManager.default.enumerator(at: module, includingPropertiesForKeys: nil)?
+                    .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
+                var owners: Set<String> = []
+                for file in files {
+                    let lines = try String(contentsOf: file, encoding: .utf8).split(whereSeparator: \.isNewline)
+                    let view = lines.lazy.compactMap { $0.firstMatch(of: /struct (\w+): View/)?.1 }.first
+                    for line in lines {
+                        let code = line.split(separator: "//", maxSplits: 1, omittingEmptySubsequences: false)[0]
+                        guard code.contains(/\bNavigationStack\s*[({]/) else {
+                            continue
+                        }
+                        let name = code.firstMatch(of: /case \.(\w+):/)?.1
+                        let preview = DesignPreview.allCases.first { name.map(String.init) == "\($0)" }
+                        owners.insert(preview?.rawValue ?? view.map(String.init) ?? String(line))
+                    }
+                }
+                return owners
             }
         }
     }
