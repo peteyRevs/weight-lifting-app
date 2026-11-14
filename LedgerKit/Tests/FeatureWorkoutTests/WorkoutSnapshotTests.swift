@@ -2,6 +2,7 @@
     @testable import FeatureWorkout
     import LedgerDesign
     import LedgerSnapshotTesting
+    import SnapshotTesting
     import SwiftUI
     import Testing
 
@@ -84,6 +85,34 @@
         func cover_noHistory_matchesReferences() {
             assertLedgerSnapshot(of: cover(.started), devices: [.phone], typeSizes: [.large])
         }
+
+        #if os(iOS)
+            /// F10 review SF3: under the old 0.5 % of pixels, this cover passed its reference with a new 44 pt
+            /// button drawn. Under `SnapshotConfig.pixelBudget` the whole cover, unchanged, still matches, and with
+            /// one more such button it fails, compared exactly as `assertPhoneSnapshot` compares it.
+            @Test("No history yet, with one more 44 pt button drawn, fails its reference")
+            func cover_noHistory_withOneMoreButton_failsItsReference() async throws {
+                let appearance = SnapshotAppearance(.light, .large)
+                let strategy = Snapshotting<PhonePage, UIImage>.phone(appearance)
+                let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                    .appending(
+                        path: "__Snapshots__/WorkoutSnapshotTests/cover_noHistory_matchesReferences.light-large.png"
+                    )
+                let reference = try strategy.diffing.fromData(Data(contentsOf: path))
+                func drawn(_ view: some View) async -> UIImage {
+                    let page = PhonePage(view, appearance)
+                    return await withCheckedContinuation { done in
+                        strategy.snapshot(page).run { done.resume(returning: $0) }
+                    }
+                }
+                let plain = await drawn(cover(.started))
+                let withButton = await drawn(cover(.started).overlay(alignment: .bottomTrailing) {
+                    IconPillButton("Swap exercise", icon: .swap) {}.padding(LedgerSpacing.screen)
+                })
+                #expect(strategy.diffing.diffV2(reference, plain) == nil, "the cover no longer matches its reference")
+                #expect(strategy.diffing.diffV2(reference, withButton) != nil, "a new button passed the reference")
+            }
+        #endif
 
         /// F10 S8b (review SF3): the card's title row alone, where "Swap exercise" is a large share of the
         /// image, so that a reference fails when the button is missing, moved or restyled; on the whole cover a

@@ -5,7 +5,7 @@ import SnapshotTesting
 import UniformTypeIdentifiers
 
 public extension Snapshotting where Value == CGImage, Format == Data {
-    /// PNG references compared with ``SnapshotConfig``'s precision: a pixel matches when its
+    /// PNG references compared within ``SnapshotConfig/pixelBudget``: a pixel matches when its
     /// CIE76 ΔE is at most `(1 − perceptualPrecision) × 100`. That is swift-snapshot-testing's
     /// threshold on iOS, where Core Image measures CIE94 instead; CIE76 is never smaller than CIE94,
     /// so this comparison is at least as strict (F06 review N1).
@@ -46,20 +46,15 @@ enum PixelComparison {
         }
         let mismatched = mismatches.count { $0 }
         let sameSize = old.width == new.width && old.height == new.height
-        // Whole pixels against the precision in parts per million, so no rounding moves the
-        // boundary: 0.995 lets exactly floor(0.5 %) of the pixels differ.
-        let allowedPerMillion = Int(((1 - Double(SnapshotConfig.precision)) * 1_000_000).rounded())
-        if sameSize, mismatched * 1_000_000 <= mismatches.count * allowedPerMillion {
+        if sameSize, mismatched <= SnapshotConfig.pixelBudget {
             return nil
         }
         let difference = PixelBuffer(width: width, height: height, pixels: mismatches.indices.map { index in
             guard !mismatches[index], let pixel = old[index % width, index / width] else { return Pixel(hex: 0xFF00FF) }
             return Pixel(red: pixel.red / 3, green: pixel.green / 3, blue: pixel.blue / 3, alpha: 0xFF)
         })
-        let matching = Double(mismatches.count - mismatched) / Double(mismatches.count)
         let message = sameSize
-            ? "\(mismatched) pixels differ by more than ΔE \(threshold): \(matching) match, "
-            + "\(SnapshotConfig.precision) required"
+            ? "\(mismatched) pixels differ by more than ΔE \(threshold): at most \(SnapshotConfig.pixelBudget) may"
             : "The image size differs from the reference: \(new.width)×\(new.height) against \(old.width)×\(old.height)"
         return (message, difference.cgImage)
     }

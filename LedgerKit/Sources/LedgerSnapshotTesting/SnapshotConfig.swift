@@ -6,8 +6,22 @@ import SwiftUI
 /// The one place snapshot tolerances and the device/appearance matrix are defined
 /// (docs/testing-strategy.md §2.5). Tests never override these per call.
 public nonisolated enum SnapshotConfig {
-    /// Fraction of pixels that must match.
-    public static let precision: Float = 0.995
+    /// How many pixels of an image may differ from its reference (beyond `perceptualPrecision`), whatever the
+    /// image's size, so a long page is held as tightly as a short one. It replaced a fraction (0.995) that let a
+    /// 1,009 pt cover pass with a new 44 pt button drawn (F10 review SF3: that button is
+    /// 204 pixels). Chosen on 2026-11-14 from runs at a budget of 0 on the iPhone 17 (iOS 27.0) and Apple Watch
+    /// Series 12 (watchOS 27.0) simulators: every reference matched every pixel, serial and parallel. 8 is under
+    /// the smallest real change these references have caught (16 pixels, the builder's mirrored marks), and
+    /// under 0.5 % of the smallest reference (102 of a 187 × 110 watch image), so no reference is held looser.
+    public static let pixelBudget = 8
+
+    /// swift-snapshot-testing's `precision` (a fraction) that lets exactly `pixelBudget` of `pixels` differ.
+    /// It sits half a pixel above the budget: the library counts in `Float`, whose rounding near 1 is
+    /// under a quarter of that up to 4 million pixels (the longest reference is 402 × 9,200).
+    public static func precision(pixels: Int) -> Float {
+        Float(1 - (Double(pixelBudget) + 0.5) / Double(max(pixels, 1)))
+    }
+
     /// How close a pixel must be to count as matching (0.98 ≈ ΔE 2, "just noticeable").
     public static let perceptualPrecision: Float = 0.98
     /// References are rendered at 1× to keep `__Snapshots__` small (F06 brief, non-functional).
@@ -72,9 +86,9 @@ public nonisolated struct SnapshotAppearance: Sendable, CustomStringConvertible 
 }
 
 public extension View {
-    /// Lays the view out as a screen would at `appearance`, for swift-snapshot-testing's
-    /// `.sizeThatFits` layout, which measures the view before it applies `traits` and proposes it a
-    /// zero size (`sizeThatFits(in: .zero)` in 1.19):
+    /// Lays the view out as a screen would at `appearance`, for `PhonePage`, which measures the view
+    /// without `traits` (but at the drawing's display scale) and proposes it a zero size, as
+    /// swift-snapshot-testing's `.sizeThatFits` does (`sizeThatFits(in: .zero)` in 1.19):
     /// - the text size and colour scheme also go into SwiftUI's environment, so a sheet at `.xLarge`
     ///   or `.accessibility3` is not measured at `.large` and clipped (F06 fix round 3);
     /// - the view takes its own height, so text wraps as it does on a device instead of being cut to
