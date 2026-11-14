@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.22.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.21.1...v0.22.0) (2026-11-14)
+
+
+### Features
+
+* **appkit:** UI tests start from seeded history, Smoke starts from Today, and the nightly Flows chain the critical paths (F15 S1) ([#103](https://github.com/peteyRevs/weight-lifting-app/issues/103)) ([a10a2c2](https://github.com/peteyRevs/weight-lifting-app/commit/a10a2c2ad2f373f58f79c5438806988464e27523))
+
+
+### Fixes
+
+* **appkit:** UI tests draw the appearance they ask for, and the Program tab's audit issues are measured exclusions ([#105](https://github.com/peteyRevs/weight-lifting-app/issues/105)) ([e7cbbcc](https://github.com/peteyRevs/weight-lifting-app/commit/e7cbbccd0e6eb4eac3ed65f59457bff631ac36b3))
+
 ## [0.21.1](https://github.com/peteyRevs/weight-lifting-app/compare/v0.21.0...v0.21.1) (2026-11-13)
 
 
