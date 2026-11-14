@@ -80,13 +80,14 @@ extension OnboardingAdversarial {
     /// test. Everything the system reported is attached, excused or not, with what it says about each.
     @MainActor
     func auditEachStep(arguments: [String], size: String) throws {
-        let before = XCUIDevice.shared.appearance
-        defer { XCUIDevice.shared.appearance = before }
         var findings: [AuditFinding] = []
-        for (appearance, name) in [(XCUIDevice.Appearance.light, "light"), (.dark, "dark")] {
-            XCUIDevice.shared.appearance = appearance
-            let app = launch(arguments)
+        // Sanctioned edit (fix/tabs-audit): the appearance is the app's (`LaunchAppearance`); the device's, set
+        // here before, is not applied by the iOS 27.0 simulator, so the dark half audited light.
+        for appearance in LaunchAppearance.allCases {
+            let name = appearance.rawValue
+            let app = launch(arguments + appearance.launchArguments)
             XCTAssertTrue(app.staticTexts[Self.headings[0]].waitForExistence(timeout: 15))
+            try assertDrawn(in: appearance, app)
             for (index, heading) in Self.headings.enumerated() {
                 if index > 0 {
                     continueTo(heading, in: app)

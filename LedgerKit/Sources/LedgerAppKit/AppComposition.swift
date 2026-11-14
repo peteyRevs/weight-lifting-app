@@ -255,6 +255,8 @@ extension AppComposition {
         /// test (`UITestRegion`). Nil seeds nothing, so a test's composition keeps `Settings.default` unless it asks
         /// for a region.
         var regionalSettings: LedgerDomain.Settings?
+        /// The appearance a UI test asked for (`UITestAppearance`); nil follows the device.
+        var colorScheme: ColorScheme?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -290,7 +292,8 @@ extension AppComposition {
                 failedFinishes: UITestSaveFailures.liveCount(arguments: arguments),
                 seedsUITestProgram: UITestProgram.liveSeeds(arguments: arguments),
                 uiTestHistoryWeeks: UITestHistory.liveWeeks(arguments: arguments),
-                regionalSettings: UITestRegion.liveSettings(isUITest: isUITest)
+                regionalSettings: UITestRegion.liveSettings(isUITest: isUITest),
+                colorScheme: UITestAppearance.liveColorScheme(arguments: arguments)
             )
         }
     }

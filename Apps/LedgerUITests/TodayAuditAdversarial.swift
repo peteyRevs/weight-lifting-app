@@ -43,12 +43,12 @@ final class TodayAuditAdversarial: XCTestCase {
         XCTAssertEqual(upNext + resume, [])
     }
 
+    /// Sanctioned edit (fix/tabs-audit): dark is the app's (`LaunchAppearance`); the device's, which this test set
+    /// before, is not applied by the iOS 27.0 simulator, so until then this audited light.
     @MainActor
     func test_sessionDay_dark_passesTheAudit() throws {
-        let before = XCUIDevice.shared.appearance
-        defer { XCUIDevice.shared.appearance = before }
-        XCUIDevice.shared.appearance = .dark
-        let app = launch(at: Self.sessionDay)
+        let app = launch(at: Self.sessionDay, appearance: .dark)
+        try assertDrawn(in: .dark, app)
         seedTheProgram(in: app)
         XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 10))
         XCTAssertEqual(try audit(app, state: "up next, dark"), [])
@@ -137,9 +137,10 @@ private extension TodayAuditAdversarial {
 
     /// The app on a fresh database, its clock moved so that the launch happens at `instant`.
     @MainActor
-    func launch(at instant: String, textSize: String? = nil) -> XCUIApplication {
+    func launch(at instant: String, textSize: String? = nil, appearance: LaunchAppearance? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", instant]
+        app.launchArguments += appearance?.launchArguments ?? []
         app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         if let textSize {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]

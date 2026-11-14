@@ -302,3 +302,13 @@ in dark; until then every "light and dark" above means light only (the dark way 
 - `AuditWorkout`'s frozen clock leaves the header's elapsed time counting from the frozen start to the wall clock
   ("1424:17:08" on 2026-11-14): the test mode moves the app's clock, not the timeline's. The header's issues are the
   same as with the real clock; noted for the follow-up PR's header layout.
+
+## Follow-up from fix/tabs-audit (2026-11-13)
+
+- `LedgerKit/Sources/LedgerAppKit/AppComposition.swift` is at 300 lines, the lint's warning limit, after
+  `Environment.colorScheme` (`-LEDGER_UITEST_APPEARANCE`). The next addition moves `Environment.live(arguments:)`
+  out to a file of its own (e.g. `AppComposition+Environment.swift`) first.
+- A UI test in light or dark launches with `LaunchAppearance` and checks it with `assertDrawn(in:_:)`
+  (`Apps/LedgerUITests/Support/Appearance.swift`); the iOS 27.0 simulator does not apply
+  `XCUIDevice.shared.appearance`. `assertDrawn` reads the top of the screen, so it holds on paper-ground screens
+  only: S2a's audits of dark-by-design screens (the workout cover) need another signal.

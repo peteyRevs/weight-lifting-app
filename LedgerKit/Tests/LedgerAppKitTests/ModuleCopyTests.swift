@@ -72,6 +72,11 @@ nonisolated struct ModuleCopyTests {
                 // A UI test's past workouts (F15 S1): the launch arguments and what stops a launch whose weeks
                 // cannot be read. Read by the launch or by the test's author, never drawn.
                 "UITestHistory.swift": ["-LEDGER_UITEST_HISTORY", "-LEDGER_UITEST", " takes  weeks, beside  seed: "],
+                // A UI test's appearance (fix/tabs-audit): the launch arguments, the two values, and what stops a
+                // launch whose value cannot be read. Read by the launch or by the test's author, never drawn.
+                "UITestAppearance.swift": [
+                    "-LEDGER_UITEST_APPEARANCE", "-LEDGER_UITEST", "light", "dark", " takes light or dark: "
+                ],
                 // Settings' About line (F14 S1, N6): the four Info.plist keys it is read from, never drawn.
                 "AppAbout.swift": [
                     "CFBundleDisplayName",
