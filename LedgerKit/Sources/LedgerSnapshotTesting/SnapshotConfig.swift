@@ -101,7 +101,7 @@ public nonisolated struct SnapshotAppearance: Sendable, CustomStringConvertible 
 
 public extension View {
     /// Lays the view out as a screen would at `appearance`, for `PhonePage`, which measures the view
-    /// without `traits` (but at the drawing's display scale) and proposes it a zero size, as
+    /// with the cell's traits at the drawing's display scale and proposes it a zero size, as
     /// swift-snapshot-testing's `.sizeThatFits` does (`sizeThatFits(in: .zero)` in 1.19):
     /// - the text size and colour scheme also go into SwiftUI's environment, so a sheet at `.xLarge`
     ///   or `.accessibility3` is not measured at `.large` and clipped (F06 fix round 3);
