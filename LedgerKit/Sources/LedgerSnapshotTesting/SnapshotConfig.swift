@@ -15,11 +15,22 @@ public nonisolated enum SnapshotConfig {
     /// under 0.5 % of the smallest reference (102 of a 187 × 110 watch image), so no reference is held looser.
     public static let pixelBudget = 8
 
-    /// swift-snapshot-testing's `precision` (a fraction) that lets exactly `pixelBudget` of `pixels` differ.
-    /// It sits half a pixel above the budget: the library counts in `Float`, whose rounding near 1 is
-    /// under a quarter of that up to 4 million pixels (the longest reference is 402 × 9,200).
+    /// How many of an image's `pixels` may differ: the budget, or 0.5 % of an image too small for it (under
+    /// 1,800 pixels), so a total change of a tiny image still fails.
+    public static func allowedPixels(of pixels: Int) -> Int {
+        min(pixelBudget, pixels * 5 / 1000)
+    }
+
+    /// The largest phone image the budget holds exactly; a larger reference fails, so split the page.
+    public static let maximumPixels = 4_000_000
+
+    /// swift-snapshot-testing's `precision` (a fraction) that lets exactly `allowedPixels(of: pixels)` differ.
+    /// It sits half a pixel above that count, because the library rounds three times: `CIAreaAverage` averages
+    /// in half floats (`CIFormat.Rh`), then `1 − average` and this precision are `Float`s. Measured: about
+    /// 0.18 pixels of error at 3.7 million pixels, 0.3 pixels of headroom on the longest reference (3.68
+    /// million), exact up to 6.03 million, and a 9-pixel change passed at 8.04 million (hence `maximumPixels`).
     public static func precision(pixels: Int) -> Float {
-        Float(1 - (Double(pixelBudget) + 0.5) / Double(max(pixels, 1)))
+        Float(1 - (Double(allowedPixels(of: pixels)) + 0.5) / Double(max(pixels, 1)))
     }
 
     /// How close a pixel must be to count as matching (0.98 ≈ ΔE 2, "just noticeable").
@@ -76,11 +87,14 @@ public nonisolated struct SnapshotAppearance: Sendable, CustomStringConvertible 
     #if os(iOS)
         /// Traits for swift-snapshot-testing's `.image(layout:traits:)`.
         @MainActor public var traits: UITraitCollection {
-            UITraitCollection { traits in
-                traits.userInterfaceStyle = colorScheme == .dark ? .dark : .light
-                traits.preferredContentSizeCategory = UIContentSizeCategory(dynamicTypeSize)
-                traits.displayScale = SnapshotConfig.scale
-            }
+            UITraitCollection { applyTraits(to: &$0) }
+        }
+
+        /// Sets the appearance's traits: its style, its text size and the drawing's display scale.
+        @MainActor func applyTraits(to traits: inout any UIMutableTraits) {
+            traits.userInterfaceStyle = colorScheme == .dark ? .dark : .light
+            traits.preferredContentSizeCategory = UIContentSizeCategory(dynamicTypeSize)
+            traits.displayScale = SnapshotConfig.scale
         }
     #endif
 }

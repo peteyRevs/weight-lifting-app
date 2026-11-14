@@ -46,7 +46,8 @@ enum PixelComparison {
         }
         let mismatched = mismatches.count { $0 }
         let sameSize = old.width == new.width && old.height == new.height
-        if sameSize, mismatched <= SnapshotConfig.pixelBudget {
+        let allowed = SnapshotConfig.allowedPixels(of: mismatches.count)
+        if sameSize, mismatched <= allowed {
             return nil
         }
         let difference = PixelBuffer(width: width, height: height, pixels: mismatches.indices.map { index in
@@ -54,7 +55,7 @@ enum PixelComparison {
             return Pixel(red: pixel.red / 3, green: pixel.green / 3, blue: pixel.blue / 3, alpha: 0xFF)
         })
         let message = sameSize
-            ? "\(mismatched) pixels differ by more than ΔE \(threshold): at most \(SnapshotConfig.pixelBudget) may"
+            ? "\(mismatched) pixels differ by more than ΔE \(threshold): at most \(allowed) may"
             : "The image size differs from the reference: \(new.width)×\(new.height) against \(old.width)×\(old.height)"
         return (message, difference.cgImage)
     }

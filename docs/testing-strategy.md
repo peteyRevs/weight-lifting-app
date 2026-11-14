@@ -226,7 +226,9 @@ Concrete test names (file = suite = source type; see §6):
 - Precision: a pixel budget, `pixelBudget: 8, perceptualPrecision: 0.98`,
   set once in `SnapshotConfig` and never overridden per test: at most 8
   pixels of an image may differ from its reference by more than ΔE 2,
-  whatever its size, so a long page is held as tightly as a short one (a
+  whatever its size (0.5 % of an image under 1,800 pixels; a phone reference
+  over 4,000,000 pixels fails, so split the page), so a long page is held as
+  tightly as a short one (a
   fraction, 0.995, let a 1,009 pt cover pass with a new 44 pt button drawn:
   F10 review SF3). The
   budget came from runs at a budget of 0 on the pinned simulators, where every

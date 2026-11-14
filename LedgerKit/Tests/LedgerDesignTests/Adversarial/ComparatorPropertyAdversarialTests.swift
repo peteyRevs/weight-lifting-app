@@ -52,16 +52,16 @@ extension RenderingSuites {
         }
 
         @Test(
-            "Any size, changed pixels anywhere, sub-threshold noise elsewhere: the budget passes, one more fails.",
+            "Any size, changed pixels anywhere, sub-threshold noise elsewhere: what is allowed passes, one more fails.",
             arguments: 0 ..< 40
         )
         func pixelBudget_anySizeAnyPositions_isExact(seed: Int) throws {
             var random = SplitMix64(seed: seed)
-            // The image always has a pixel more than the budget.
-            let allowed = SnapshotConfig.pixelBudget
-            let width = Int.random(in: allowed + 1 ... 402, using: &random)
+            // Every fifth seed is a whole multiple of 200 pixels, where 0.5 % is exact.
+            let width = Int.random(in: 1 ... 402, using: &random)
             let height = seed % 5 == 0 ? 200 : Int.random(in: 1 ... 60, using: &random)
             let pixels = width * height
+            let allowed = SnapshotConfig.allowedPixels(of: pixels)
             let order = (0 ..< pixels).shuffled(using: &random)
             let changed = Dictionary(uniqueKeysWithValues: order.prefix(allowed + 1).enumerated().map { ($1, $0) })
             let noisy = Set(order.dropFirst(allowed + 1).filter { $0 % 3 == seed % 3 })
@@ -135,11 +135,10 @@ extension RenderingSuites {
             #expect(difference.width == 20 && difference.height == 20)
         }
 
-        @Test("An image one pixel larger than the budget: identical passes, every pixel changed fails.")
-        func smallestFailingImage_boundary() throws {
-            let width = SnapshotConfig.pixelBudget + 1
-            let reference = try #require(Bitmap.make(width: width, height: 1) { _, _ in Self.grey })
-            let changed = try #require(Bitmap.make(width: width, height: 1) { _, _ in Self.red })
+        @Test("A one-pixel image: identical passes, one changed pixel fails (0.5 % of 1 is 0).")
+        func onePixel_boundary() throws {
+            let reference = try #require(Bitmap.make(width: 1, height: 1) { _, _ in Self.grey })
+            let changed = try #require(Bitmap.make(width: 1, height: 1) { _, _ in Self.red })
             #expect(Self.diff(reference, reference) == nil)
             #expect(Self.diff(reference, changed) != nil)
         }

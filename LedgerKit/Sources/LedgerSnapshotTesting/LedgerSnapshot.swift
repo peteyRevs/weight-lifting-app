@@ -67,7 +67,7 @@ public nonisolated enum SnapshotCell: Sendable, CustomStringConvertible {
 /// Asserts `view` against its references across the F06 matrix (`SnapshotCell.matrix`), one reference per cell,
 /// named `<name>-<cell>` (or `<cell>` without a name). The simulator a test runs on draws its own cells, phone
 /// cells on iOS and watch cells on watchOS, through `assertPhoneSnapshot` and `assertWatchSnapshot`, so every
-/// snapshot keeps their appearance steps and precisions; the Mac host draws none (F06 review N3). On a simulator,
+/// snapshot keeps their appearance steps and pixel budget; the Mac host draws none (F06 review N3). On a simulator,
 /// arguments that leave it no cell of its own (`themes: []`, or only the other platform's devices) fail the test
 /// rather than pass with nothing compared.
 public func assertLedgerSnapshot(

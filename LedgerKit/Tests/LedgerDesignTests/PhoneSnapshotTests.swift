@@ -47,28 +47,63 @@
             )
         }
 
-        /// A `width`×`height` white image whose first `changed` pixels (row-major) are red, at 1×.
-        static func image(width: Int, height: Int, changed: Int) throws -> UIImage {
+        /// A `width`×`height` white image with `changed` red pixels, at 1×: the first ones (row-major), or spread
+        /// evenly over the whole page.
+        static func image(width: Int, height: Int, changed: Int, scattered: Bool = false) throws -> UIImage {
+            let stride = scattered ? width * height / max(changed, 1) : 1
             let cgImage = try #require(Bitmap.make(width: width, height: height) { column, row in
-                row * width + column < changed ? 0xFF00_00FF : ground
+                let index = row * width + column
+                return index % stride == 0 && index / stride < changed ? 0xFF00_00FF : ground
             })
             return UIImage(cgImage: cgImage, scale: SnapshotConfig.scale, orientation: .up)
         }
 
         @Test(
-            "The budget is exact at a short and at a long page: the budget's pixels pass, one more fails",
-            arguments: [66, 1009, 9200]
+            "The budget is exact on a short and a long page, pixels together or spread: it passes, one more fails",
+            arguments: [66, 1009, 9200], [false, true]
         )
-        func budget_isExact_atAnyLength(height: Int) throws {
+        func budget_isExact_atAnyLength(height: Int, scattered: Bool) throws {
             let width = Int(SnapshotConfig.phoneWidth)
             let budget = SnapshotConfig.pixelBudget
             let reference = try Self.image(width: width, height: height, changed: 0)
-            let atBudget = try Self.image(width: width, height: height, changed: budget)
-            let overBudget = try Self.image(width: width, height: height, changed: budget + 1)
+            let atBudget = try Self.image(width: width, height: height, changed: budget, scattered: scattered)
+            let overBudget = try Self.image(width: width, height: height, changed: budget + 1, scattered: scattered)
             let diffing = Diffing<UIImage>.withinPixelBudget
             #expect(diffing.diffV2(reference, atBudget) == nil, "\(budget) of \(width)×\(height) differing failed")
             let failure = try #require(diffing.diffV2(reference, overBudget), "\(budget + 1) differing passed")
             #expect(failure.0.contains("At most \(budget) of \(width * height) pixels may differ"), "\(failure.0)")
+        }
+
+        @Test("A reference over the pixels the budget holds exactly fails, even matched, and says to split the page")
+        func reference_overMaximumPixels_fails() throws {
+            let height = SnapshotConfig.maximumPixels / Int(SnapshotConfig.phoneWidth) + 1
+            let image = try Self.image(width: Int(SnapshotConfig.phoneWidth), height: height, changed: 0)
+            let failure = try #require(
+                Diffing<UIImage>.withinPixelBudget.diffV2(image, image),
+                "a 402×\(height) passed"
+            )
+            #expect(failure.0.contains("split the page"), "\(failure.0)")
+        }
+
+        /// A view 50 pt high, or 100 pt with Increase Contrast, which SwiftUI reads from the window's traits.
+        struct ContrastSized: View {
+            @Environment(\.colorSchemeContrast) private var contrast
+
+            var body: some View {
+                Color.white.frame(width: SnapshotConfig.phoneWidth, height: contrast == .increased ? 100 : 50)
+            }
+        }
+
+        @Test("The page is measured with the cell's traits, as it is drawn: Increase Contrast makes it 100 pt high")
+        func page_isMeasuredWithTheCellsTraits() async {
+            let appearance = SnapshotAppearance(.light, .large)
+            let contrast: (inout any UIMutableTraits) -> Void = { $0.accessibilityContrast = .high }
+            let page = PhonePage(ContrastSized(), appearance, modifyingTraits: contrast)
+            let image = await withCheckedContinuation { done in
+                Snapshotting<PhonePage, UIImage>.phone(appearance, modifyingTraits: contrast).snapshot(page)
+                    .run { done.resume(returning: $0) }
+            }
+            #expect(image.size.height == 100)
         }
     }
 #endif

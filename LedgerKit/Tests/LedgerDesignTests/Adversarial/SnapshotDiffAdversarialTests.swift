@@ -5,8 +5,8 @@ import LedgerSnapshotTesting
 import SnapshotTesting
 import Testing
 
-/// An image size for the pixel budget's boundary: `SnapshotConfig.pixelBudget` of its pixels may differ, whatever
-/// its size.
+/// An image size for the pixel budget's boundary: `SnapshotConfig.pixelBudget` of its pixels may differ, or 0.5 %
+/// of an image too small for the budget.
 nonisolated struct PrecisionCase: Sendable, CustomTestStringConvertible {
     let width: Int
     let height: Int
@@ -16,7 +16,7 @@ nonisolated struct PrecisionCase: Sendable, CustomTestStringConvertible {
     }
 
     var allowed: Int {
-        SnapshotConfig.pixelBudget
+        SnapshotConfig.allowedPixels(of: pixels)
     }
 
     var testDescription: String {
@@ -59,7 +59,7 @@ extension RenderingSuites {
         }
 
         @Test(
-            "At each size, the pixel budget of differing pixels passes and one more fails.",
+            "At each size, the allowed differing pixels pass and one more fails.",
             arguments: PrecisionCase.all
         )
         func precision_boundary_holdsFromBothSides(size: PrecisionCase) throws {

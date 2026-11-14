@@ -84,15 +84,15 @@ extension RenderingSuites {
         @Test("Exactly the pixel budget of differing pixels passes: the budget is inclusive.")
         func pngDiffing_exactlyAtBudget_passes() throws {
             let budget = SnapshotConfig.pixelBudget
-            let reference = try #require(Self.strip(width: 1000, changed: 0))
-            let actual = try #require(Self.strip(width: 1000, changed: budget))
-            #expect(Self.diff(reference, actual) == nil, "\(budget) of 1000 pixels differ")
+            let reference = try #require(Self.strip(width: 2000, changed: 0))
+            let actual = try #require(Self.strip(width: 2000, changed: budget))
+            #expect(Self.diff(reference, actual) == nil, "\(budget) of 2000 pixels differ")
         }
 
         @Test("One pixel over the budget fails.")
         func pngDiffing_overBudget_fails() throws {
-            let reference = try #require(Self.strip(width: 1000, changed: 0))
-            let actual = try #require(Self.strip(width: 1000, changed: SnapshotConfig.pixelBudget + 1))
+            let reference = try #require(Self.strip(width: 2000, changed: 0))
+            let actual = try #require(Self.strip(width: 2000, changed: SnapshotConfig.pixelBudget + 1))
             #expect(Self.diff(reference, actual) != nil)
         }
 

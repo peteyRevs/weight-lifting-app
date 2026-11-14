@@ -19,7 +19,7 @@
         line: UInt = #line,
         column: UInt = #column
     ) {
-        let page = PhonePage(view, appearance)
+        let page = PhonePage(view, appearance, modifyingTraits: modifyingTraits)
         assertSnapshot(
             of: page,
             as: .phone(appearance, modifyingTraits: modifyingTraits),
@@ -43,20 +43,34 @@
         let content: AnyView
         let size: CGSize
 
-        public init(_ view: some View, _ appearance: SnapshotAppearance) {
+        /// `modifyingTraits` must be the strategy's (`Snapshotting.phone`), so the page is measured as it is drawn.
+        public init(
+            _ view: some View,
+            _ appearance: SnapshotAppearance,
+            modifyingTraits: (inout any UIMutableTraits) -> Void = { _ in }
+        ) {
             content = AnyView(view.snapshotAppearance(appearance))
-            size = Self.drawnSize(of: content)
+            size = Self.drawnSize(of: content, appearance, modifyingTraits)
         }
 
         public var body: some View {
             content.frame(width: size.width, height: size.height)
         }
 
-        static func drawnSize(of view: AnyView) -> CGSize {
+        static func drawnSize(
+            of view: AnyView,
+            _ appearance: SnapshotAppearance,
+            _ modifyingTraits: (inout any UIMutableTraits) -> Void
+        ) -> CGSize {
             let host = UIHostingController(rootView: view)
             host.safeAreaRegions = []
             let window = SceneLessWindow.make(frame: CGRect(x: 0, y: 0, width: SnapshotConfig.phoneWidth, height: 874))
-            window.traitOverrides.displayScale = SnapshotConfig.scale
+            var traits: any UIMutableTraits = window.traitOverrides
+            appearance.applyTraits(to: &traits)
+            modifyingTraits(&traits)
+            if let overrides = traits as? UITraitOverrides {
+                window.traitOverrides = overrides
+            }
             window.rootViewController = host
             window.isHidden = false
             defer {
@@ -91,18 +105,27 @@
 
     public extension Diffing where Value == UIImage {
         /// swift-snapshot-testing's image comparison, at the precision that lets ``SnapshotConfig/pixelBudget``
-        /// pixels of the reference differ (``SnapshotConfig/precision(pixels:)``), whatever its size.
+        /// pixels of the reference differ (``SnapshotConfig/precision(pixels:)``), whatever its size up to
+        /// ``SnapshotConfig/maximumPixels``; a larger reference fails.
         static var withinPixelBudget: Diffing {
             let fixed = Diffing.image(scale: SnapshotConfig.scale)
             return .diff(toData: fixed.toData, fromData: fixed.fromData) { reference, actual in
                 let pixels = Int(reference.size.width * reference.scale) * Int(reference.size.height * reference.scale)
+                guard pixels <= SnapshotConfig.maximumPixels else {
+                    return (
+                        "The reference is \(pixels) pixels, over the \(SnapshotConfig.maximumPixels) the pixel budget "
+                            + "holds exactly: split the page into shorter snapshots",
+                        []
+                    )
+                }
                 let precision = SnapshotConfig.precision(pixels: pixels)
                 let comparison = Diffing.image(
                     precision: precision, perceptualPrecision: SnapshotConfig.perceptualPrecision,
                     scale: SnapshotConfig.scale
                 )
+                let allowed = SnapshotConfig.allowedPixels(of: pixels)
                 return comparison.diffV2(reference, actual).map { message, attachments in
-                    ("At most \(SnapshotConfig.pixelBudget) of \(pixels) pixels may differ: \(message)", attachments)
+                    ("At most \(allowed) of \(pixels) pixels may differ: \(message)", attachments)
                 }
             }
         }

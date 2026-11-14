@@ -110,13 +110,14 @@
                     IconPillButton("Swap exercise", icon: .swap) {}.padding(LedgerSpacing.screen)
                 })
                 #expect(strategy.diffing.diffV2(reference, plain) == nil, "the cover no longer matches its reference")
-                #expect(strategy.diffing.diffV2(reference, withButton) != nil, "a new button passed the reference")
+                let failure = try #require(strategy.diffing.diffV2(reference, withButton), "a new button passed")
+                #expect(failure.0.contains("At most \(SnapshotConfig.pixelBudget) of"), "\(failure.0)")
             }
         #endif
 
         /// F10 S8b (review SF3): the card's title row alone, where "Swap exercise" is a large share of the
         /// image, so that a reference fails when the button is missing, moved or restyled; on the whole cover a
-        /// 44 pt outline is under the comparison's 0.5 % of pixels.
+        /// 44 pt outline was under the comparison's old 0.5 % of pixels (now a pixel budget, tested above).
         @Test("The card's title row: the place and the name, with Swap exercise at the trailing edge")
         func card_titleRow_matchesReferences() throws {
             guard case let .workout(workout) = WorkoutPreview.started.model, let card = workout.page.card else {
