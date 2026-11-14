@@ -3,11 +3,13 @@ import XCTest
 /// F15 S2, criterion 6 (C7): the system's accessibility audit on the active workout's cover, three ways
 /// (`AuditWay`): the solo card, the swap sheet, the rest panel, the superset block, the finish sheet and the
 /// receipt. Each is reached through the Debug menu's sample workout (the seed's Upper A), as the older workout
-/// tests reach them, at noon on Wednesday of the seed's week 5 (the receipt's date). What the audit reports and is
-/// excused is `exclusions`' (measured, in the implementation notes); anything else fails. Nightly only: the `PR`
-/// plan selects `Smoke`.
+/// tests reach them. The clock is not moved: `-LEDGER_UITEST_NOW` moves the app's clock but not the header's
+/// elapsed time, which counts by the wall clock from a start the moved clock set, so a moved clock draws a time no
+/// lifter sees ("1424:17:08"), whose width changes the header's layout at Accessibility XXXL. What the audit reports
+/// and is excused is `exclusions`' (measured, in the implementation notes); anything else fails. Nightly only: the
+/// `PR` plan selects `Smoke`.
 final class AuditWorkout: XCTestCase {
-    private static let arguments = ["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z", "-LEDGER_UITEST_PROGRAM", "seed"]
+    private static let arguments = ["-LEDGER_UITEST_PROGRAM", "seed"]
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -82,16 +84,45 @@ extension AuditWorkout {
                 "solo card": ["UPPER A — PUSH FOCUS", "Barbell Bench Press", "5 × 5 @ 180 lb · RPE 8"],
                 "rest panel": ["UPPER A — PUSH FOCUS", "Barbell Bench Press", "5 × 5 @ 180 lb · RPE 8"],
                 "superset block": ["UPPER A — PUSH FOCUS", "Superset · block 4 of 4"],
-                "receipt": ["Wednesday, September 16", "Upper A — Push focus", "LB MOVED"]
+                "receipt": ["Upper A — Push focus", "LB MOVED"]
             ]),
             headerPillsWhole,
             .underThePinnedPart(on: ["rest panel"]),
             .accentButtons(["Skip rest", "Save workout"], on: ["rest panel", "finish sheet"]),
-            receiptDate
+            receiptDate,
+            receiptDateLine,
+            skipRestUnnamed
         ]
     }
 
-    /// F15-S2-9: the receipt's date, "Wednesday, September 16" (a caption, 12 pt tall), is no control. VoiceOver's
+    /// F15-S2-7 on "Skip rest" (white on the accent, 3.10:1) when the audit reports it without its element: from
+    /// phase 2 of S2a's review on, the rest panel's one "Contrast nearly passed" comes with no element and no frame,
+    /// light and dark alike, and the labelled "Skip rest" one is gone from the same runs; the panel holds no other
+    /// accent control. One a way on the rest panel: a second, or one elsewhere, fails.
+    static var skipRestUnnamed: ScreenExclusion {
+        ScreenExclusion(
+            finding: "F15-S2-7",
+            issue: "Contrast nearly passed with no element, rest panel",
+            perScreenAndWay: 1
+        ) {
+            $0.type == .contrast && $0.summary == "Contrast nearly passed" && $0.screen == "rest panel"
+                && $0.elementType == .any && $0.frame.isNull
+        }
+    }
+
+    /// Whether `label` is the receipt's date as it writes today's: "Saturday, November 14".
+    static func isDate(_ label: String) -> Bool {
+        label.range(of: #"^[A-Z][a-z]+day, [A-Z][a-z]+ \d{1,2}$"#, options: .regularExpression) != nil
+    }
+
+    /// F15-S2-4 on the receipt's date, a caption on the role's native line: whole in its pictures at both sizes.
+    static var receiptDateLine: ScreenExclusion {
+        ScreenExclusion(finding: "F15-S2-4", issue: "Text clipped on the receipt's date") {
+            $0.summary == "Text clipped" && $0.screen == "receipt" && $0.elementType == .staticText && isDate($0.label)
+        }
+    }
+
+    /// F15-S2-9: the receipt's date (a caption, 12 pt tall) is no control. VoiceOver's
     /// escape, "Done", is set on the receipt's stack, and SwiftUI hands it to each element of it
     /// (`ReceiptTests.escape_isDone` performs it on the first), which the audit takes for a tap target. Of those it
     /// reports the date alone: the pinned header's other two are 29 pt (the name) and 44 pt ("Done") tall. Moving
@@ -100,7 +131,7 @@ extension AuditWorkout {
     static var receiptDate: ScreenExclusion {
         ScreenExclusion(finding: "F15-S2-9", issue: "Hit area too small, the receipt's date") {
             $0.summary == "Hit area is too small" && $0.screen == "receipt" && $0.elementType == .staticText
-                && $0.label == "Wednesday, September 16"
+                && isDate($0.label)
         }
     }
 

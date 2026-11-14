@@ -14,15 +14,17 @@ extension AuditExclusionsTests {
             issue("rest panel", contrast, "+ Add set", type: .button, frame: under, pinned: panel),
             issue("finish sheet", nearly, "Save workout", type: .button),
             issue("solo card", clipped, "Finish", type: .button, identifier: "workout.header.finish"),
-            issue("receipt", clipped, "Wednesday, September 16"),
-            issue("receipt", hitArea, "Wednesday, September 16")
+            issue("receipt", clipped, "Saturday, November 14"),
+            issue("receipt", hitArea, "Saturday, November 14"),
+            ScreenIssue(screen: "rest panel", type: .contrast, summary: nearly)
         ]
     }
 
     /// Their near misses.
     private static var workoutNearMisses: [ScreenIssue] {
         [
-            issue("receipt", hitArea, "Thursday, September 17"),
+            issue("receipt", hitArea, "Upper A — Push focus"),
+            issue("solo card", clipped, "Saturday, November 14"),
             issue("solo card", dynamicType, "Barbell Bench Press"),
             issue("solo card", clipped, "Finish", type: .button),
             issue("solo card", contrast, "Minimize", type: .button),
@@ -66,12 +68,29 @@ extension AuditExclusionsTests {
             issue("finish sheet", nearly, "Discard", type: .button),
             issue("receipt", hitArea, "Done", type: .button),
             issue("solo card", hitArea, "Elapsed time", type: .other),
-            issue("receipt", clipped, "Friday, November 13")
+            issue("receipt", contrast, "Friday, November 13")
         ]
     }
 
     @MainActor
     func test_workoutExclusions_excuseNothingWider() {
         check(AuditWorkout.exclusions, excused: Self.workoutExcused, nearMisses: Self.workoutNearMisses)
+    }
+
+    /// The rest panel's element-less near pass is excused once a way, and nowhere else.
+    @MainActor
+    func test_unnamedSkipRest_isExcusedOnceAWayOnTheRestPanel() {
+        let unnamed = ScreenIssue(screen: "rest panel", type: .contrast, summary: Self.nearly)
+        var dark = unnamed
+        dark.way = .dark
+        let exclusions = AuditWorkout.exclusions
+        XCTAssertNotNil(ScreenAudit.exclusion(for: unnamed, in: exclusions, among: [unnamed, dark]))
+        XCTAssertNil(ScreenAudit.exclusion(for: unnamed, in: exclusions, among: [unnamed, unnamed]), "a second")
+        var elsewhere = unnamed
+        elsewhere.screen = "solo card"
+        XCTAssertNil(ScreenAudit.exclusion(for: elsewhere, in: exclusions), "another screen")
+        elsewhere = unnamed
+        elsewhere.summary = Self.contrast
+        XCTAssertNil(ScreenAudit.exclusion(for: elsewhere, in: exclusions), "Contrast failed")
     }
 }

@@ -130,5 +130,17 @@
             #expect(SupersetLegendRow.letterInk(isCurrent: false) == LedgerColor.inkMuted)
             #expect(SupersetLegendRow.letterInk(isCurrent: false) != LedgerColor.inkFaint)
         }
+
+        /// F15-S2-14: on the current member's inverted fill the letter is `accentText` read in the other scheme: the
+        /// plain accent on the near-black fill in light, the deep accent on the light fill in dark (the plain accent
+        /// there was 2.8:1). Off the current row the letter keeps the screen's scheme.
+        @Test("The current member's letter is the accent text of the other scheme; the others keep the screen's")
+        func letterScheme_isInvertedOnTheCurrentRowOnly() {
+            #expect(SupersetLegendRow.letterInk(isCurrent: true) == LedgerColor.accentText)
+            #expect(SupersetLegendRow.letterScheme(isCurrent: true, in: .dark) == .light)
+            #expect(SupersetLegendRow.letterScheme(isCurrent: true, in: .light) == .dark)
+            #expect(SupersetLegendRow.letterScheme(isCurrent: false, in: .dark) == .dark)
+            #expect(SupersetLegendRow.letterScheme(isCurrent: false, in: .light) == .light)
+        }
     }
 #endif

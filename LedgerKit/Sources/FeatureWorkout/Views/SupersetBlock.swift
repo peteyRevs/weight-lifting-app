@@ -82,6 +82,7 @@ struct SupersetLegendRow: View {
     let row: SupersetBlockModel.LegendRow
     let send: (WorkoutAction) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let outer = dynamicTypeSize.isAccessibilitySize
@@ -108,12 +109,22 @@ struct SupersetLegendRow: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// The letter's ink: the accent on the current member's ink fill (unchanged here; in dark the fill is the
-    /// light `ink`, #F4F2ED, and the accent on it is about 2.8:1, to be measured by S2a's dark audit); on the
-    /// surface, `inkMuted`, which holds 4.5:1 there (`MutedTextContrastAdversarialTests`). F15-S2-1: it was
-    /// `inkFaint`, a token for what is not read, and the system's audit measured the letter at 1.8:1 on the surface.
+    /// The letter's ink. On the surface, `inkMuted`, which holds 4.5:1 there (`MutedTextContrastAdversarialTests`).
+    /// F15-S2-1: it was `inkFaint`, a token for what is not read, and the system's audit measured it at 1.8:1.
+    /// On the current member's `ink` fill, `accentText` read in the other scheme (`letterScheme`), as the fill is
+    /// the other scheme's ground: the plain accent on the near-black fill in light, as before; the deep accent,
+    /// #B2390E, on the light fill (#F4F2ED) in dark. F15-S2-14: the plain accent there measured 2.8:1, "Contrast
+    /// failed" in the dark audit.
     static func letterInk(isCurrent: Bool) -> Color {
-        isCurrent ? LedgerColor.accent : LedgerColor.inkMuted
+        isCurrent ? LedgerColor.accentText : LedgerColor.inkMuted
+    }
+
+    /// The scheme the letter's ink is read in: the other one on the current member's inverted fill.
+    static func letterScheme(isCurrent: Bool, in scheme: ColorScheme) -> ColorScheme {
+        guard isCurrent else {
+            return scheme
+        }
+        return scheme == .dark ? .light : .dark
     }
 
     /// The letter, the name and the target on the row's fill: side by side, the target under the name at the
@@ -127,6 +138,7 @@ struct SupersetLegendRow: View {
                 Text(row.letter)
                     .ledgerFont(.numeralS)
                     .foregroundStyle(Self.letterInk(isCurrent: row.isCurrent))
+                    .environment(\.colorScheme, Self.letterScheme(isCurrent: row.isCurrent, in: colorScheme))
                 Text(row.name)
                     .ledgerFont(.body)
                     .foregroundStyle(row.isCurrent ? LedgerColor.ground : LedgerColor.ink)

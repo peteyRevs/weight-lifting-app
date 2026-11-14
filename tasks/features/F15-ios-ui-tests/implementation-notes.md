@@ -312,3 +312,47 @@ in dark; until then every "light and dark" above means light only (the dark way 
   (`Apps/LedgerUITests/Support/Appearance.swift`); the iOS 27.0 simulator does not apply
   `XCUIDevice.shared.appearance`. `assertDrawn` reads the top of the screen, so it holds on paper-ground screens
   only: S2a's audits of dark-by-design screens (the workout cover) need another signal.
+
+### Review round 1, phase 2: the appearance seam and dark (2026-11-14, after `main` e7cbbcc was merged)
+
+- **The seam.** `AuditWay` takes its appearance from `LaunchAppearance` (`-LEDGER_UITEST_APPEARANCE light|dark`), and
+  each launch calls `assertDrawn(in:)` on Today, before the walk: no pass depends on the shared simulator.
+- **Dark findings, fixed or open:**
+  - **F15-S2-14, fixed.** The current superset member's accent letter on its inverted `ink` fill: in dark the plain
+    accent on #F4F2ED is 2.8:1 ("Contrast failed" on "A"). The letter now reads `accentText` in the other scheme:
+    the plain accent on the near-black fill in light (unchanged), the deep accent #B2390E on #F4F2ED in dark. No
+    token changed (`SupersetLegendRow.letterScheme`, pinned by `SupersetBlockTests.letterScheme_isInvertedOnTheCurrentRowOnly`).
+  - **F15-S2-13, open.** "Contrast failed" on the Day editor's name field in dark only. `NameField` draws the field's
+    own text clear while unfocused and the name as wrapping text under it; the audit reads the field's text colour,
+    not its pixels (black on paper passes, black on #0B0B0D fails). The drawn name is 17:1. Changing how the field's
+    text is hidden touches `NameField`'s measured layout and hosted tests, so it goes to the follow-up PR; a strict
+    expected failure, dark, that field only.
+  - **The rest panel's element-less near pass** is not a dark finding: from this phase on it comes in light and dark
+    alike, one a way, while the labelled "Skip rest" near pass is gone from the same runs; the panel has no other
+    accent control. It is F15-S2-7 with its element lost, excused once a way on the rest panel only
+    (`skipRestUnnamed`, count-checked like F15-S2-12; exclusions now take a per-way count too).
+- **Dark re-measured** (all excused in the last run): F15-S2-5 under the tab bar (Settings' "DATA", "Apple Health",
+  "Not connected"; the detail's "Delete workout"; the history's last session) and each page scrolls clear in dark;
+  F15-S2-6 under the edit sheet's foot and the rest panel; F15-S2-7, white on the accent, which is #FF5B22 in both
+  schemes: 3.10:1; F15-S2-8, the bar's "Edit", its picture's ink 20.5:1; F15-S2-12: two element-less issues on
+  Settings in dark too.
+- **The frozen clock** is dropped from `AuditWorkout`: the header's elapsed time is `Text(timerInterval:)`, drawn by
+  the system from the wall clock, so it cannot read the test mode's moved clock without a timeline of its own
+  (more than this slice). The receipt's date is matched by its shape ("Saturday, November 14"), for its hit area
+  (F15-S2-9) and its native line (F15-S2-4).
+- **The last run** (Nightly plan, the audits and `AuditExclusionsTests` only): 12 tests passed; 222 issues reported
+  (85 light, 86 dark, 51 at XXXL), 213 excused, 9 open (F15-S2-10 ×3, 11 ×1, 12 ×4, 13 ×1), none left.
+
+| Test | Seconds |
+|---|--:|
+| AuditWorkout.test_cardSwapSheetAndRestPanel_passTheAudit | 135.4 |
+| AuditWorkout.test_supersetFinishSheetAndReceipt_passTheAudit | 114.4 |
+| AuditProgramLibrary.test_dayEditorAndItsPicker_passTheAudit | 268.9 |
+| AuditProgramLibrary.test_historyNewAndEditExercise_passTheAudit | 272.6 |
+| AuditHistorySettings.test_workoutDetailAndEditSets_passTheAudit | 279.8 |
+| AuditHistorySettings.test_settingsAndBarAndPlates_passTheAudit | 104.1 |
+| AuditExclusionsTests (6 tests) | under 0.1 each |
+
+1,175 s on the Mac, about 1,760 s on the runner (× 1.5): the scroll proofs added about 400 s. Leg 4 becomes about
+4,590 s of tests, still under the 5,000 s line, with less room; the next rebalance should move an audit class to
+leg 5.

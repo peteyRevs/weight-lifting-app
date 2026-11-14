@@ -2,25 +2,21 @@ import XCTest
 
 /// The three ways F15 audits a screen (S2, question 6, A): contrast differs by appearance, and clipping by size.
 /// The hosted sweeps already cover every text size, so the running app is audited at the default size and at the
-/// largest only. The appearance is the app's own Debug seam, `-LEDGER_UITEST_APPEARANCE`: on the iOS 27.0
-/// simulator neither `XCUIDevice.appearance` nor `simctl ui appearance` reaches a launched app.
+/// largest only. The appearance is the app's own Debug seam (`LaunchAppearance`, `Support/Appearance.swift`): on the
+/// iOS 27.0 simulator the device's appearance does not reliably reach a launched app.
 enum AuditWay: String, CaseIterable {
     case light
     case dark
     case largest = "light, Accessibility XXXL"
 
+    var appearance: LaunchAppearance {
+        self == .dark ? .dark : .light
+    }
+
     /// The launch arguments that set the way's appearance and text size.
     var arguments: [String] {
-        switch self {
-        case .light: ["-LEDGER_UITEST_APPEARANCE", "light"]
-        case .dark: ["-LEDGER_UITEST_APPEARANCE", "dark"]
-        case .largest: [
-                "-LEDGER_UITEST_APPEARANCE",
-                "light",
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityXXXL"
-            ]
-        }
+        let size = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        return appearance.launchArguments + (self == .largest ? size : [])
     }
 }
 
@@ -143,8 +139,10 @@ final class ScreenAudit {
     }
 
     /// The exclusion that excuses `issue`, if one does.
-    nonisolated static func exclusion(for issue: ScreenIssue, in exclusions: [ScreenExclusion]) -> ScreenExclusion? {
-        exclusions.first { $0.excuses(issue) }
+    nonisolated static func exclusion(
+        for issue: ScreenIssue, in exclusions: [ScreenExclusion], among issues: [ScreenIssue]? = nil
+    ) -> ScreenExclusion? {
+        exclusions.first { $0.names(issue, among: issues ?? [issue]) }
     }
 
     /// Launches the app three ways (`AuditWay`) with `arguments`, and runs `walk` each time: the walk reaches each
@@ -155,6 +153,10 @@ final class ScreenAudit {
         for next in AuditWay.allCases {
             way = next
             let steps = Steps(launching: arguments + next.arguments, for: test)
+            // Today stands on the paper ground in light: the one screen every walk starts on where the appearance
+            // can be read off the picture (never the cover or a sheet).
+            XCTAssertTrue(steps.todayTitle.waitForExistence(timeout: 10), "on Today")
+            try test.assertDrawn(in: next.appearance, steps.app)
             try walk(steps)
             steps.app.terminate()
         }
@@ -269,7 +271,7 @@ final class ScreenAudit {
     /// Every issue, with its type and its verdict: excused, open, or not excused.
     private func attachReport() {
         let report = issues.map { issue in
-            let excused = Self.exclusion(for: issue, in: exclusions).map { "excused, \($0.finding)" }
+            let excused = Self.exclusion(for: issue, in: exclusions, among: issues).map { "excused, \($0.finding)" }
             let opened = open.first { $0.names(issue, among: issues) }.map { "open, \($0.finding)" }
             return "\(issue) type \(issue.type.rawValue)\n  \(issue.detail)\n  \(excused ?? opened ?? "NOT EXCUSED")"
         }
@@ -281,7 +283,7 @@ final class ScreenAudit {
 
     /// The issues no exclusion excuses fail the test; each open finding is a strict expected failure.
     private func verdict() {
-        let left = issues.filter { Self.exclusion(for: $0, in: exclusions) == nil }
+        let left = issues.filter { Self.exclusion(for: $0, in: exclusions, among: self.issues) == nil }
         let isOpen = { (issue: ScreenIssue) in self.open.contains { $0.names(issue, among: left) } }
         let unknown = left.filter { !isOpen($0) }.map(\.description)
         XCTAssertEqual(unknown, [], "\(issues.count) reported, \(issues.count - left.count) excused")
