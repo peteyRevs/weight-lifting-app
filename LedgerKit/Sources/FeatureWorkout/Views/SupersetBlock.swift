@@ -108,9 +108,10 @@ struct SupersetLegendRow: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// The letter's ink: the accent on the current member's ink fill; on the surface, `inkMuted`, which holds
-    /// 4.5:1 there (`MutedTextContrastAdversarialTests`). F15-S2-1: it was `inkFaint`, a token for what is not
-    /// read, and the system's audit measured the letter at 1.8:1 on the surface.
+    /// The letter's ink: the accent on the current member's ink fill (unchanged here; in dark the fill is the
+    /// light `ink`, #F4F2ED, and the accent on it is about 2.8:1, to be measured by S2a's dark audit); on the
+    /// surface, `inkMuted`, which holds 4.5:1 there (`MutedTextContrastAdversarialTests`). F15-S2-1: it was
+    /// `inkFaint`, a token for what is not read, and the system's audit measured the letter at 1.8:1 on the surface.
     static func letterInk(isCurrent: Bool) -> Color {
         isCurrent ? LedgerColor.accent : LedgerColor.inkMuted
     }

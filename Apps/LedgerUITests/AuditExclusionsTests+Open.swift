@@ -22,11 +22,11 @@ extension AuditExclusionsTests {
             identifier: "library.create.name",
             way: .largest
         )
-        XCTAssertTrue(AuditWorkout.minimizeBroken.names(minimize, among: [minimize]))
+        XCTAssertTrue(AuditWorkout.headerPillsBroken.names(minimize, among: [minimize]))
         XCTAssertTrue(AuditProgramLibrary.truncatedName.names(name, among: [name]))
         var elsewhere = minimize
         elsewhere.way = .light
-        XCTAssertFalse(AuditWorkout.minimizeBroken.names(elsewhere, among: [elsewhere]), "at the default size")
+        XCTAssertFalse(AuditWorkout.headerPillsBroken.names(elsewhere, among: [elsewhere]), "at the default size")
         elsewhere = name
         elsewhere.identifier = "workout.header.finish"
         XCTAssertFalse(AuditProgramLibrary.truncatedName.names(elsewhere, among: [elsewhere]), "another element")
@@ -39,7 +39,11 @@ extension AuditExclusionsTests {
     @MainActor
     func test_openElementlessFinding_namesExactlyTwoOnSettings() {
         let open = AuditHistorySettings.unlabelledText
-        let unlabelled = ScreenIssue(screen: "Settings", type: .textClipped, summary: "Potentially inaccessible text")
+        let unlabelled = ScreenIssue(
+            screen: "Settings",
+            type: .elementDetection,
+            summary: "Potentially inaccessible text"
+        )
         XCTAssertTrue(open.names(unlabelled, among: [unlabelled, unlabelled]))
         XCTAssertFalse(open.names(unlabelled, among: [unlabelled, unlabelled, unlabelled]), "a third")
         XCTAssertFalse(open.names(unlabelled, among: [unlabelled]), "one alone")
@@ -52,6 +56,9 @@ extension AuditExclusionsTests {
         drawn = unlabelled
         drawn.frame = CGRect(x: 26, y: 300, width: 40, height: 15)
         XCTAssertFalse(open.names(drawn, among: [drawn, drawn]), "an element with a frame")
+        drawn = unlabelled
+        drawn.type = .contrast
+        XCTAssertFalse(open.names(drawn, among: [drawn, drawn]), "another type of issue")
         drawn = unlabelled
         drawn.way = .largest
         XCTAssertFalse(open.names(drawn, among: [drawn, drawn]), "at Accessibility XXXL")

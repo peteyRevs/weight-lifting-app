@@ -24,13 +24,19 @@ final class AuditHistorySettings: XCTestCase {
             newest.tap()
             XCTAssertTrue(app.staticTexts["history.workout.title"].waitForExistence(timeout: 5), "its detail")
             try audit.audit(steps, screen: "workout detail")
-            audit.expectScrollsClearOfTheTabBar(steps, screen: "workout detail")
+            audit.expectScrollsClear(steps, screen: "workout detail", anchor: "LOGGED", last: "Delete workout") {
+                app.tabBars.firstMatch.frame.minY
+            }
 
             let edit = app.buttons["history.workout.edit"]
             XCTAssertTrue(edit.waitForExistence(timeout: 5))
             edit.tap()
             XCTAssertTrue(app.buttons["history.edit.save"].waitForExistence(timeout: 5), "the edit-sets sheet")
-            try audit.audit(steps, screen: "edit sets", pinned: app.buttons["history.edit.save"])
+            let foot = PinnedPart.sheetFoot(app.buttons["history.edit.save"])
+            try audit.audit(steps, screen: "edit sets", pinned: foot)
+            audit.expectScrollsClear(
+                steps, screen: "edit sets", anchor: "Set 1 weight", last: Self.lastEditedSet
+            ) { foot.minY }
         }
     }
 
@@ -54,22 +60,25 @@ final class AuditHistorySettings: XCTestCase {
             cancel.tap()
             XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the sheet went down")
 
-            audit.expectScrollsClearOfTheTabBar(steps, screen: "Settings")
+            audit.expectScrollsClear(steps, screen: "Settings", anchor: "TRAINING", last: Self.lastSetting) {
+                app.tabBars.firstMatch.frame.minY
+            }
         }
     }
 }
 
 extension AuditHistorySettings {
-    static let screens: Set = ["workout detail", "edit sets", "Settings", "Bar and plates"]
+    /// The pages' last texts or buttons: the edit sheet's last set, and Settings' last row.
+    static let lastEditedSet = "16" // the reps of Cable Lateral Raise's last set
+    static let lastSetting = "Ledger " // "Ledger 0.21.1 · build 1": the version changes
 
     /// The measured exclusions of the workout's detail, its edit sheet, Settings and Bar and plates (F15-S2-3 to 8).
     static var exclusions: [ScreenExclusion] {
         [
-            .eyebrows(["TIME", "SETS", "LB MOVED", "LOGGED", "TRAINING"], on: screens),
-            .shortLines(
-                ["Monday, September 14", "Upper A — Push focus", "8 new PRs this session", "LB MOVED"],
-                on: screens
-            ),
+            .eyebrows(["workout detail": ["TIME", "SETS", "LB MOVED", "LOGGED"], "Settings": ["TRAINING"]]),
+            .shortLines([
+                "workout detail": ["Monday, September 14", "Upper A — Push focus", "8 new PRs this session", "LB MOVED"]
+            ]),
             .underTheTabBar(on: ["workout detail", "Settings"]),
             .underThePinnedPart(on: ["edit sets"]),
             systemEditButton
@@ -78,16 +87,18 @@ extension AuditHistorySettings {
 
     /// F15-S2-12, open: Settings at rest, at the default size, light and dark, reports "Potentially inaccessible
     /// text" twice with no element and no frame; still so with the page scrolled to its end (not the tab bar's
-    /// glass), and not at Accessibility XXXL. The likeliest two texts are the units control's "LB" and "KG", whose
-    /// buttons are labelled "pounds" and "kilograms". Unproven: the follow-up PR after S2 tries that label and
-    /// fixes what it finds; until then an expected failure, with no element to name it by but the screen and way.
+    /// glass), and not at Accessibility XXXL. The units control's "LB" and "KG" (labelled "pounds" and "kilograms")
+    /// were tried and **refuted**: with the options labelled by their drawn words both issues remained. Unexplained;
+    /// the follow-up PR after S2 looks further. Until then an expected failure, with no element to name it by but
+    /// the screen, the way and the count.
     static var unlabelledText: ScreenExclusion {
         ScreenExclusion(
             finding: "F15-S2-12",
             issue: "two drawn texts no element carries, Settings",
             perScreenAndWay: 2
         ) {
-            $0.summary == "Potentially inaccessible text" && $0.screen == "Settings" && $0.way != .largest
+            $0.type == .elementDetection && $0.summary == "Potentially inaccessible text" && $0.screen == "Settings"
+                && $0.way != .largest
                 && $0.elementType == .any && $0.frame.isNull
         }
     }

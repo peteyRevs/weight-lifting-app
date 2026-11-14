@@ -42,12 +42,50 @@ struct ScreenIssue: CustomStringConvertible {
     /// The part of the screen pinned over the page's end (the rest panel, a sheet's bottom button and its rule),
     /// from its top to the screen's bottom; null where nothing is pinned.
     var pinned = CGRect.null
+    /// Whether the element is one of the pinned part's own (by identifier, else by label), not the page's.
+    var inPinnedPart = false
 
     var description: String {
         // An issue the system reports with no element has a null frame, which has no whole numbers.
         let box = frame.isNull ? "no frame"
             : "x \(Int(frame.minX)) y \(Int(frame.minY)) w \(Int(frame.width)) h \(Int(frame.height))"
         return "\(screen), \(way.rawValue): \(summary) [\(elementType.rawValue) \"\(label)\" \(identifier) \(box)]"
+    }
+}
+
+/// A part pinned over the page's end, which the page scrolls under: its top element, how far above that element the
+/// part begins (measured in the pictures), and its own elements, so an issue on one of them is never taken for the
+/// page's line under it.
+@MainActor
+struct PinnedPart {
+    let top: XCUIElement
+    let margin: CGFloat
+    let members: [XCUIElement]
+
+    /// The rest panel: its 16 pt padding and rule put its top 17 pt above `workout.rest.status`.
+    static func restPanel(in app: XCUIApplication) -> PinnedPart {
+        let status = app.descendants(matching: .any).matching(identifier: "workout.rest.status").firstMatch
+        return PinnedPart(
+            top: status,
+            margin: 17,
+            members: [status, app.buttons["workout.rest.extend"], app.buttons["workout.rest.skip"]]
+        )
+    }
+
+    /// A sheet's foot: its rule stands 11 pt above its one button.
+    static func sheetFoot(_ button: XCUIElement) -> PinnedPart {
+        PinnedPart(top: button, margin: 11, members: [button])
+    }
+
+    /// Where the part begins on screen.
+    var minY: CGFloat {
+        top.frame.minY - margin
+    }
+
+    /// The identifiers and labels of the part's own elements and of what they hold.
+    var names: (identifiers: Set<String>, labels: Set<String>) {
+        let all = members.flatMap { [$0] + $0.descendants(matching: .any).allElementsBoundByIndex }.filter(\.exists)
+        return (Set(all.map(\.identifier).filter { !$0.isEmpty }), Set(all.map(\.label)))
     }
 }
 
@@ -110,8 +148,10 @@ final class ScreenAudit {
     }
 
     /// Launches the app three ways (`AuditWay`) with `arguments`, and runs `walk` each time: the walk reaches each
-    /// screen and calls `audit(_:screen:)` on it. Then the verdict: every issue no exclusion excuses fails.
+    /// screen and calls `audit(_:screen:)` on it. Then the verdict: every issue no exclusion excuses fails. The
+    /// report of every issue is kept with the result at the test's end, also when a walk stopped midway.
     func threeWays(launching arguments: [String], walk: (Steps) throws -> Void) throws {
+        test.addTeardownBlock { self.attachReport() }
         for next in AuditWay.allCases {
             way = next
             let steps = Steps(launching: arguments + next.arguments, for: test)
@@ -122,18 +162,18 @@ final class ScreenAudit {
     }
 
     /// One audit, every type, of what is on screen, named `screen`. The screen and each reported element are
-    /// pictured and kept. `pinned` is the top element of a part pinned over the page's end: the part is taken to
-    /// begin `ScreenExclusion.pinnedMargin` above it (its padding and rule).
-    func audit(_ steps: Steps, screen: String, pinned: XCUIElement? = nil) throws {
+    /// pictured and kept. `pinned` is a part pinned over the page's end, if the screen has one.
+    func audit(_ steps: Steps, screen: String, pinned: PinnedPart? = nil) throws {
         let app = steps.app
         let name = "\(screen), \(way.rawValue)"
+        Self.settle(app)
         steps.attachScreenshot(named: "\(name): screen")
         let tabBar = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame : .null
         let window = app.windows.firstMatch.frame
-        let pinnedPart = pinned.map { element in
-            let top = element.frame.minY - ScreenExclusion.pinnedMargin
-            return CGRect(x: window.minX, y: top, width: window.width, height: window.maxY - top)
+        let pinnedPart = pinned.map { part in
+            CGRect(x: window.minX, y: part.minY, width: window.width, height: window.maxY - part.minY)
         } ?? .null
+        let pinnedNames: (identifiers: Set<String>, labels: Set<String>) = pinned?.names ?? ([], [])
         var pictured: [(String, XCUIElement)] = []
         try app.performAccessibilityAudit(for: .all) { issue in
             var found = ScreenIssue(
@@ -150,6 +190,8 @@ final class ScreenAudit {
                 found.identifier = element.identifier
                 found.label = element.label
                 found.frame = element.frame
+                found.inPinnedPart = found.identifier.isEmpty ? pinnedNames.labels.contains(found.label)
+                    : pinnedNames.identifiers.contains(found.identifier)
                 pictured.append(("\(name): \(issue.compactDescription): \(element.label)", element))
             }
             self.issues.append(found)
@@ -163,36 +205,82 @@ final class ScreenAudit {
         }
     }
 
-    /// The proof that makes "under the tab bar" a false positive (testing-strategy §2.7, as
-    /// `TodayAuditAdversarial.test_sessionDay_theLastLineScrollsClearOfTheTabBar`): the page, swiped to its end,
-    /// stands whole above the floating bar, so whatever rested under the bar can be read.
-    func expectScrollsClearOfTheTabBar(_ steps: Steps, screen: String) {
+    /// The proof that makes "under the tab bar" or "under a pinned part" a false positive (testing-strategy §2.7, as
+    /// `TodayAuditAdversarial.test_sessionDay_theLastLineScrollsClearOfTheTabBar`): the page holding a text or
+    /// button labelled `anchor` (never a page behind the screen), swiped until it stops moving, ends with the text
+    /// or button whose label is or starts with `last` (no labelled text or button of it lies lower), and that stands
+    /// whole above `barTop`, so whatever rested under the bar or the part can be read.
+    func expectScrollsClear(
+        _ steps: Steps, screen: String, anchor: String, last: String, above barTop: () -> CGFloat
+    ) {
         let app = steps.app
-        let page = app.scrollViews.firstMatch
-        for _ in 0 ..< 8 {
-            page.swipeUp(velocity: .fast)
+        let page = app.scrollViews.containing(NSPredicate(format: "label == %@", anchor)).firstMatch
+        XCTAssertTrue(page.exists, "\(screen): no page holds \(anchor)")
+        // Drags near the leading edge, where no control or chart takes the touch, until the page stops: two drags
+        // in a row that leave its picture as it was (a lazy list drops what it scrolled past, so no element of it
+        // can be the mark).
+        var still = 0
+        var picture = page.screenshot().pngRepresentation
+        // From above the bar or pinned part (a drag that starts on a sheet's foot moves nothing) to near the top.
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let frame = page.frame
+        let start = min(frame.minY + frame.height * 0.8, barTop() - 24)
+        for _ in 0 ..< 30 where still < 2 {
+            let from = origin.withOffset(CGVector(dx: frame.minX + 24, dy: start))
+            from.press(
+                forDuration: 0.05,
+                thenDragTo: origin.withOffset(CGVector(dx: frame.minX + 24, dy: frame.minY + 40))
+            )
+            let next = page.screenshot().pngRepresentation
+            still = next == picture ? still + 1 : 0
+            picture = next
         }
-        let texts = page.staticTexts.allElementsBoundByIndex.filter { $0.frame.height > 0 }
-        let last = texts.max { $0.frame.maxY < $1.frame.maxY }
-        let bar = app.tabBars.firstMatch.frame
+        let lowest = Self.lowest(on: page)
         steps.attachScreenshot(named: "\(screen), \(way.rawValue): scrolled to the end")
-        XCTAssertNotNil(last, "\(screen): no text on the page")
-        if let last {
-            let place = "\(screen), \(way.rawValue): \(last.label)"
-            XCTAssertLessThanOrEqual(last.frame.maxY, bar.minY, "\(place) is under the bar")
+        let place = "\(screen), \(way.rawValue)"
+        XCTAssertTrue(
+            lowest?.label.hasPrefix(last) == true,
+            "\(place): the page ends with \(lowest?.label ?? "nothing")"
+        )
+        XCTAssertLessThanOrEqual(lowest?.frame.maxY ?? .infinity, barTop(), "\(place): \(last) is under the bar")
+    }
+
+    /// Waits, at most ten pictures long, until two pictures of the screen in a row are the same: an audit taken while
+    /// a selection or a sheet still moves measures colours half-way (a current legend row's accent letter over the
+    /// fill it was leaving, measured once in S2a's review round). A screen with a clock that runs (the rest panel) is
+    /// never still; it is audited after the ten.
+    private static func settle(_ app: XCUIApplication) {
+        var picture = app.screenshot().pngRepresentation
+        for _ in 0 ..< 10 {
+            let next = app.screenshot().pngRepresentation
+            if next == picture {
+                return
+            }
+            picture = next
         }
     }
 
-    /// Every issue with its verdict kept with the result; those no exclusion excuses fail the test.
-    private func verdict() {
+    /// The page's lowest text or button with a label: what a reader reads last.
+    private static func lowest(on page: XCUIElement) -> XCUIElement? {
+        let elements = page.staticTexts.allElementsBoundByIndex + page.buttons.allElementsBoundByIndex
+        return elements.filter { $0.frame.height > 0 && !$0.label.isEmpty }.max { $0.frame.maxY < $1.frame.maxY }
+    }
+
+    /// Every issue, with its type and its verdict: excused, open, or not excused.
+    private func attachReport() {
         let report = issues.map { issue in
-            let verdict = Self.exclusion(for: issue, in: exclusions).map { "excused, \($0.finding)" } ?? "NOT EXCUSED"
-            return "\(issue)\n  \(issue.detail)\n  \(verdict)"
+            let excused = Self.exclusion(for: issue, in: exclusions).map { "excused, \($0.finding)" }
+            let opened = open.first { $0.names(issue, among: issues) }.map { "open, \($0.finding)" }
+            return "\(issue) type \(issue.type.rawValue)\n  \(issue.detail)\n  \(excused ?? opened ?? "NOT EXCUSED")"
         }
         let attachment = XCTAttachment(string: report.joined(separator: "\n"))
         attachment.name = "Audit issues"
         attachment.lifetime = .keepAlways
         test.add(attachment)
+    }
+
+    /// The issues no exclusion excuses fail the test; each open finding is a strict expected failure.
+    private func verdict() {
         let left = issues.filter { Self.exclusion(for: $0, in: exclusions) == nil }
         let isOpen = { (issue: ScreenIssue) in self.open.contains { $0.names(issue, among: left) } }
         let unknown = left.filter { !isOpen($0) }.map(\.description)

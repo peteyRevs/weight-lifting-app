@@ -252,3 +252,53 @@ of the 7,800 s deadline with a 1,500 s build: no rebalance.
 
 Other runs: `FeatureWorkoutTests` whole (PR plan): 723 tests passed, 3 known issues, 620 s. `check.sh --lint-only`:
 green.
+
+### Review round 1 (G3: request changes), phase 1: light and Accessibility XXXL
+
+Phase 2 (after `main`'s appearance seam is merged here) runs the dark passes and re-measures every contrast excuse
+in dark; until then every "light and dark" above means light only (the dark way drew light).
+
+- **B1, pinned parts.** `PinnedPart` names a part's top element, its measured margin (17 pt over
+  `workout.rest.status`, 11 pt over a sheet's button; the old blanket 24 pt is gone) and its own elements. Each issue
+  records whether its element is one of the part's (`inPinnedPart`, by identifier, else label), and F15-S2-6 never
+  excuses those: "Skip rest", the rest status, the picker's and the edit sheet's buttons.
+- **B2/B3, scrolls clear.** `expectScrollsClear(_:screen:anchor:last:above:)` replaces the tab-bar-only proof: the
+  page is the scroll view holding `anchor` (never a page behind a push or a sheet), dragged near its leading edge
+  from above the bar or foot until two drags leave its picture unchanged; its lowest labelled text or button must be
+  the one named (`last`, or its start) and stand above the bar's top or the foot's. Proved on: Day editor ("Delete
+  day"), exercise history ("Aug 24"), workout detail ("Delete workout"), Settings ("Ledger …", the version line),
+  edit sets ("16", the last set's reps), and the picker's "Press" list ("Smith Machine Overhead Press").
+- The picker's proof at Accessibility XXXL first failed with its last row below the screen: the drags started on the
+  sheet's foot, which moves nothing. They now start above the bar or foot, and it passes; no finding.
+- **B4, per screen.** F15-S2-3 and 4 are keyed by screen, as measured (`[screen: labels]`). "Day name" is measured
+  whole at both sizes in the screen's pictures (at XXXL the field's own frame cuts the drawn name's second line).
+- **S1.** `letterInk`'s doc and test no longer claim the current row: its accent on the dark `ink` fill (#F4F2ED) is
+  about 2.8:1, for phase 2 to measure and fix (token or element). The test is
+  `letterInk_offTheCurrentRow_isInkMuted`.
+- **S2.** F15-S2-5 takes texts and buttons only, whose middle lies inside the bar; a button wholly inside the bar is
+  the bar's own, whatever its label.
+- **S3, F15-S2-9 kept.** With `ReceiptScreen` containing its elements under the escape action
+  (`.accessibilityElement(children: .contain)`) the audit stopped reporting the date's hit area, but
+  `ReceiptTests.escape_isDone` failed: the first element no longer performs the escape. Reverted; the exclusion
+  stays, now by the frozen clock's label. Why the date alone: SwiftUI hands the stack's escape to each element,
+  which the audit counts as a control, and of the pinned header's three only the date (12 pt) is under the size;
+  the name is 29 pt, "Done" 44 pt. In the contained run the date's "Text clipped" (caption role) was reported too,
+  and it is excused by label on the receipt (F15-S2-4).
+- **S4.** The "Audit issues" report is attached in a teardown block, also when a walk stops midway; each line gives
+  the issue's type and its verdict (excused, open, or not excused).
+- **S6.** F15-S2-12's hypothesis is recorded as refuted; its issue type is `.elementDetection` (2), which the open
+  finding now also matches.
+- **Nits.** `AuditWorkout` freezes the clock (Wednesday 2026-09-16); the Library's search is found by its label's
+  start and the history's back by "BackButton". "Finish" is reported "Text clipped" from this round on: at the default
+  size with "Minimize" (whole, F15-S2-4), and at XXXL with it in F15-S2-10 (open).
+- **Settling.** Each audit now waits (at most ten pictures, no sleep) until two pictures of the screen in a row are
+  the same, so a selection or sheet still moving is not measured half-way.
+- **The simulator turned dark mid-round.** From about 13:25 on 2026-11-14 the shared simulator's own appearance was
+  dark (another lane's work), and without the seam every way drew dark. That run reported three issues the light
+  runs never did, all dark: "Contrast failed" on the current legend row's accent "A" on the dark `ink` fill (S1's
+  2.8:1), on the Day editor's name field, and an element-less "Contrast nearly passed" on the rest panel. They are
+  phase 2's to measure and fix. The last all-light run of every audit (12:49 build) passed but for the picker proof's
+  then-expected failure, since removed.
+- `AuditWorkout`'s frozen clock leaves the header's elapsed time counting from the frozen start to the wall clock
+  ("1424:17:08" on 2026-11-14): the test mode moves the app's clock, not the timeline's. The header's issues are the
+  same as with the real clock; noted for the follow-up PR's header layout.

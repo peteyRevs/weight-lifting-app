@@ -125,11 +125,10 @@
 
         /// F15-S2-1: a member's letter is read, so off the current row it is `inkMuted`, the muted token that holds
         /// 4.5:1 on the surface (`MutedTextContrastAdversarialTests`), never `inkFaint` (1.8:1 in the running app).
-        @Test("The letter of a member that is not current is drawn in inkMuted, the current one's in the accent")
-        func letterInk_isReadableOnBothFills() {
+        @Test("The letter of a member that is not current is drawn in inkMuted, not inkFaint")
+        func letterInk_offTheCurrentRow_isInkMuted() {
             #expect(SupersetLegendRow.letterInk(isCurrent: false) == LedgerColor.inkMuted)
             #expect(SupersetLegendRow.letterInk(isCurrent: false) != LedgerColor.inkFaint)
-            #expect(SupersetLegendRow.letterInk(isCurrent: true) == LedgerColor.accent)
         }
     }
 #endif

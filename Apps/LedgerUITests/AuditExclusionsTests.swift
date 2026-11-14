@@ -13,13 +13,13 @@ final class AuditExclusionsTests: XCTestCase {
     static let hitArea = "Hit area is too small"
     /// The tab bar and pinned parts where the runs measured them, on the iPhone 17 (402 × 874 pt).
     static let tabBar = CGRect(x: 20, y: 791, width: 362, height: 63)
-    static let panel = CGRect(x: 0, y: 661, width: 402, height: 213)
-    static let sheetButton = CGRect(x: 0, y: 746, width: 402, height: 128)
+    static let panel = CGRect(x: 0, y: 668, width: 402, height: 206) // 17 pt over workout.rest.status, at 685
+    static let sheetButton = CGRect(x: 0, y: 759, width: 402, height: 115) // 11 pt over the button, at 770
 
     static func issue(
         _ screen: String, _ summary: String, _ label: String, type: XCUIElement.ElementType = .staticText,
         identifier: String = "", frame: CGRect = CGRect(x: 26, y: 300, width: 200, height: 12),
-        pinned: CGRect = .null, way: AuditWay = .light
+        pinned: CGRect = .null, way: AuditWay = .light, inPinnedPart: Bool = false
     ) -> ScreenIssue {
         let auditType: XCUIAccessibilityAuditType = switch summary {
         case clipped: .textClipped
@@ -29,46 +29,17 @@ final class AuditExclusionsTests: XCTestCase {
         }
         return ScreenIssue(
             way: way, screen: screen, type: auditType, summary: summary, elementType: type,
-            identifier: identifier, label: label, frame: frame, tabBar: tabBar, pinned: pinned
+            identifier: identifier, label: label, frame: frame, tabBar: tabBar, pinned: pinned,
+            inPinnedPart: inPinnedPart
         )
     }
 
     /// Asserts that `excused` are all excused by `exclusions`, and that none of `nearMisses` is.
-    private func check(_ exclusions: [ScreenExclusion], excused: [ScreenIssue], nearMisses: [ScreenIssue]) {
+    func check(_ exclusions: [ScreenExclusion], excused: [ScreenIssue], nearMisses: [ScreenIssue]) {
         let notExcused = excused.filter { ScreenAudit.exclusion(for: $0, in: exclusions) == nil }
         XCTAssertEqual(notExcused.map(\.description), [], "not excused, and should be")
         let wider = nearMisses.filter { ScreenAudit.exclusion(for: $0, in: exclusions) != nil }
         XCTAssertEqual(wider.map(\.description), [], "excused, and should not be")
-    }
-
-    @MainActor
-    func test_workoutExclusions_excuseNothingWider() {
-        let under = CGRect(x: 26, y: 702, width: 7, height: 12)
-        let above = CGRect(x: 26, y: 600, width: 7, height: 12)
-        let minimize = "workout.header.minimize"
-        check(AuditWorkout.exclusions, excused: [
-            Self.issue("solo card", Self.dynamicType, "REMAINING"),
-            Self.issue("solo card", Self.clipped, "Minimize", type: .button, identifier: minimize),
-            Self.issue("rest panel", Self.contrast, "5", frame: under, pinned: Self.panel),
-            Self.issue("rest panel", Self.contrast, "+ Add set", type: .button, frame: under, pinned: Self.panel),
-            Self.issue("finish sheet", Self.nearly, "Save workout", type: .button),
-            Self.issue("receipt", Self.hitArea, "Friday, November 13")
-        ], nearMisses: [
-            Self.issue("solo card", Self.dynamicType, "Barbell Bench Press"),
-            Self.issue("solo card", Self.clipped, "Finish", type: .button),
-            Self.issue("solo card", Self.contrast, "Minimize", type: .button),
-            Self.issue("Settings", Self.clipped, "Minimize", type: .button, identifier: minimize),
-            Self.issue("solo card", Self.clipped, "Minimize", type: .button, identifier: minimize, way: .largest),
-            // A line above the panel's top, a line over a screen with no panel, and what is no text or button.
-            Self.issue("rest panel", Self.contrast, "5", frame: above, pinned: Self.panel),
-            Self.issue("solo card", Self.contrast, "5", frame: under),
-            Self.issue("rest panel", Self.contrast, "B", type: .other, frame: under, pinned: Self.panel),
-            Self.issue("finish sheet", Self.contrast, "Save workout", type: .button),
-            Self.issue("finish sheet", Self.nearly, "Discard", type: .button),
-            Self.issue("receipt", Self.hitArea, "Done", type: .button),
-            Self.issue("solo card", Self.hitArea, "Elapsed time", type: .other),
-            Self.issue("receipt", Self.clipped, "Friday, November 13")
-        ])
     }
 
     @MainActor
@@ -97,6 +68,20 @@ final class AuditExclusionsTests: XCTestCase {
             Self.issue("Day editor", Self.contrast, "Program", type: .button, frame: underBar),
             Self.issue("exercise picker", Self.contrast, "Band External Rotation", frame: underBar),
             Self.issue("exercise picker", Self.contrast, "Arnold Press", pinned: Self.sheetButton),
+            Self.issue(
+                "exercise picker",
+                Self.contrast,
+                "Select exercises to add",
+                type: .button,
+                frame: CGRect(x: 24, y: 770, width: 354, height: 54),
+                pinned: Self.sheetButton,
+                inPinnedPart: true
+            ),
+            Self.issue("exercise picker", Self.clipped, "Barbell Bench Press"),
+            Self.issue("Day editor", Self.dynamicType, "SESSION LOG"),
+            // Under the tab bar: what is no text or button, and a text that only grazes the bar.
+            Self.issue("Day editor", Self.contrast, "", type: .image, frame: underBar),
+            Self.issue("Day editor", Self.contrast, "Delete day", frame: CGRect(x: 26, y: 770, width: 90, height: 30)),
             Self.issue("New exercise", Self.contrast, "Save", type: .button),
             Self.issue("Day editor", Self.nearly, "Save", type: .button)
         ])
@@ -119,13 +104,22 @@ final class AuditExclusionsTests: XCTestCase {
         ], nearMisses: [
             Self.issue("workout detail", Self.contrast, "Delete workout", type: .button),
             Self.issue("workout detail", Self.contrast, "History", type: .button, frame: underBar),
+            // A button wholly inside the bar is the bar's own, whatever its label.
+            Self.issue(
+                "workout detail",
+                Self.contrast,
+                "",
+                type: .button,
+                frame: CGRect(x: 40, y: 800, width: 70, height: 45)
+            ),
+            Self.issue("Settings", Self.dynamicType, "LOGGED"),
             Self.issue("Bar and plates", Self.contrast, "Apple Health", frame: underBar),
             Self.issue("workout detail", Self.clipped, "Edit", type: .button, identifier: editID),
             Self.issue("workout detail", Self.contrast, "Edit", type: .button, frame: edit),
             Self.issue("edit sets", Self.contrast, "5", frame: high, pinned: Self.sheetButton),
             Self.issue("workout detail", Self.dynamicType, "Upper A — Push focus"),
             // F15-S2-12 is an open finding, never an exclusion.
-            ScreenIssue(screen: "Settings", type: .textClipped, summary: "Potentially inaccessible text")
+            ScreenIssue(screen: "Settings", type: .elementDetection, summary: "Potentially inaccessible text")
         ])
     }
 }
