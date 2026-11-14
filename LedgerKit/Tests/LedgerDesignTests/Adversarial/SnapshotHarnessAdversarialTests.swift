@@ -52,7 +52,10 @@ extension RenderingSuites {
             let actual = try #require(RenderedImage.render(Text("185 × 6").ledgerFont(.numeralL).padding(4)))
             let failure = try #require(Self.diff(reference, actual), "a changed digit passed the comparator")
             #expect(failure.0.contains("pixels differ"), "message: \(failure.0)")
-            #expect(failure.0.contains("0.995"), "message should state the required precision: \(failure.0)")
+            #expect(
+                failure.0.contains("at most \(SnapshotConfig.pixelBudget) may"),
+                "message should state the pixel budget: \(failure.0)"
+            )
         }
 
         @Test("A failure attaches a difference image, not just the two inputs (testing-strategy §2.5).")
@@ -78,17 +81,18 @@ extension RenderingSuites {
             #expect(message.contains("101×1") && message.contains("100×1"), "message: \(message)")
         }
 
-        @Test("Exactly 99.5 % matching pixels passes: precision 0.995 is inclusive.")
-        func pngDiffing_exactlyAtPrecision_passes() throws {
-            let reference = try #require(Self.strip(width: 1000, changed: 0))
-            let actual = try #require(Self.strip(width: 1000, changed: 5))
-            #expect(Self.diff(reference, actual) == nil, "5 of 1000 pixels differ = 99.5 % match")
+        @Test("Exactly the pixel budget of differing pixels passes: the budget is inclusive.")
+        func pngDiffing_exactlyAtBudget_passes() throws {
+            let budget = SnapshotConfig.pixelBudget
+            let reference = try #require(Self.strip(width: 2000, changed: 0))
+            let actual = try #require(Self.strip(width: 2000, changed: budget))
+            #expect(Self.diff(reference, actual) == nil, "\(budget) of 2000 pixels differ")
         }
 
-        @Test("99.4 % matching pixels fails.")
-        func pngDiffing_belowPrecision_fails() throws {
-            let reference = try #require(Self.strip(width: 1000, changed: 0))
-            let actual = try #require(Self.strip(width: 1000, changed: 6))
+        @Test("One pixel over the budget fails.")
+        func pngDiffing_overBudget_fails() throws {
+            let reference = try #require(Self.strip(width: 2000, changed: 0))
+            let actual = try #require(Self.strip(width: 2000, changed: SnapshotConfig.pixelBudget + 1))
             #expect(Self.diff(reference, actual) != nil)
         }
 
@@ -121,7 +125,7 @@ extension RenderingSuites {
                 "dark-large", "dark-xLarge", "dark-accessibility3"
             ])
             #expect(cells.count == 6)
-            #expect(SnapshotConfig.precision == 0.995 && SnapshotConfig.perceptualPrecision == 0.98)
+            #expect(SnapshotConfig.pixelBudget == 8 && SnapshotConfig.perceptualPrecision == 0.98)
         }
     }
 }

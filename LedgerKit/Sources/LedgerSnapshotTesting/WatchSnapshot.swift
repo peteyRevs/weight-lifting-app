@@ -27,7 +27,7 @@ public nonisolated struct WatchAppearance: Sendable, CustomStringConvertible {
 
 /// Asserts `view` against its reference in one cell of the watch matrix: rendered with
 /// `RenderedImage` (swift-snapshot-testing has no watchOS image strategy) at the case's width and
-/// the view's own height, at the cell's text size, and compared with ``SnapshotConfig``'s precisions
+/// the view's own height, at the cell's text size, and compared within ``SnapshotConfig``'s pixel budget
 /// through the `.png` strategy. `name` defaults to the cell (`mm42-large`).
 public func assertWatchSnapshot(
     of view: some View,
