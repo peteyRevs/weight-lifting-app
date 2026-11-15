@@ -168,7 +168,9 @@ extension WorkoutAnnouncementAdversarialTests {
     @Test("Rest over is said after it is felt, once: a haptic that is slow holds the words back")
     func restOver_isSaidAfterItIsFelt() async throws {
         let running = try Fixtures.seedSession()
-        let (haptics, said, clock) = (GatedHaptics(), FakeAnnouncements(), RestProbeClock())
+        // `RestCoverClock`, not a `TestClock`: each of its 150 `advance`s ran four `megaYield`s of background
+        // tasks, which a runner busy with this suite's walks starved past the time limit (run 43692994418).
+        let (haptics, said, clock) = (GatedHaptics(), FakeAnnouncements(), RestCoverClock())
         let store = try WorkoutScene.onFake(live: running).store {
             $0.haptics = haptics
             $0.announcements = said
@@ -181,14 +183,16 @@ extension WorkoutAnnouncementAdversarialTests {
         await store.drain()
         await observed("the rest to be shown") { store.shownRest != nil }
         let keeper = Task { await store.keepRestTime() }
-        await eventually("the rest's task to sleep") { clock.sleeps.value > 0 }
+        await eventually("the rest's task to sleep") { clock.asleep == 1 }
         #expect(await said.announced == ["Rest, 2 minutes, 30 seconds remaining"])
         await haptics.hold()
         let length = Int(running.exercises[0].rest.duration / .seconds(1))
         for _ in 0 ..< length {
-            let sleeps = clock.sleeps.value
-            await clock.base.advance(by: .seconds(1))
-            await eventually("a second of the rest") { clock.sleeps.value > sleeps || store.restPanel?.isOver == true }
+            guard let due = clock.due else {
+                break
+            }
+            clock.advance(to: due)
+            await eventually("a second of the rest") { clock.asleep == 1 || store.restPanel?.isOver == true }
         }
         await eventually("Rest over to be felt") { await haptics.played.contains(.restOver) }
         await giveWay()

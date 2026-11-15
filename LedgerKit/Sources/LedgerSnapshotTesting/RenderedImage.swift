@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
+import Testing
 
 /// Renders SwiftUI with `ImageRenderer`. swift-snapshot-testing 1.19 has no image strategy on
 /// watchOS (its view and `UIImage` strategies are iOS/tvOS only), so watch snapshots and pixel
@@ -16,6 +17,7 @@ public enum RenderedImage {
         colorScheme: ColorScheme = .dark,
         dynamicTypeSize: DynamicTypeSize = SnapshotConfig.referenceDynamicTypeSize
     ) -> CGImage? {
+        _ = isWarm
         let renderer = ImageRenderer(
             content: view
                 .environment(\.colorScheme, colorScheme)
@@ -25,6 +27,24 @@ public enum RenderedImage {
         renderer.proposedSize = ProposedViewSize(width: width, height: height)
         return renderer.cgImage
     }
+
+    /// The process's first `ImageRenderer` render, of an opaque square, before any render a test reads. On the
+    /// hosted runner the first render of a test process has come back undrawn, and only the first: the orange
+    /// audit's estimate (nightly 43692994418, FeatureLibraryTests) and the onboarding pill's whole picture
+    /// (PR 43695702125, both attempts; PR 43157142440), each the first render of its target's process, while
+    /// every later render in the same process drew. A developer Mac has never shown it, alone or under load.
+    /// This render takes no part in any verdict, and is never repeated: one that draws nothing is recorded as a
+    /// warning, which fails nothing, so a runner's bundle shows when it happened.
+    private static let isWarm: Bool = {
+        let probe = ImageRenderer(content: Color.black.frame(width: 8, height: 8))
+        probe.scale = SnapshotConfig.scale
+        let buffer = probe.cgImage.flatMap { PixelBuffer($0) }
+        let isDrawn = buffer?.pixels.contains { $0.alpha == 0xFF } == true
+        if !isDrawn {
+            Issue.record("the process's first ImageRenderer render drew nothing", severity: .warning)
+        }
+        return isDrawn
+    }()
 }
 
 /// One 8-bit sRGB pixel (premultiplied alpha).

@@ -155,27 +155,37 @@ extension WorkoutRestAdversarialTests {
 
     @Test("+30s the session has taken and the page has not heard: nothing at the old end, the buzz at the new one")
     func extended_withThePageBehind_feltAtTheNewEnd() async throws {
-        let bench = try await LaggingRestBench()
+        // `RestCoverClock`: a `TestClock` moved through the 180 one-second waits past the PR lane's minute on the
+        // runner (run 43695702125, both attempts), as in `restOver_isSaidAfterItIsFelt`.
+        let bench = try await LaggingRestBench(clock: RestCoverClock())
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
         await observed("the rest on the page") { bench.store.shownRest != nil }
-        var keeper = Task { await bench.store.keepRestTime() }
-        await giveWay()
-        await bench.clock.base.advance(by: .seconds(149))
+        var ended = LockIsolated(false)
+        var keeper = Task { [ended] in
+            await bench.store.keepRestTime()
+            ended.setValue(true)
+        }
+        await eventually("the rest's task asleep") { bench.clock.asleep == 1 }
+        await bench.clock.run(.seconds(149)) { ended.value }
         await bench.session.keepStreamsBehind()
         bench.store.send(.edit(.extendRest))
         await bench.store.drain()
-        await bench.clock.base.advance(by: .seconds(1))
+        await bench.clock.run(.seconds(1)) { ended.value }
         await keeper.value
         #expect(await bench.played() == [.setLogged], "the rest was extended: its old end is not felt")
         // The page hears; the root starts the task again for the longer rest.
         await bench.session.keepStreamsBehind(false)
         await observed("the longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
         #expect(bench.store.restPanel?.status == "Resting")
-        keeper = Task { await bench.store.keepRestTime() }
-        await giveWay()
-        await bench.clock.base.advance(by: .seconds(30))
+        ended = LockIsolated(false)
+        keeper = Task { [ended] in
+            await bench.store.keepRestTime()
+            ended.setValue(true)
+        }
+        await eventually("the longer rest's task asleep") { bench.clock.asleep == 1 }
+        await bench.clock.run(.seconds(30)) { ended.value }
         await keeper.value
         #expect(await bench.played() == [.setLogged, .restOver])
         #expect(bench.store.restPanel?.status == "Rest over")

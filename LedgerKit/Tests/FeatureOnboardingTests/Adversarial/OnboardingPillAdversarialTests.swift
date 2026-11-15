@@ -85,8 +85,9 @@
                         let buffer = try Self.drawn(state, scheme, size)
                         let bands = Self.bands(buffer)
                         // The picture's size and corner pixel too: a blank render was seen once on CI (run
-                        // 43157142440, attempt 1, its first case) and not reproduced since; they tell an empty
-                        // picture from a transparent or a one-colour one.
+                        // 43157142440, attempt 1, its first case; PR 43695702125, both attempts), each the first
+                        // render of the process (`RenderedImage.isWarm`); they tell an empty picture from a
+                        // transparent or a one-colour one.
                         let picture = "\(buffer.width)×\(buffer.height), corner \(buffer.pixel(column: 0, row: 0))"
                         let drawnCase = "\(state.step) \(state.phase) \(scheme) \(size)"
                         let context: Comment = "\(drawnCase): \(bands.prefix(3)); \(picture)"
