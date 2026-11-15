@@ -3,8 +3,8 @@ import XCTest
 /// F15 S2, criterion 6 (C7): the system's accessibility audit, three ways (`AuditWay`), on the Library's screens: an
 /// exercise's history (the bench press's, with the seed's four weeks of workouts, so its chart has points), New
 /// exercise and Edit exercise. Their exclusions are `AuditProgramLibrary.exclusions` (measured, in the implementation
-/// notes). One test per screen, each under about four minutes on a Mac (S2b; the nightly allows 600 s a test on the
-/// runner). Nightly only.
+/// notes). One test per screen, or per way, each about 200 s or less on a Mac (S2b: the nightly allows 600 s a test,
+/// and the runner is up to three times slower). Nightly only.
 final class AuditLibrary: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -37,7 +37,7 @@ final class AuditLibrary: XCTestCase {
         try auditNewExercise([.light, .dark])
     }
 
-    /// New exercise at Accessibility XXXL: a way of its own, as the three would take over four minutes on a Mac.
+    /// New exercise at Accessibility XXXL: a way of its own, as the three would take over 200 s on a Mac.
     @MainActor
     func test_newExercise_atAccessibilityXXXL_passesTheAudit() throws {
         try auditNewExercise([.largest])

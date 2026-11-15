@@ -376,11 +376,12 @@ only with `waitForExistence` or a predicate, never a sleep.
   and the Library root (`LibraryAuditAdversarial`), each with its own exclusions;
 - every screen under the tab roots through F15's one runner (`Support/Audit.swift`, `ScreenAudit`): the workout's
   cover, sheets and receipt (`AuditWorkout`), the Day editor and its picker (`AuditProgramLibrary`), the exercise
-  history, New and Edit exercise (`AuditLibrary`), the workout detail, its edit sheet, Settings and Bar and plates
-  (`AuditHistorySettings`). Each is audited three ways (`AuditWay`): light and dark at the default size, and light
+  history, New and Edit exercise (`AuditLibrary`), the workout detail and its edit sheet (`AuditHistorySettings`),
+  Settings and Bar and plates (`AuditSettings`). Each is audited three ways (`AuditWay`): light and dark at the default size, and light
   at Accessibility XXXL. Every issue is attached to the result with its verdict and a picture of its element.
-- Each UI test stays under about four minutes on a Mac (the nightly allows 600 s a test on the runner, which runs
-  two to three times slower): a walk that grows past that is split by screen.
+- Each UI test takes about 200 s or less on a Mac: the nightly allows 600 s a test, and the runner runs up to three
+  times slower. A walk that grows past that is split by screen, or by way (light and dark apart from Accessibility
+  XXXL).
 
 **Dynamic Type.** At `accessibility5` (Accessibility XXXL) each §2.2 screen is pictured, its primary actions are
 scrolled to and must be hittable (`ScreenAudit.reach`), and no text may be clipped. F15's audits do this in their
@@ -398,8 +399,10 @@ off-schedule sheet, the Program builder and the History list. It also reaches th
   needs a proof that the page scrolls clear of it (`ScreenAudit.expectScrollsClear`). Every sheet with a pinned
   foot has one, at the default size and at Accessibility XXXL: the picker, edit sets, New exercise, Bar and plates,
   and Delete all data.
-- A real finding is fixed in its slice or reported to the orchestrator, never carried as a passing test. S2a's
-  strict expected failures for open findings left with the last of them (S2b).
+- A real finding not fixed yet is an *open* finding: a strict `XCTExpectFailure` on exactly what it names, so the
+  test stays green, catches everything else, and goes red the day the finding is fixed (as F11-S14-2 in `DayEditor`
+  and `ProgramTabAdversarial`). `ScreenAudit` carries none today; its `open:` parameter, removed in S2b with the
+  last of S2a's, returns when one is needed.
 
 A test is never weakened to pass. Re-pinning a test whose subject legitimately changed is allowed, and the commit
 says so.

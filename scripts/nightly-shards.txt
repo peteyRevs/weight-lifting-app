@@ -26,8 +26,8 @@
 2 LedgerActivityKitTests                            #     2
 2 LedgerUITests/AuditWorkout                        #  ~810 (local x 3): leg 2 ~3,600
 3 FeatureWorkoutTests/WorkoutAnnouncementAdversarialTests # 4,365
-4 LedgerUITests                                     # 1,840 without the classes in other legs, + ~1,240 for
-#   F15's AuditHistorySettings and DynamicType (F15 S2b: local seconds x 3, the notes' table): leg 4 ~3,850
+4 LedgerUITests                                     # 1,840 without the classes in other legs, + ~1,220 for
+#   F15's AuditHistorySettings and DynamicType (F15 S2b: local seconds x 3, the notes' table): leg 4 ~3,830
 4 LedgerDesignTests                                 #   301
 4 FeatureOnboardingTests                            #   203
 4 FeatureTodayTests                                 #   166

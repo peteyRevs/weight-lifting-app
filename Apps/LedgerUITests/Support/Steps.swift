@@ -125,11 +125,12 @@ struct Steps {
 
     /// Swipes the screen's first scroll view toward `element` until it can be tapped, at most twenty times: down
     /// while the element stands above the page's middle, up while it stands below (or under a pinned bar). An element
-    /// a lazy list has not made yet has no place: `back` says it lies above; else it is looked for below.
+    /// a lazy list has not made yet has no place: it is looked for ten swipes one way (above when `back`, else below),
+    /// then ten the other.
     func scrollUntilHittable(_ element: XCUIElement, back: Bool = false) {
         let page = app.scrollViews.firstMatch
-        for _ in 0 ..< 20 where !(element.exists && element.isHittable) {
-            let isAbove = element.exists ? element.frame.midY < page.frame.midY : back
+        for swipe in 0 ..< 20 where !(element.exists && element.isHittable) {
+            let isAbove = element.exists ? element.frame.midY < page.frame.midY : (swipe < 10) == back
             if isAbove {
                 page.swipeDown(velocity: .slow)
             } else {

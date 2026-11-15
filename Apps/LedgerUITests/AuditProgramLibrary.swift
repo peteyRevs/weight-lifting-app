@@ -3,8 +3,8 @@ import XCTest
 /// F15 S2, criterion 6 (C7): the system's accessibility audit, three ways (`AuditWay`), on the Program tab's Day
 /// editor and its exercise-picker sheet (the Library's screens: `AuditLibrary`). On the seed program at noon on
 /// Wednesday of its week 5. What the audit reports and is excused is each screen's exclusions' (measured, in the
-/// implementation notes); anything else fails. One test per screen, so each stays under about four minutes on a Mac
-/// (the plan's R5 and C12; the nightly allows 600 s a test on the runner). Nightly only.
+/// implementation notes); anything else fails. One test per screen, or per way, so each takes about 200 s or less on
+/// a Mac (the nightly allows 600 s a test, and the runner is up to three times slower). Nightly only.
 final class AuditProgramLibrary: XCTestCase {
     static let arguments = ["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z", "-LEDGER_UITEST_PROGRAM", "seed"]
 
@@ -33,7 +33,7 @@ final class AuditProgramLibrary: XCTestCase {
         try auditThePicker([.light, .dark])
     }
 
-    /// The picker at Accessibility XXXL: a way of its own, as the three would take over four minutes on a Mac.
+    /// The picker at Accessibility XXXL: a way of its own, as the three would take over 200 s on a Mac.
     @MainActor
     func test_exercisePicker_atAccessibilityXXXL_passesTheAudit() throws {
         try auditThePicker([.largest])

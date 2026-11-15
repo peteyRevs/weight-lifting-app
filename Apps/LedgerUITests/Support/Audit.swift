@@ -100,8 +100,9 @@ final class ScreenAudit {
     private(set) var issues: [ScreenIssue] = []
     private(set) var way = AuditWay.light
 
-    /// S2a's open findings (strict expected failures) went with the last of them in S2b: a real finding is fixed in
-    /// its slice or reported, never carried as a passing test.
+    /// It carries no open finding today: S2a's `open:` parameter (a strict expected failure on exactly what a real,
+    /// unfixed finding names) went with the last of them in S2b, and returns when one is needed (testing-strategy
+    /// §2.7).
     init(for test: XCTestCase, exclusions: [ScreenExclusion]) {
         self.test = test
         self.exclusions = exclusions

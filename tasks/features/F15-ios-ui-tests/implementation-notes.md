@@ -524,8 +524,9 @@ green. `check.sh --lint-only`: green. `pr-shards.adv.sh`: 31 passed.
   (the field alone, a four-line name, light, AX5), cited in the exclusion's comment beside
   `name_longerThanItsLine_isDrawnWhole`.
 - **N1.** `DynamicType.exclusions` take Accessibility XXXL only, with a near miss at the default size.
-- **N2.** The open-finding machinery is removed (none is left, and an untested strict path is dead code); §2.7
-  says a real finding is fixed or reported. `reach` lost its unused `in page:`.
+- **N2.** The open-finding machinery is removed from `ScreenAudit` (none is left, and an untested strict path is dead
+  code). `reach` lost its unused `in page:`. (Round 1's §2.7 wording, "never carried as a passing test", was
+  withdrawn in round 2.)
 - **N3.** `OnboardingAdversarial`'s largest-size audit pictures each step and checks "Skip setup", Continue or
   "Start training", and "Back" after the first step, can be tapped.
 - **N5.** `WorkoutHeaderLayoutTests.readingOrder_staysTheRows`: Minimize, time, Finish in all eight settings at
@@ -574,3 +575,34 @@ green. `check.sh --lint-only`: green. `pr-shards.adv.sh`: 31 passed.
 F15's tests put no leg past about 6,050 s. **Leg 3 is over the mark on its own**: `WorkoutAnnouncementAdversarialTests`
 is one suite of 4,365 s, and leg 6 is near it. Neither holds an F15 test. This is for the next rebalance, from a newer
 run's bundles. The shards file's own note says the slowest build seen was 2,092 s.
+
+### Review round 2 (G3)
+
+- **B1'.** The rule is about 200 s or less on a Mac per UI test (600 s allowed on a runner up to three times slower),
+  in §2.7 and the audit classes' comments. `test_editSets` (227 s) is split by way, as the picker and New exercise
+  are. Every other F15 UI test was already under 200 s (round 1's table); the times after the change are below.
+- **S5.** §2.7's rule is restored: a real finding not fixed yet is a strict `XCTExpectFailure` on exactly what it names
+  (as F11-S14-2 in `DayEditor` and `ProgramTabAdversarial`). `ScreenAudit` carries none today, and its `open:`
+  parameter returns when one is needed (said in its comment too).
+- **N9.** §2.7 lists Settings and Bar and plates under `AuditSettings`.
+- **N10.** `scrollUntilHittable`, for an element a lazy list has not made: ten swipes one way (`back` says which),
+  then ten the other.
+- **N11.** A row's copy is matched as a whole name ("Wired by" and "Pinned by"), never as the start of a longer one;
+  fixture cases for both.
+
+**Times after round 2** (local Mac, Nightly plan; every F15 UI test, the longest 149 s):
+
+| Class | Test | Seconds |
+|---|---|--:|
+| AuditWorkout | card/swap/rest; superset/finish/receipt | 144.5; 126.5 |
+| AuditProgramLibrary | dayEditor; picker light+dark; picker XXXL | 98.0; 114.1; 149.0 |
+| AuditLibrary | exerciseHistory; newExercise light+dark; newExercise XXXL; editExercise | 99.9; 140.7; 119.0; 122.7 |
+| AuditHistorySettings | workoutDetail; editSets light+dark; editSets XXXL | 86.8; 131.8; 90.0 |
+| AuditSettings | settingsAndBarAndPlates | 141.1 |
+| DynamicType | today/builder/library/history; restDay | 75.8; 21.2 |
+| OnboardingAdversarial | largest-size audit | 29.3 |
+| Flows | the three | 45.4, 81.8, 28.8 |
+| Smoke | the four | 20.0, 23.4, 23.9, 33.5 |
+
+Leg 4 becomes 2,615 + `AuditHistorySettings` 309 × 3 = 926 + `DynamicType` 97 × 3 = 291 = 3,832 s of tests, 5,932 with a
+2,100 s build; the other legs are as in round 1's table.

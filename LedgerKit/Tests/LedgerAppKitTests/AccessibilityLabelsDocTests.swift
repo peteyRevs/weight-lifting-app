@@ -132,11 +132,18 @@ nonisolated struct AccessibilityLabelsDocTests {
             let words = try Self.copy(named: parts[1], of: parts[0])
             #expect(words == row.english, "\(row.copy) says \(words ?? "nothing")")
             let wiring = try Self.file(named: row.wiredBy, under: Self.sources)
-            #expect(wiring?.contains(row.copy) == true, "\(row.wiredBy) does not name \(row.copy)")
+            #expect(wiring.map { Self.names($0, row.copy) } == true, "\(row.wiredBy) does not name \(row.copy)")
             let spoken = pin.range(of: Self.spoken(row.english), options: .regularExpression) != nil
-            let pinned = pin.contains(row.copy) || spoken
+            let pinned = Self.names(pin, row.copy) || spoken
             #expect(pinned, "\(row.pinnedBy) holds neither \(row.english) nor \(row.copy)")
         }
+    }
+
+    /// Whether `text` names `reference` (`WorkoutCopy.logSet`) as a whole name: not as the start of a longer one
+    /// (`WorkoutCopy.logSetHeavy`).
+    static func names(_ text: String, _ reference: String) -> Bool {
+        let pattern = NSRegularExpression.escapedPattern(for: reference) + "(?![A-Za-z0-9_])"
+        return text.range(of: pattern, options: .regularExpression) != nil
     }
 
     /// `english` as a pattern of a quoted string: each `\(…)` stands for any text.
@@ -184,6 +191,17 @@ extension AccessibilityLabelsDocTests {
     ])
     func scan_findsEachForm(_ fixture: String, _ count: Int) {
         #expect(Self.sites(in: fixture, file: "Fixture.swift").count == count, "\(fixture)")
+    }
+
+    /// G3 N11: a copy is named by its whole name only.
+    @Test("A copy's name is found whole, never as the start of a longer name", arguments: [
+        ("check: WorkoutCopy.logSet(number, locale: locale)", true),
+        ("WorkoutCopy.logSet\n", true),
+        ("check: WorkoutCopy.logSetHeavy(number, locale: locale)", false),
+        ("WorkoutCopy.logSet_2", false)
+    ])
+    func names_matchTheWholeName(_ text: String, _ isNamed: Bool) {
+        #expect(Self.names(text, "WorkoutCopy.logSet") == isNamed, "\(text)")
     }
 
     /// G3 N6: a malformed row fails with its line, never by a crash.

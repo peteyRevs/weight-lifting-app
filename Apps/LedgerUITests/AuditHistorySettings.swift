@@ -4,7 +4,8 @@ import XCTest
 /// detail and its edit-sets sheet (with the seed's four weeks of history); Settings's screens are `AuditSettings`'s,
 /// with these exclusions. On the seed program at noon on Wednesday of its week 5.
 /// What the audit reports and is excused is each screen's exclusions' (measured, in the implementation notes);
-/// anything else fails. Each test stays under about four minutes on a Mac (S2b). Nightly only.
+/// anything else fails. Each test takes about 200 s or less on a Mac (S2b: the nightly allows 600 s a test, and the
+/// runner is up to three times slower). Nightly only.
 final class AuditHistorySettings: XCTestCase {
     static let arguments = ["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z", "-LEDGER_UITEST_PROGRAM", "seed"]
 
@@ -28,11 +29,23 @@ final class AuditHistorySettings: XCTestCase {
         }
     }
 
+    /// The edit-sets sheet, light and dark at the default size (`auditEditSets`).
+    @MainActor
+    func test_editSets_lightAndDark_passesTheAudit() throws {
+        try auditEditSets([.light, .dark])
+    }
+
+    /// The edit-sets sheet at Accessibility XXXL: a way of its own, as the three would take over 200 s on a Mac.
+    @MainActor
+    func test_editSets_atAccessibilityXXXL_passesTheAudit() throws {
+        try auditEditSets([.largest])
+    }
+
     /// The newest workout's "Edit": the edit-sets sheet.
     @MainActor
-    func test_editSets_passesTheAudit() throws {
+    private func auditEditSets(_ ways: [AuditWay]) throws {
         let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
-        try audit.threeWays(launching: Self.arguments + ["-LEDGER_UITEST_HISTORY", "4"]) { steps in
+        try audit.run(ways, launching: Self.arguments + ["-LEDGER_UITEST_HISTORY", "4"]) { steps in
             let app = steps.app
             Self.openTheNewestWorkout(steps)
             let edit = app.buttons["history.workout.edit"]
