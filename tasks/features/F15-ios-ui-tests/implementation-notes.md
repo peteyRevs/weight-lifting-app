@@ -172,7 +172,7 @@ M1-exit run are S2b's.
   way and runs the walk; the walk calls `audit(_:screen:pinned:)` on each screen, which runs
   `performAccessibilityAudit(for: .all)`, keeps each issue with the element's type, identifier, label and frame (and the
   tab bar's and a pinned part's frames), and attaches the screen and each reported element. The verdict attaches every
-  issue with its verdict and fails on any no exclusion excuses. `expectScrollsClearOfTheTabBar` is the "scrolls clear"
+  issue with its verdict and fails on any no exclusion excuses. `expectScrollsClear` (from review round 1) is the "scrolls clear"
   proof each "under the tab bar" exclusion needs. **Open findings** (`open:`): a real finding not fixed in S2a is a
   strict `XCTExpectFailure` on exactly what it names, so the test stays green, catches everything else, and goes red
   the day the finding is fixed.
@@ -232,7 +232,7 @@ Round 1 reported 151 issues on 13 screens with nothing excluded; the last run, 0
 5. The Settings walk reaches Bar and plates before the "scrolls clear" proof: from the page's end a swipe back did
    not bring the row within reach at XXXL. The page is audited at rest only; an audit of it scrolled to its end
    (an experiment) reports the rows under the navigation bar's glass, which no exclusion covers.
-6. No shard change: leg 4's estimate is under the 5,000 s line (below).
+6. No shard change: leg 4's estimate stays under `nightly-shards.txt`'s ~6,300 s rebalance mark (below).
 
 ### Times (local Mac, iPhone 17, iOS 27.0; the dark way drew light, see above)
 
@@ -247,7 +247,7 @@ Round 1 reported 151 issues on 13 screens with nothing excluded; the last run, 0
 | AuditExclusionsTests (5 tests) | 0.04 each |
 
 775 s on the Mac, about 1,160 s on the runner (× 1.5). Leg 4 (`nightly-shards.txt`: `LedgerUITests` 1,840, the
-package targets 775, S1's `Flows` about 210) becomes about 3,990 s of tests, under the 5,000 s line and ~3,800 s short
+package targets 775, S1's `Flows` about 210) becomes about 3,990 s of tests, short of the ~6,300 s rebalance mark and ~3,800 s short
 of the 7,800 s deadline with a 1,500 s build: no rebalance.
 
 Other runs: `FeatureWorkoutTests` whole (PR plan): 723 tests passed, 3 known issues, 620 s. `check.sh --lint-only`:
@@ -354,5 +354,36 @@ in dark; until then every "light and dark" above means light only (the dark way 
 | AuditExclusionsTests (6 tests) | under 0.1 each |
 
 1,175 s on the Mac, about 1,760 s on the runner (× 1.5): the scroll proofs added about 400 s. Leg 4 becomes about
-4,590 s of tests, still under the 5,000 s line, with less room; the next rebalance should move an audit class to
+4,590 s of tests, under `nightly-shards.txt`'s ~6,300 s rebalance mark; the next rebalance could move an audit class to
 leg 5.
+
+### Review round 2 (G3: small changes)
+
+- **SF1, the element-less "Skip rest".** The excuse now also needs the default size, a detail naming a
+  `SwiftUI.AccessibilityNode` (as the labelled one's did), and no labelled "Skip rest" near pass on the same screen in
+  the same way; near misses for XXXL, a labelled one beside it, and a frame. Which change lost the element, from the
+  runs already made (no further run was needed to separate the two): the frozen clock is ruled out, as the 12:49
+  run had it and named "Skip rest", and the 13:25 run had it too and did not; the appearance seam is ruled out, as
+  the 13:25 run had no seam and already lost the element. What changed between those two runs was outside the
+  code: the shared simulator's own appearance turned dark (with the app's code for the cover unchanged but for the
+  receipt's revert). Not fixable in this slice; it stays excused as narrowed.
+- **SF2, F15-S2-13 fixed (ruling A, as a token).** The ink at no opacity in `NameField` made the dark audit pass
+  (one run), but a raw alpha in a view breaks the token rule and the Program views' source tests. So it is a
+  LedgerDesign token: `LedgerColor.inkConcealed`, ink's own colour at alpha 0 (Increase Contrast too), "text drawn
+  but not shown", which an audit reads as ink. `NameField` draws its hidden text and its unfocused field in it, and
+  spells no `Color` at all; the one sanctioned edit is `ProgramViewsSourceAdversarialTests`' colour pin, now empty
+  (F15-S2-13). The token is listed wherever the token tests list every token (`PhoneToken`, `TokenValueTests`, the
+  gallery and its names). Closed for the Day editor's "Day name" and the builder's "Program name", the same
+  `NameField` (the latter not audited in dark here: the builder root is the tabs lane's).
+- **SF1, observation.** The element-less "Skip rest" tracks the shared simulator's own appearance: present from the
+  moment it turned dark, absent before, whatever the app was told by the seam.
+- **SF3.** `settle` compares the screen's first scroll view, not the whole screen, so the cover's running clock
+  and the rest ring no longer keep it from settling.
+- **SF4.** "Wednesday, September 30", the longest date the receipt writes, measured at Accessibility XXXL with the
+  clock at 2026-09-30 (one run, reverted): frame 240 × 76 at (26, 78), two lines, whole in the picture; reported
+  "Text clipped" and excused as F15-S2-4. The date excuses (F15-S2-4 and 9) take no date longer than it.
+- **N1.** `expectScrollsClear` stops as soon as `last` ends above the bar or foot, and measures where `last` ends by
+  its text where it has one: a row's button reaches below its text by its padding (the picker's last row at XXXL
+  ended 1 pt under the foot's rule by its frame, its text well above).
+- **N2.** The letter's test resolves the colours in both schemes and asserts 4.5:1 on both fills (it replaces the
+  scheme-only test). **N3.** The report's open findings are counted among the issues not excused. **N4/N5** above.

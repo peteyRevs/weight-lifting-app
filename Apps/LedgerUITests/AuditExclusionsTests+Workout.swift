@@ -15,8 +15,8 @@ extension AuditExclusionsTests {
             issue("finish sheet", nearly, "Save workout", type: .button),
             issue("solo card", clipped, "Finish", type: .button, identifier: "workout.header.finish"),
             issue("receipt", clipped, "Saturday, November 14"),
-            issue("receipt", hitArea, "Saturday, November 14"),
-            ScreenIssue(screen: "rest panel", type: .contrast, summary: nearly)
+            issue("receipt", hitArea, "Wednesday, September 30"),
+            unnamedSkipRest
         ]
     }
 
@@ -77,10 +77,16 @@ extension AuditExclusionsTests {
         check(AuditWorkout.exclusions, excused: Self.workoutExcused, nearMisses: Self.workoutNearMisses)
     }
 
-    /// The rest panel's element-less near pass is excused once a way, and nowhere else.
+    /// The rest panel's element-less near pass as the runs reported it.
+    private static var unnamedSkipRest: ScreenIssue {
+        ScreenIssue(screen: "rest panel", type: .contrast, summary: nearly, detail: "for SwiftUI.AccessibilityNode")
+    }
+
+    /// The rest panel's element-less near pass is excused once a way at the default size, alone, and nowhere else.
     @MainActor
     func test_unnamedSkipRest_isExcusedOnceAWayOnTheRestPanel() {
-        let unnamed = ScreenIssue(screen: "rest panel", type: .contrast, summary: Self.nearly)
+        let unnamed = Self.unnamedSkipRest
+        let labelled = Self.issue("rest panel", Self.nearly, "Skip rest", type: .button)
         var dark = unnamed
         dark.way = .dark
         let exclusions = AuditWorkout.exclusions
@@ -92,5 +98,20 @@ extension AuditExclusionsTests {
         elsewhere = unnamed
         elsewhere.summary = Self.contrast
         XCTAssertNil(ScreenAudit.exclusion(for: elsewhere, in: exclusions), "Contrast failed")
+        elsewhere = unnamed
+        elsewhere.way = .largest
+        XCTAssertNil(ScreenAudit.exclusion(for: elsewhere, in: exclusions), "at Accessibility XXXL")
+        XCTAssertNil(
+            ScreenAudit.exclusion(for: unnamed, in: exclusions, among: [unnamed, labelled]),
+            "beside Skip rest"
+        )
+        elsewhere = unnamed
+        elsewhere.frame = CGRect(x: 207, y: 762, width: 163, height: 54)
+        XCTAssertNil(ScreenAudit.exclusion(for: elsewhere, in: exclusions), "with a frame")
+        // A date of the right shape but longer than the one measured is never excused.
+        XCTAssertNil(ScreenAudit.exclusion(
+            for: Self.issue("receipt", Self.hitArea, "Wednesday, Septembers 30"),
+            in: exclusions
+        ))
     }
 }

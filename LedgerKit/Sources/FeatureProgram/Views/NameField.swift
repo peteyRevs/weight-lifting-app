@@ -76,7 +76,7 @@ struct NameField: View {
             }
             Text(draft)
                 .ledgerFont(.title)
-                .foregroundStyle(isEditing ? Color.clear : LedgerColor.ink)
+                .foregroundStyle(isEditing ? LedgerColor.inkConcealed : LedgerColor.ink)
                 .multilineTextAlignment(.leading)
                 // With the focus the text keeps to one line, as the field over it does, and is not drawn; a
                 // line longer than the screen runs out of the frame, which keeps the width it is given.
@@ -91,7 +91,9 @@ struct NameField: View {
             .ledgerFieldFont(.title)
             // Where the text starts: at the layout's leading edge, whatever the name's script.
             .multilineTextAlignment(strategy: .layoutBased)
-            .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
+            // Concealed ink while unfocused, never a clear colour: the system's audit reads the field's text colour,
+            // and took clear for black, which failed on the dark ground (F15-S2-13).
+            .foregroundStyle(isEditing ? LedgerColor.ink : LedgerColor.inkConcealed)
             .submitLabel(.done)
             .focused($isEditing)
             .accessibilityLabel(label)

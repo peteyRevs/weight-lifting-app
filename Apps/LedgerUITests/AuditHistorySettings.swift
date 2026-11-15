@@ -34,8 +34,9 @@ final class AuditHistorySettings: XCTestCase {
             XCTAssertTrue(app.buttons["history.edit.save"].waitForExistence(timeout: 5), "the edit-sets sheet")
             let foot = PinnedPart.sheetFoot(app.buttons["history.edit.save"])
             try audit.audit(steps, screen: "edit sets", pinned: foot)
+            // The sheet's last line: the reps of Cable Lateral Raise's last set.
             audit.expectScrollsClear(
-                steps, screen: "edit sets", anchor: "Set 1 weight", last: Self.lastEditedSet
+                steps, screen: "edit sets", anchor: "Set 1 weight", last: "16"
             ) { foot.minY }
         }
     }
@@ -60,7 +61,8 @@ final class AuditHistorySettings: XCTestCase {
             cancel.tap()
             XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the sheet went down")
 
-            audit.expectScrollsClear(steps, screen: "Settings", anchor: "TRAINING", last: Self.lastSetting) {
+            // The version line, "Ledger 0.21.1 · build 1", whose version changes: matched by its start.
+            audit.expectScrollsClear(steps, screen: "Settings", anchor: "TRAINING", last: "Ledger ") {
                 app.tabBars.firstMatch.frame.minY
             }
         }
@@ -68,10 +70,6 @@ final class AuditHistorySettings: XCTestCase {
 }
 
 extension AuditHistorySettings {
-    /// The pages' last texts or buttons: the edit sheet's last set, and Settings' last row.
-    static let lastEditedSet = "16" // the reps of Cable Lateral Raise's last set
-    static let lastSetting = "Ledger " // "Ledger 0.21.1 · build 1": the version changes
-
     /// The measured exclusions of the workout's detail, its edit sheet, Settings and Bar and plates (F15-S2-3 to 8).
     static var exclusions: [ScreenExclusion] {
         [

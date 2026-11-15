@@ -33,14 +33,6 @@ extension AuditExclusionsTests {
         elsewhere = name
         elsewhere.summary = Self.contrast
         XCTAssertFalse(AuditProgramLibrary.truncatedName.names(elsewhere, among: [elsewhere]), "another issue")
-        let field = Self.issue("Day editor", Self.contrast, "Day name", type: .textField, way: .dark)
-        XCTAssertTrue(AuditProgramLibrary.hiddenFieldText.names(field, among: [field]))
-        elsewhere = field
-        elsewhere.way = .light
-        XCTAssertFalse(AuditProgramLibrary.hiddenFieldText.names(elsewhere, among: [elsewhere]), "in light")
-        elsewhere = field
-        elsewhere.label = "Program name"
-        XCTAssertFalse(AuditProgramLibrary.hiddenFieldText.names(elsewhere, among: [elsewhere]), "another field")
     }
 
     /// F15-S2-12 names exactly two element-less issues on Settings in one way, at the default size.

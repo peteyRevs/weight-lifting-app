@@ -30,6 +30,7 @@
             /// Every token, as its page names it.
             static let tokens: [String] = [
                 "ground", "surface", "ink", "inkSecondary", "inkMuted", "inkFaint", "inkDim", "hairline",
+                "inkConcealed",
                 "hairlineStrong", "accent", "accentText", "accentSoft", "accentLine", "onAccent", "watchGround",
                 "watchInk", "watchInkSecondary", "watchInkMuted", "watchOutline", "watchHairline", "watchTrack",
                 "xs · 4", "s · 8", "m · 12", "l · 16", "xl · 24", "xxl · 32", "screen · 26",

@@ -15,7 +15,7 @@ final class AuditProgramLibrary: XCTestCase {
     /// Lower A's Day editor from the builder, then its "+ Add exercise from library" sheet.
     @MainActor
     func test_dayEditorAndItsPicker_passTheAudit() throws {
-        let audit = ScreenAudit(for: self, exclusions: Self.exclusions, open: [Self.hiddenFieldText])
+        let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
         try audit.threeWays(launching: Self.arguments) { steps in
             let app = steps.app
             XCTAssertTrue(steps.todayTitle.waitForExistence(timeout: 10))
@@ -57,7 +57,7 @@ final class AuditProgramLibrary: XCTestCase {
             XCTAssertTrue(title.waitForExistence(timeout: 10), "its history")
             try audit.audit(steps, screen: "exercise history")
             audit.expectScrollsClear(
-                steps, screen: "exercise history", anchor: "SESSION LOG", last: Self.oldestSession
+                steps, screen: "exercise history", anchor: "SESSION LOG", last: "Aug 24"
             ) {
                 app.tabBars.firstMatch.frame.minY
             }
@@ -115,9 +115,8 @@ final class AuditProgramLibrary: XCTestCase {
 }
 
 extension AuditProgramLibrary {
-    /// The last row of the picker's list for "Press", and the bench press's oldest session: the pages' ends.
+    /// The last row of the picker's list for "Press": the list's end. (The history's end is its oldest session.)
     static let lastPress = "Smith Machine Overhead Press"
-    static let oldestSession = "Aug 24"
 
     /// The measured exclusions of the Day editor, its picker and the Library's screens (F15-S2-3 to 8, the notes).
     static var exclusions: [ScreenExclusion] {
@@ -154,19 +153,6 @@ extension AuditProgramLibrary {
         ScreenExclusion(finding: "F15-S2-4", issue: "Text clipped on the whole name, Edit exercise") {
             $0.summary == "Text clipped" && $0.identifier == "library.create.name" && $0.way != .largest
                 && $0.screen == "Edit exercise"
-        }
-    }
-
-    /// F15-S2-13, open: in dark, "Contrast failed" on the Day editor's name field. `NameField` draws the field's own
-    /// text clear while it has no focus and the name as wrapping text under it; the audit reads the field's text
-    /// colour, not its pixels, and so measures the hidden text, which is no fault in light (black on paper) and is
-    /// in dark. The drawn name is (244, 242, 237) on (11, 11, 13), 17:1, in the field's picture. Not changed in this
-    /// slice: hiding the field's text another way touches `NameField`'s measured layout (its doc) and its hosted
-    /// tests; the follow-up PR after S2 does it, or shows the audit wrong. Until then an expected failure.
-    static var hiddenFieldText: ScreenExclusion {
-        ScreenExclusion(finding: "F15-S2-13", issue: "the Day name field's hidden text, dark") {
-            $0.summary == "Contrast failed" && $0.screen == "Day editor" && $0.way == .dark
-                && $0.elementType == .textField && $0.label == "Day name"
         }
     }
 

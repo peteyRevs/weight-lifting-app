@@ -249,12 +249,12 @@ nonisolated extension ProgramViewsSourceAdversarialTests {
         #expect(handed == ["NameField.swift: onRename(text)"], "\(handed)")
     }
 
-    /// `NameField` hides whichever of its two texts is not shown with `Color.clear`, a colour that is no
-    /// token and that the bans of `reachedFor` do not name. Pinned so that a third is a changed list: one
-    /// for the text, one for the field.
-    @Test("The only colour a view spells outside the tokens is clear, twice, in the name field")
+    /// Sanctioned edit (F15-S2-13): `NameField` hid whichever of its two texts is not shown with `Color.clear`,
+    /// which the system's audit reads as black; it now uses the `inkConcealed` token, so no view spells a colour
+    /// outside the tokens at all.
+    @Test("No view spells a colour outside the tokens")
     func views_spellNoColourButClear() throws {
         let spelled = try Self.matches(#"\bColor\.\w+"#)
-        #expect(spelled == ["NameField.swift: Color.clear", "NameField.swift: Color.clear"], "\(spelled)")
+        #expect(spelled == [], "F15-S2-13: \(spelled)")
     }
 }

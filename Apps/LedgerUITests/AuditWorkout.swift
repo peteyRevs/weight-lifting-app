@@ -95,24 +95,31 @@ extension AuditWorkout {
         ]
     }
 
-    /// F15-S2-7 on "Skip rest" (white on the accent, 3.10:1) when the audit reports it without its element: from
-    /// phase 2 of S2a's review on, the rest panel's one "Contrast nearly passed" comes with no element and no frame,
-    /// light and dark alike, and the labelled "Skip rest" one is gone from the same runs; the panel holds no other
-    /// accent control. One a way on the rest panel: a second, or one elsewhere, fails.
+    /// F15-S2-7 on "Skip rest" (white on the accent, 3.10:1) when the audit reports it without its element. From
+    /// 2026-11-14 13:25 on the rest panel's one "Contrast nearly passed" comes with no element and no frame, in light
+    /// and dark at the default size, its detail still naming a `SwiftUI.AccessibilityNode` as the labelled one's
+    /// did; the labelled one is gone from the same runs, and the panel holds no other accent control. The runs
+    /// before and after differ in neither the frozen clock nor the appearance seam (the notes). Excused once a way
+    /// on the rest panel at the default size, and never beside a labelled "Skip rest" near pass.
     static var skipRestUnnamed: ScreenExclusion {
         ScreenExclusion(
             finding: "F15-S2-7",
             issue: "Contrast nearly passed with no element, rest panel",
-            perScreenAndWay: 1
-        ) {
-            $0.type == .contrast && $0.summary == "Contrast nearly passed" && $0.screen == "rest panel"
-                && $0.elementType == .any && $0.frame.isNull
-        }
+            perScreenAndWay: 1,
+            unlessBeside: { $0.summary == "Contrast nearly passed" && $0.label == "Skip rest" },
+            excuses: {
+                $0.type == .contrast && $0.summary == "Contrast nearly passed" && $0.screen == "rest panel"
+                    && $0.way != .largest && $0.elementType == .any && $0.frame.isNull
+                    && $0.detail.contains("SwiftUI.AccessibilityNode")
+            }
+        )
     }
 
-    /// Whether `label` is the receipt's date as it writes today's: "Saturday, November 14".
+    /// Whether `label` is the receipt's date as it writes today's ("Saturday, November 14"), no longer than the
+    /// longest it writes, "Wednesday, September 30", measured at Accessibility XXXL (the notes).
     static func isDate(_ label: String) -> Bool {
-        label.range(of: #"^[A-Z][a-z]+day, [A-Z][a-z]+ \d{1,2}$"#, options: .regularExpression) != nil
+        label.count <= "Wednesday, September 30".count
+            && label.range(of: #"^[A-Z][a-z]+day, [A-Z][a-z]+ \d{1,2}$"#, options: .regularExpression) != nil
     }
 
     /// F15-S2-4 on the receipt's date, a caption on the role's native line: whole in its pictures at both sizes.

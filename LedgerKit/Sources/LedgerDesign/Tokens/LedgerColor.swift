@@ -23,6 +23,10 @@ public nonisolated enum LedgerColor {
 
     /// Primary text: ink `#16150F` / text `#F4F2ED`.
     public static let ink = Color(light: .ink, dark: .text)
+    /// Text drawn but not shown: ink's own colour at no opacity. An accessibility audit reads a text's colour, not
+    /// its pixels, and takes `Color.clear` for black (failing on the dark ground); this one it reads as ink
+    /// (F15-S2-13, `NameField`).
+    public static let inkConcealed = ink(0, increased: 0)
     /// Secondary text, 72 % (Increase Contrast 86 %).
     public static let inkSecondary = ink(0.72, increased: 0.86)
     /// Metadata and captions: 62 % on paper, 51 % on dark (the spec's 45 % is below AA, and these

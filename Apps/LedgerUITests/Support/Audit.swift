@@ -49,42 +49,6 @@ struct ScreenIssue: CustomStringConvertible {
     }
 }
 
-/// A part pinned over the page's end, which the page scrolls under: its top element, how far above that element the
-/// part begins (measured in the pictures), and its own elements, so an issue on one of them is never taken for the
-/// page's line under it.
-@MainActor
-struct PinnedPart {
-    let top: XCUIElement
-    let margin: CGFloat
-    let members: [XCUIElement]
-
-    /// The rest panel: its 16 pt padding and rule put its top 17 pt above `workout.rest.status`.
-    static func restPanel(in app: XCUIApplication) -> PinnedPart {
-        let status = app.descendants(matching: .any).matching(identifier: "workout.rest.status").firstMatch
-        return PinnedPart(
-            top: status,
-            margin: 17,
-            members: [status, app.buttons["workout.rest.extend"], app.buttons["workout.rest.skip"]]
-        )
-    }
-
-    /// A sheet's foot: its rule stands 11 pt above its one button.
-    static func sheetFoot(_ button: XCUIElement) -> PinnedPart {
-        PinnedPart(top: button, margin: 11, members: [button])
-    }
-
-    /// Where the part begins on screen.
-    var minY: CGFloat {
-        top.frame.minY - margin
-    }
-
-    /// The identifiers and labels of the part's own elements and of what they hold.
-    var names: (identifiers: Set<String>, labels: Set<String>) {
-        let all = members.flatMap { [$0] + $0.descendants(matching: .any).allElementsBoundByIndex }.filter(\.exists)
-        return (Set(all.map(\.identifier).filter { !$0.isEmpty }), Set(all.map(\.label)))
-    }
-}
-
 /// An issue the audit reports on a screen that was measured and judged no fault of it: its finding ID
 /// (`F15-S2-<n>`, in the implementation notes, with the measurement), the issue and element in words, and the
 /// condition. Nothing wider is excused: the same kind on another element, or another kind on the same element,
@@ -95,12 +59,18 @@ struct ScreenExclusion {
     /// For an issue the system reports with no element: how many the measurement found on one screen in one way.
     /// Another count, more or fewer, is not this finding.
     var perScreenAndWay: Int?
+    /// An issue whose presence on the same screen in the same way means this is not the finding.
+    var unlessBeside: ((ScreenIssue) -> Bool)?
     let excuses: (ScreenIssue) -> Bool
 
-    init(finding: String, issue: String, perScreenAndWay: Int? = nil, excuses: @escaping (ScreenIssue) -> Bool) {
+    init(
+        finding: String, issue: String, perScreenAndWay: Int? = nil, unlessBeside: ((ScreenIssue) -> Bool)? = nil,
+        excuses: @escaping (ScreenIssue) -> Bool
+    ) {
         self.finding = finding
         self.issue = issue
         self.perScreenAndWay = perScreenAndWay
+        self.unlessBeside = unlessBeside
         self.excuses = excuses
     }
 
@@ -110,6 +80,8 @@ struct ScreenExclusion {
         guard excuses(issue) else {
             return false
         }
+        let beside = issues.contains { unlessBeside?($0) == true && $0.screen == issue.screen && $0.way == issue.way }
+        guard !beside else { return false }
         guard let perScreenAndWay else {
             return true
         }
@@ -168,7 +140,7 @@ final class ScreenAudit {
     func audit(_ steps: Steps, screen: String, pinned: PinnedPart? = nil) throws {
         let app = steps.app
         let name = "\(screen), \(way.rawValue)"
-        Self.settle(app)
+        Self.settle(app.scrollViews.firstMatch.exists ? app.scrollViews.firstMatch : app)
         steps.attachScreenshot(named: "\(name): screen")
         let tabBar = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame : .null
         let window = app.windows.firstMatch.frame
@@ -218,16 +190,23 @@ final class ScreenAudit {
         let app = steps.app
         let page = app.scrollViews.containing(NSPredicate(format: "label == %@", anchor)).firstMatch
         XCTAssertTrue(page.exists, "\(screen): no page holds \(anchor)")
-        // Drags near the leading edge, where no control or chart takes the touch, until the page stops: two drags
-        // in a row that leave its picture as it was (a lazy list drops what it scrolled past, so no element of it
-        // can be the mark).
+        // Drags near the leading edge, where no control or chart takes the touch, until `last` stands above the bar,
+        // or the page stops: two drags in a row that leave its picture as it was (the picture, not an element, as a
+        // lazy list drops the rows it scrolled past).
+        // Where `last` ends: its text where it is one (a row's button reaches below its text by its padding), else
+        // the element itself.
+        let named = NSPredicate(format: "label BEGINSWITH %@", last)
+        let (texts, any) = (page.staticTexts.matching(named), page.descendants(matching: .any).matching(named))
+        let lastEnd = { (texts.firstMatch.exists ? texts : any).allElementsBoundByIndex.map(\.frame.maxY).max() }
+        let top = barTop()
+        let arrived = { lastEnd().map { $0 <= top } ?? false }
         var still = 0
         var picture = page.screenshot().pngRepresentation
         // From above the bar or pinned part (a drag that starts on a sheet's foot moves nothing) to near the top.
         let origin = app.coordinate(withNormalizedOffset: .zero)
         let frame = page.frame
         let start = min(frame.minY + frame.height * 0.8, barTop() - 24)
-        for _ in 0 ..< 30 where still < 2 {
+        for _ in 0 ..< 30 where still < 2 && !arrived() {
             let from = origin.withOffset(CGVector(dx: frame.minX + 24, dy: start))
             from.press(
                 forDuration: 0.05,
@@ -244,17 +223,17 @@ final class ScreenAudit {
             lowest?.label.hasPrefix(last) == true,
             "\(place): the page ends with \(lowest?.label ?? "nothing")"
         )
-        XCTAssertLessThanOrEqual(lowest?.frame.maxY ?? .infinity, barTop(), "\(place): \(last) is under the bar")
+        XCTAssertLessThanOrEqual(lastEnd() ?? .infinity, top, "\(place): \(last) is under the bar")
     }
 
-    /// Waits, at most ten pictures long, until two pictures of the screen in a row are the same: an audit taken while
+    /// Waits, at most ten pictures long, until two pictures in a row of `region` are the same: an audit taken while
     /// a selection or a sheet still moves measures colours half-way (a current legend row's accent letter over the
-    /// fill it was leaving, measured once in S2a's review round). A screen with a clock that runs (the rest panel) is
-    /// never still; it is audited after the ten.
-    private static func settle(_ app: XCUIApplication) {
-        var picture = app.screenshot().pngRepresentation
+    /// fill it was leaving, measured once in S2a's review round). The region is the screen's first scroll view, the
+    /// page: never the cover's header, whose elapsed time changes each second, nor the rest panel's ring.
+    private static func settle(_ region: XCUIElement) {
+        var picture = region.screenshot().pngRepresentation
         for _ in 0 ..< 10 {
-            let next = app.screenshot().pngRepresentation
+            let next = region.screenshot().pngRepresentation
             if next == picture {
                 return
             }
@@ -270,9 +249,10 @@ final class ScreenAudit {
 
     /// Every issue, with its type and its verdict: excused, open, or not excused.
     private func attachReport() {
+        let left = issues.filter { Self.exclusion(for: $0, in: exclusions, among: issues) == nil }
         let report = issues.map { issue in
             let excused = Self.exclusion(for: issue, in: exclusions, among: issues).map { "excused, \($0.finding)" }
-            let opened = open.first { $0.names(issue, among: issues) }.map { "open, \($0.finding)" }
+            let opened = open.first { $0.names(issue, among: left) }.map { "open, \($0.finding)" }
             return "\(issue) type \(issue.type.rawValue)\n  \(issue.detail)\n  \(excused ?? opened ?? "NOT EXCUSED")"
         }
         let attachment = XCTAttachment(string: report.joined(separator: "\n"))
