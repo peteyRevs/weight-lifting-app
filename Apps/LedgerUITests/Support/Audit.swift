@@ -97,17 +97,15 @@ struct ScreenExclusion {
 final class ScreenAudit {
     private let test: XCTestCase
     private let exclusions: [ScreenExclusion]
-    private let open: [ScreenExclusion]
     private(set) var issues: [ScreenIssue] = []
-    private var way = AuditWay.light
+    private(set) var way = AuditWay.light
 
-    /// `open` names real findings not fixed yet, each by its finding ID: what one names is an expected failure
-    /// (strict), so the test stays able to catch everything else, and fails the day the finding is fixed, so that
-    /// the entry is taken out.
-    init(for test: XCTestCase, exclusions: [ScreenExclusion], open: [ScreenExclusion] = []) {
+    /// It carries no open finding today: S2a's `open:` parameter (a strict expected failure on exactly what a real,
+    /// unfixed finding names) went with the last of them in S2b, and returns when one is needed (testing-strategy
+    /// §2.7).
+    init(for test: XCTestCase, exclusions: [ScreenExclusion]) {
         self.test = test
         self.exclusions = exclusions
-        self.open = open
     }
 
     /// The exclusion that excuses `issue`, if one does.
@@ -121,8 +119,13 @@ final class ScreenAudit {
     /// screen and calls `audit(_:screen:)` on it. Then the verdict: every issue no exclusion excuses fails. The
     /// report of every issue is kept with the result at the test's end, also when a walk stopped midway.
     func threeWays(launching arguments: [String], walk: (Steps) throws -> Void) throws {
+        try run(AuditWay.allCases, launching: arguments, walk: walk)
+    }
+
+    /// `threeWays`, in `ways` only.
+    func run(_ ways: [AuditWay], launching arguments: [String], walk: (Steps) throws -> Void) throws {
         test.addTeardownBlock { self.attachReport() }
-        for next in AuditWay.allCases {
+        for next in ways {
             way = next
             let steps = Steps(launching: arguments + next.arguments, for: test)
             // Today stands on the paper ground in light: the one screen every walk starts on where the appearance
@@ -135,9 +138,11 @@ final class ScreenAudit {
         verdict()
     }
 
-    /// One audit, every type, of what is on screen, named `screen`. The screen and each reported element are
-    /// pictured and kept. `pinned` is a part pinned over the page's end, if the screen has one.
-    func audit(_ steps: Steps, screen: String, pinned: PinnedPart? = nil) throws {
+    /// One audit, of every type (or of `types`), of what is on screen, named `screen`. The screen and each reported
+    /// element are pictured and kept. `pinned` is a part pinned over the page's end, if the screen has one.
+    func audit(
+        _ steps: Steps, screen: String, pinned: PinnedPart? = nil, types: XCUIAccessibilityAuditType = .all
+    ) throws {
         let app = steps.app
         let name = "\(screen), \(way.rawValue)"
         Self.settle(app.scrollViews.firstMatch.exists ? app.scrollViews.firstMatch : app)
@@ -149,7 +154,7 @@ final class ScreenAudit {
         } ?? .null
         let pinnedNames: (identifiers: Set<String>, labels: Set<String>) = pinned?.names ?? ([], [])
         var pictured: [(String, XCUIElement)] = []
-        try app.performAccessibilityAudit(for: .all) { issue in
+        try app.performAccessibilityAudit(for: types) { issue in
             var found = ScreenIssue(
                 way: self.way,
                 screen: screen,
@@ -241,19 +246,18 @@ final class ScreenAudit {
         }
     }
 
-    /// The page's lowest text or button with a label: what a reader reads last.
+    /// The page's lowest text, button or field with a label: what a reader reads last.
     private static func lowest(on page: XCUIElement) -> XCUIElement? {
         let elements = page.staticTexts.allElementsBoundByIndex + page.buttons.allElementsBoundByIndex
+            + page.textFields.allElementsBoundByIndex
         return elements.filter { $0.frame.height > 0 && !$0.label.isEmpty }.max { $0.frame.maxY < $1.frame.maxY }
     }
 
-    /// Every issue, with its type and its verdict: excused, open, or not excused.
+    /// Every issue, with its type and its verdict: excused, or not excused.
     private func attachReport() {
-        let left = issues.filter { Self.exclusion(for: $0, in: exclusions, among: issues) == nil }
         let report = issues.map { issue in
             let excused = Self.exclusion(for: issue, in: exclusions, among: issues).map { "excused, \($0.finding)" }
-            let opened = open.first { $0.names(issue, among: left) }.map { "open, \($0.finding)" }
-            return "\(issue) type \(issue.type.rawValue)\n  \(issue.detail)\n  \(excused ?? opened ?? "NOT EXCUSED")"
+            return "\(issue) type \(issue.type.rawValue)\n  \(issue.detail)\n  \(excused ?? "NOT EXCUSED")"
         }
         let attachment = XCTAttachment(string: report.joined(separator: "\n"))
         attachment.name = "Audit issues"
@@ -261,17 +265,23 @@ final class ScreenAudit {
         test.add(attachment)
     }
 
-    /// The issues no exclusion excuses fail the test; each open finding is a strict expected failure.
+    /// The issues no exclusion excuses fail the test.
     private func verdict() {
         let left = issues.filter { Self.exclusion(for: $0, in: exclusions, among: self.issues) == nil }
-        let isOpen = { (issue: ScreenIssue) in self.open.contains { $0.names(issue, among: left) } }
-        let unknown = left.filter { !isOpen($0) }.map(\.description)
-        XCTAssertEqual(unknown, [], "\(issues.count) reported, \(issues.count - left.count) excused")
-        for finding in open {
-            let named = left.filter { finding.names($0, among: left) }.map(\.description)
-            XCTExpectFailure("\(finding.finding), open: \(finding.issue)", strict: true) {
-                XCTAssertEqual(named, [], "\(finding.finding) is still open")
-            }
+        XCTAssertEqual(left.map(\.description), [], "\(issues.count) reported, \(issues.count - left.count) excused")
+    }
+}
+
+extension ScreenAudit {
+    /// Criterion 7 (S2b): in the Accessibility XXXL way, and in no other, the screen is pictured and each of its
+    /// primary `actions` is scrolled to (`Steps.scrollUntilHittable`) and can be tapped.
+    func reach(_ steps: Steps, screen: String, _ actions: [XCUIElement]) {
+        guard way == .largest else {
+            return
+        }
+        steps.attachScreenshot(named: "\(screen), \(way.rawValue): primary actions")
+        for action in actions {
+            steps.scrollUntilHittable(action)
         }
     }
 }

@@ -8,16 +8,19 @@ struct WeekStartRow: View {
     let weekStart: SettingsModel.WeekStart
     let send: (SettingsAction) -> Void
 
+    /// F15-S2-12: the row's title and line are drawn inside the menu's button, which speaks for them. Beside it, as
+    /// texts no element held, the system's audit reported them "Potentially inaccessible" (found by hiding the rows
+    /// one by one).
     var body: some View {
         SettingsRow {
-            SettingsRowLayout {
-                SettingsRowLabel(title: weekStart.title, detail: weekStart.detail)
-            } control: {
-                Menu {
-                    Picker(weekStart.title, selection: selection) {
-                        ForEach(weekStart.days) { Text($0.title).tag($0.id) }
-                    }
-                } label: {
+            Menu {
+                Picker(weekStart.title, selection: selection) {
+                    ForEach(weekStart.days) { Text($0.title).tag($0.id) }
+                }
+            } label: {
+                SettingsRowLayout {
+                    SettingsRowLabel(title: weekStart.title, detail: weekStart.detail)
+                } control: {
                     HStack(spacing: LedgerSpacing.xs) {
                         Text(weekStart.value)
                             .ledgerFont(.body)
@@ -27,11 +30,14 @@ struct WeekStartRow: View {
                     .foregroundStyle(LedgerColor.ink)
                     .ledgerHitTarget(alignment: .trailing)
                 }
-                .tint(LedgerColor.ink)
-                .accessibilityLabel(weekStart.title)
-                .accessibilityValue(weekStart.value)
-                .accessibilityHint(weekStart.detail)
+                // A menu's label centres the lines that wrap; the row's line starts at the leading edge.
+                .multilineTextAlignment(.leading)
+                .contentShape(Rectangle())
             }
+            .tint(LedgerColor.ink)
+            .accessibilityLabel(weekStart.title)
+            .accessibilityValue(weekStart.value)
+            .accessibilityHint(weekStart.detail)
         }
     }
 

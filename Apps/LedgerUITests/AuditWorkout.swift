@@ -18,23 +18,27 @@ final class AuditWorkout: XCTestCase {
     /// The card as the workout opens, its swap sheet, and the rest a logged set starts.
     @MainActor
     func test_cardSwapSheetAndRestPanel_passTheAudit() throws {
-        let audit = ScreenAudit(for: self, exclusions: Self.exclusions, open: [Self.headerPillsBroken])
+        let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
         try audit.threeWays(launching: Self.arguments) { steps in
             let app = steps.app
             steps.startSampleWorkout()
             XCTAssertTrue(steps.cardTitle.waitForExistence(timeout: 10))
             try audit.audit(steps, screen: "solo card")
+            let swap = app.buttons["workout.card.swap"]
+            audit.reach(steps, screen: "solo card", [steps.minimize, Self.finish(app), app.buttons["Log set 1"], swap])
 
-            app.buttons["workout.card.swap"].tap()
+            swap.tap()
             let row = app.buttons["workout.swap.row.0"]
             XCTAssertTrue(row.waitForExistence(timeout: 10), "the swap sheet's rows are read")
             try audit.audit(steps, screen: "swap sheet")
+            audit.reach(steps, screen: "swap sheet", [app.buttons["workout.swap.cancel"], row])
             app.buttons["workout.swap.cancel"].tap()
             XCTAssertTrue(row.waitForNonExistence(timeout: 5), "the sheet went down")
 
             steps.logSet("1")
             XCTAssertTrue(steps.skip.waitForExistence(timeout: 5), "a logged set starts a rest")
             try audit.audit(steps, screen: "rest panel", pinned: .restPanel(in: app))
+            audit.reach(steps, screen: "rest panel", [app.buttons["workout.rest.extend"], steps.skip])
             steps.skipRest()
             steps.discard()
         }
@@ -43,7 +47,7 @@ final class AuditWorkout: XCTestCase {
     /// The superset block, the finish sheet over a workout with a set logged, and the receipt once it is saved.
     @MainActor
     func test_supersetFinishSheetAndReceipt_passTheAudit() throws {
-        let audit = ScreenAudit(for: self, exclusions: Self.exclusions, open: [Self.headerPillsBroken])
+        let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
         try audit.threeWays(launching: Self.arguments) { steps in
             let app = steps.app
             steps.startSampleWorkout()
@@ -53,21 +57,29 @@ final class AuditWorkout: XCTestCase {
             lat.tap()
             XCTAssertTrue(app.staticTexts["workout.block.title"].waitForExistence(timeout: 5), "the superset block")
             try audit.audit(steps, screen: "superset block")
+            audit.reach(steps, screen: "superset block", [Self.finish(app), app.buttons["Log set A1"]])
 
             steps.logSet("A1")
             app.buttons["workout.header.finish"].tap()
             let save = app.buttons["workout.finish.save"].firstMatch
             XCTAssertTrue(save.waitForExistence(timeout: 5), "End workout? is up")
             try audit.audit(steps, screen: "finish sheet")
+            audit.reach(steps, screen: "finish sheet", [app.buttons["workout.finish.discard"].firstMatch, save])
             save.tap()
             XCTAssertTrue(app.buttons["workout.receipt.done"].waitForExistence(timeout: 10), "the receipt shows")
             try audit.audit(steps, screen: "receipt")
+            audit.reach(steps, screen: "receipt", [app.buttons["workout.receipt.done"]])
             steps.closeReceipt()
         }
     }
 }
 
 extension AuditWorkout {
+    /// The header's "Finish".
+    static func finish(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons["workout.header.finish"]
+    }
+
     /// The screens whose header the audit reported "Minimize" on.
     static let headerScreens: Set = ["solo card", "rest panel", "superset block"]
 
@@ -146,21 +158,11 @@ extension AuditWorkout {
     static let headerPills: Set = ["workout.header.minimize", "workout.header.finish"]
 
     /// F15-S2-4 on the header's "Minimize" and "Finish", the pills' button role: each whole on one line at the
-    /// default size (measured in light; the dark way is measured in S2a's second phase). At Accessibility XXXL each
-    /// breaks inside the word: `headerPillsBroken`.
+    /// default size, light and dark. At Accessibility XXXL nothing is reported on them since S2b laid the header out
+    /// for the accessibility sizes (F15-S2-10, fixed: `HeaderRowLayout`); a report there fails.
     static var headerPillsWhole: ScreenExclusion {
         ScreenExclusion(finding: "F15-S2-4", issue: "Text clipped on the header's pills at the default size") {
             $0.summary == "Text clipped" && headerPills.contains($0.identifier) && $0.way != .largest
-                && headerScreens.contains($0.screen)
-        }
-    }
-
-    /// F15-S2-10, open: at Accessibility XXXL "Minimize" is drawn "Minimi / ze" and "Finish" "Finis / h" (the audit
-    /// reported "Finish" from S2a's second round on). A real layout finding, an expected failure until the follow-up
-    /// PR after S2 lays the header's row out for the accessibility sizes.
-    static var headerPillsBroken: ScreenExclusion {
-        ScreenExclusion(finding: "F15-S2-10", issue: "the header's pills break inside the word at Accessibility XXXL") {
-            $0.summary == "Text clipped" && headerPills.contains($0.identifier) && $0.way == .largest
                 && headerScreens.contains($0.screen)
         }
     }

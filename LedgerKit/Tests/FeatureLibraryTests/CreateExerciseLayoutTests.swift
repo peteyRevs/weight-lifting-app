@@ -1,8 +1,10 @@
 #if os(iOS) && DEBUG
     @testable import FeatureLibrary
+    import LedgerDesign
     import LedgerSnapshotTesting
     import SwiftUI
     import Testing
+    import UIKit
 
     /// F12 S3, by measurement, as `LibraryLayoutTests` measures the Library: at every text size, with Bold Text and
     /// laid out right to left (`LibraryLayoutTests.Setting.all`, through `TestSweep`), every stop of every state of
@@ -40,6 +42,31 @@
             } else {
                 #expect(cancel.midY > title.minY && cancel.midY < title.maxY, "Cancel stands beside the title")
             }
+        }
+
+        /// F15-S2-11: at Accessibility XXXL the one-line field drew "Landmine Squ…". The name is drawn as text that
+        /// wraps under the field, so the field grows by every line the name takes beyond its first. At the
+        /// accessibility sizes, where one line and its padding are taller than the 44 pt target, which would
+        /// otherwise take up some of the growth.
+        @Test(
+            "A long name is drawn whole: the field grows by the lines the name wraps onto",
+            arguments: [DynamicTypeSize.accessibility3, .accessibility5]
+        )
+        func name_longerThanItsLine_isDrawnWhole(_ size: DynamicTypeSize) {
+            let width: CGFloat = 353 // the iPhone 17's width inside the sheet's margins
+            let inner = width - 2 * LedgerSpacing.m
+            func height(_ view: some View, _ wide: CGFloat) -> CGFloat {
+                let sized = view.frame(width: wide).environment(\.dynamicTypeSize, size)
+                return UIHostingController(rootView: sized).sizeThatFits(in: CGSize(width: wide, height: 5000)).height
+            }
+            func field(_ text: String) -> some View {
+                CreateExerciseNameField(model: .init(label: "Name", text: text, problem: nil)) { _ in }
+            }
+            let name = "Landmine Squeeze Press with a Three-Second Pause"
+            let lines = height(Text(name).ledgerFont(.body), inner) - height(Text("N").ledgerFont(.body), inner)
+            let grows = height(field(name), width) - height(field("N"), width)
+            #expect(lines > 0, "the name is longer than one line at \(size)")
+            #expect(grows >= lines - 0.5, "the field grows \(grows) pt for \(lines) pt of further lines at \(size)")
         }
     }
 #endif

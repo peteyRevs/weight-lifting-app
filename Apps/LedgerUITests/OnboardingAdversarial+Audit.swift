@@ -93,6 +93,9 @@ extension OnboardingAdversarial {
                     continueTo(heading, in: app)
                 }
                 findings += try audit(app, step: index + 1, appearance: name)
+                if arguments == Self.largestText {
+                    expectTheActionsInReach(app, step: index + 1, appearance: name)
+                }
             }
             app.terminate()
         }
@@ -106,6 +109,21 @@ extension OnboardingAdversarial {
         add(attachment)
         let left = findings.filter { Self.exclusion(for: $0) == nil }.map(\.description)
         XCTAssertEqual(left, [], "at \(size): \(findings.count) reported, \(findings.count - left.count) excused")
+    }
+
+    /// F15 S2b, criterion 7: at the largest size the step is pictured, and its actions, "Skip setup", Continue or
+    /// "Start training" (pinned) and, after the first step, "Back" (the page's top, where each step opens), can be
+    /// tapped.
+    @MainActor
+    private func expectTheActionsInReach(_ app: XCUIApplication, step: Int, appearance: String) {
+        let picture = XCTAttachment(screenshot: app.screenshot())
+        picture.name = "step \(step), \(appearance), the largest text size: primary actions"
+        picture.lifetime = .keepAlways
+        add(picture)
+        let actions = ["onboarding.skip", "onboarding.cta"] + (step > 1 ? ["onboarding.back"] : [])
+        for action in actions {
+            XCTAssertTrue(app.buttons[action].isHittable, "step \(step), \(appearance): \(action) cannot be tapped")
+        }
     }
 
     /// One audit of the step on screen: every issue, with where the page ends and where the options stand.
