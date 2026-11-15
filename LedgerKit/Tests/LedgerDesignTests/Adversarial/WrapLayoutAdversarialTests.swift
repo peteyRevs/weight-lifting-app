@@ -154,14 +154,12 @@ nonisolated struct WrapLayoutAdversarialTests {
         #expect(nan.frames.count == 3 && nan.size.width.isFinite, "a width that is no number is no width")
     }
 
-    @Test("Five thousand children are arranged in under a second")
-    func arrangement_manyChildren_isLinear() {
+    @Test("Five thousand children are each given a frame")
+    func arrangement_manyChildren_framesEach() {
         var random = SplitMix64(seed: 5000)
         let sizes = Self.sizes(5000, upTo: 90, using: &random)
         let layout = WrapLayout(spacing: 8, lineSpacing: 6)
-        var frames = 0
-        let taken = ContinuousClock().measure { frames = layout.arrangement(of: sizes, in: 402).frames.count }
-        #expect(frames == 5000)
-        #expect(taken < .seconds(1), "\(taken)")
+        // Its time is `WrapLayoutPerformanceTests`' (nightly lane only).
+        #expect(layout.arrangement(of: sizes, in: 402).frames.count == 5000)
     }
 }

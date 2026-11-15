@@ -146,7 +146,7 @@ nonisolated extension ExercisePickerModelAdversarialTests {
         }
     }
 
-    @Test("Ten thousand stored exercises, a thousand of them picked, are one model, built in under two seconds")
+    @Test("Ten thousand stored exercises, a thousand of them picked, are one model")
     func tenThousandExercises_areOneModel() {
         var generator = SeededGenerator(seed: 8)
         let exercises = (0 ..< 10000).map { AdvPicker.exercise($0, using: &generator) }
@@ -155,14 +155,12 @@ nonisolated extension ExercisePickerModelAdversarialTests {
             exercises: exercises, dayExercises: Set(exercises.suffix(500).map(\.id)), query: "", muscle: nil,
             equipment: nil, picks: picks + picks, locale: Locale(identifier: "en_US")
         )
-        let clock = ContinuousClock()
-        var model: ExercisePickerModel?
-        let taken = clock.measure { model = ExercisePickerPresentation.make(input) }
-        #expect(model?.rows.count == 10000)
-        #expect(model?.foot.title == "Add 1,000 exercises")
-        #expect(model?.foot.action == .add(picks))
-        #expect(model?.rows.count(where: \.isPicked) == 1000)
-        #expect(taken < .seconds(2), "\(taken)")
+        // Its time is `ExercisePickerPerformanceTests`' (nightly lane only).
+        let model = ExercisePickerPresentation.make(input)
+        #expect(model.rows.count == 10000)
+        #expect(model.foot.title == "Add 1,000 exercises")
+        #expect(model.foot.action == .add(picks))
+        #expect(model.rows.count(where: \.isPicked) == 1000)
     }
 
     @Test("An exercise stored twice under one id does not trap and is added once (question F11-S8-Q1: two rows)")

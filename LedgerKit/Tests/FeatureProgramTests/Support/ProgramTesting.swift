@@ -13,6 +13,16 @@ extension Tag {
     @Tag static var property: Self
     /// Suites that compare against committed reference images.
     @Tag static var snapshot: Self
+    /// A timing: nightly lane only (testing-strategy §6).
+    @Tag static var performance: Self
+}
+
+/// The lane a test plan runs in, from its `LEDGER_TEST_LANE` variable (testing-strategy §6).
+nonisolated enum TestLane {
+    /// `.performance` tests run only in the nightly plans; the PR plans and `swift test` skip them.
+    static var runsSlowTests: Bool {
+        ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly"
+    }
 }
 
 /// Deterministic SplitMix64 generator for property tests (testing-strategy §3 rule 5).
