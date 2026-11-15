@@ -99,7 +99,7 @@ final class ScreenAudit {
     private let exclusions: [ScreenExclusion]
     private let open: [ScreenExclusion]
     private(set) var issues: [ScreenIssue] = []
-    private var way = AuditWay.light
+    private(set) var way = AuditWay.light
 
     /// `open` names real findings not fixed yet, each by its finding ID: what one names is an expected failure
     /// (strict), so the test stays able to catch everything else, and fails the day the finding is fixed, so that
@@ -121,8 +121,13 @@ final class ScreenAudit {
     /// screen and calls `audit(_:screen:)` on it. Then the verdict: every issue no exclusion excuses fails. The
     /// report of every issue is kept with the result at the test's end, also when a walk stopped midway.
     func threeWays(launching arguments: [String], walk: (Steps) throws -> Void) throws {
+        try run(AuditWay.allCases, launching: arguments, walk: walk)
+    }
+
+    /// `threeWays`, in `ways` only.
+    func run(_ ways: [AuditWay], launching arguments: [String], walk: (Steps) throws -> Void) throws {
         test.addTeardownBlock { self.attachReport() }
-        for next in AuditWay.allCases {
+        for next in ways {
             way = next
             let steps = Steps(launching: arguments + next.arguments, for: test)
             // Today stands on the paper ground in light: the one screen every walk starts on where the appearance
@@ -135,9 +140,11 @@ final class ScreenAudit {
         verdict()
     }
 
-    /// One audit, every type, of what is on screen, named `screen`. The screen and each reported element are
-    /// pictured and kept. `pinned` is a part pinned over the page's end, if the screen has one.
-    func audit(_ steps: Steps, screen: String, pinned: PinnedPart? = nil) throws {
+    /// One audit, of every type (or of `types`), of what is on screen, named `screen`. The screen and each reported
+    /// element are pictured and kept. `pinned` is a part pinned over the page's end, if the screen has one.
+    func audit(
+        _ steps: Steps, screen: String, pinned: PinnedPart? = nil, types: XCUIAccessibilityAuditType = .all
+    ) throws {
         let app = steps.app
         let name = "\(screen), \(way.rawValue)"
         Self.settle(app.scrollViews.firstMatch.exists ? app.scrollViews.firstMatch : app)
@@ -149,7 +156,7 @@ final class ScreenAudit {
         } ?? .null
         let pinnedNames: (identifiers: Set<String>, labels: Set<String>) = pinned?.names ?? ([], [])
         var pictured: [(String, XCUIElement)] = []
-        try app.performAccessibilityAudit(for: .all) { issue in
+        try app.performAccessibilityAudit(for: types) { issue in
             var found = ScreenIssue(
                 way: self.way,
                 screen: screen,
@@ -241,9 +248,10 @@ final class ScreenAudit {
         }
     }
 
-    /// The page's lowest text or button with a label: what a reader reads last.
+    /// The page's lowest text, button or field with a label: what a reader reads last.
     private static func lowest(on page: XCUIElement) -> XCUIElement? {
         let elements = page.staticTexts.allElementsBoundByIndex + page.buttons.allElementsBoundByIndex
+            + page.textFields.allElementsBoundByIndex
         return elements.filter { $0.frame.height > 0 && !$0.label.isEmpty }.max { $0.frame.maxY < $1.frame.maxY }
     }
 
@@ -272,6 +280,20 @@ final class ScreenAudit {
             XCTExpectFailure("\(finding.finding), open: \(finding.issue)", strict: true) {
                 XCTAssertEqual(named, [], "\(finding.finding) is still open")
             }
+        }
+    }
+}
+
+extension ScreenAudit {
+    /// Criterion 7 (S2b): in the Accessibility XXXL way, and in no other, the screen is pictured and each of its
+    /// primary `actions` is scrolled to (in `page`, else the screen's first scroll view) and can be tapped.
+    func reach(_ steps: Steps, screen: String, _ actions: [XCUIElement], in page: XCUIElement? = nil) {
+        guard way == .largest else {
+            return
+        }
+        steps.attachScreenshot(named: "\(screen), \(way.rawValue): primary actions")
+        for action in actions {
+            steps.scrollIntoReach(action, in: page)
         }
     }
 }

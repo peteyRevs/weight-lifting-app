@@ -46,7 +46,6 @@ final class AuditExclusionsTests: XCTestCase {
     func test_programAndLibraryExclusions_excuseNothingWider() {
         let underBar = CGRect(x: 58, y: 765, width: 210, height: 104)
         let underButton = CGRect(x: 24, y: 753, width: 156, height: 18)
-        let name = "library.create.name"
         check(AuditProgramLibrary.exclusions, excused: [
             Self.issue("Day editor", Self.dynamicType, "DAY 2 OF 4"),
             Self.issue("Day editor", Self.clipped, "Day name", type: .textField),
@@ -58,11 +57,8 @@ final class AuditExclusionsTests: XCTestCase {
                 frame: underButton,
                 pinned: Self.sheetButton
             ),
-            Self.issue("New exercise", Self.nearly, "Save", type: .button),
-            Self.issue("Edit exercise", Self.clipped, "", type: .textField, identifier: name)
+            Self.issue("New exercise", Self.nearly, "Save", type: .button)
         ], nearMisses: [
-            Self.issue("Edit exercise", Self.clipped, "", type: .textField, identifier: name, way: .largest),
-            Self.issue("New exercise", Self.contrast, "", type: .textField, identifier: name),
             Self.issue("Day editor", Self.clipped, "Lower A — Squat focus"),
             Self.issue("Day editor", Self.contrast, "Romanian Deadlift"),
             Self.issue("Day editor", Self.contrast, "Program", type: .button, frame: underBar),
@@ -84,6 +80,21 @@ final class AuditExclusionsTests: XCTestCase {
             Self.issue("Day editor", Self.contrast, "Delete day", frame: CGRect(x: 26, y: 770, width: 90, height: 30)),
             Self.issue("New exercise", Self.contrast, "Save", type: .button),
             Self.issue("Day editor", Self.nearly, "Save", type: .button)
+        ])
+    }
+
+    /// Edit exercise's name, drawn whole in every way (F15-S2-4; F15-S2-11 fixed in S2b): on that field only.
+    @MainActor
+    func test_editExerciseName_isExcusedInEveryWay_onThatFieldOnly() {
+        let name = "library.create.name"
+        check(AuditProgramLibrary.exclusions, excused: [
+            Self.issue("Edit exercise", Self.clipped, "", type: .textField, identifier: name),
+            Self.issue("Edit exercise", Self.clipped, "", type: .textField, identifier: name, way: .largest)
+        ], nearMisses: [
+            Self.issue("New exercise", Self.clipped, "", type: .textField, identifier: name, way: .largest),
+            Self.issue("New exercise", Self.contrast, "", type: .textField, identifier: name),
+            Self.issue("Edit exercise", Self.contrast, "", type: .textField, identifier: name),
+            Self.issue("Edit exercise", Self.clipped, "", type: .textField, identifier: "settings.deleteAll.field")
         ])
     }
 
@@ -118,8 +129,25 @@ final class AuditExclusionsTests: XCTestCase {
             Self.issue("workout detail", Self.contrast, "Edit", type: .button, frame: edit),
             Self.issue("edit sets", Self.contrast, "5", frame: high, pinned: Self.sheetButton),
             Self.issue("workout detail", Self.dynamicType, "Upper A — Push focus"),
-            // F15-S2-12 is an open finding, never an exclusion.
+            // F15-S2-12, fixed in S2b: a drawn text no element holds is never excused.
             ScreenIssue(screen: "Settings", type: .elementDetection, summary: "Potentially inaccessible text")
+        ])
+    }
+
+    /// S2b: `DynamicType`'s screens at Accessibility XXXL.
+    @MainActor
+    func test_dynamicTypeExclusions_excuseNothingWider() {
+        check(DynamicType.exclusions, excused: [
+            Self.issue("Today", Self.clipped, "Week 5 of 8 · ~38 min", way: .largest),
+            Self.issue("Today, rest day", Self.clipped, "SCHEDULED REST", way: .largest),
+            Self.issue("Program builder", Self.clipped, "BLOCK · 8 WEEKS", way: .largest)
+        ], nearMisses: [
+            Self.issue("Today", Self.clipped, "SCHEDULED REST", way: .largest),
+            Self.issue("History", Self.clipped, "Lower A — Squat focus", way: .largest),
+            Self.issue("Program builder", Self.clipped, "Upper / Lower", type: .textField, way: .largest),
+            Self.issue("Today", Self.contrast, "Week 5 of 8 · ~38 min", way: .largest),
+            Self.issue("Today, rest day", Self.dynamicType, "SCHEDULED REST", way: .largest),
+            Self.issue("Today", Self.clipped, "Settings", type: .image, way: .largest)
         ])
     }
 }

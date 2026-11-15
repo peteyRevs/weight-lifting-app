@@ -201,13 +201,13 @@ M1-exit run are S2b's.
 | F15-S2-3 | every family | Dynamic Type partially unsupported, the eyebrows | 10 pt at the default size, 37 pt tall at XXXL | Excluded by label (F09-S5-2) |
 | F15-S2-4 | every family | Text clipped, texts in the caption, eyebrow, button, heading and title roles; the Day name and Edit exercise name fields at the default size | every glyph whole in the element's picture | Excluded by label or identifier (F09-S5-3/4) |
 | F15-S2-5 | Day editor (XXXL), exercise history, workout detail, Settings | Contrast failed under the tab bar | inside the bar's frame; each page scrolls clear (proved in the walk) | Excluded by frame, never a tab |
-| F15-S2-6 | rest panel, exercise picker, edit sets | Contrast failed on a line under a pinned part | hidden in the pictures; the panel starts 17 pt over `workout.rest.status`, a sheet's rule 11 pt over its button (margin 24) | Excluded by frame; the rest page scrolls clear (`WorkoutRest`); **a sheet's last row scrolling clear of its button is not proven**: S2b's reachability pass |
+| F15-S2-6 | rest panel, exercise picker, edit sets | Contrast failed on a line under a pinned part | hidden in the pictures; the panel starts 17 pt over `workout.rest.status`, a sheet's rule 11 pt over its button (margin 24) | Excluded by frame; the rest page scrolls clear (`WorkoutRest`), and every sheet with a pinned foot scrolls clear of it in every way (`expectScrollsClear`: the picker and edit sets from S2a's review round 1; New exercise, Bar and plates and Delete all data from S2b) |
 | F15-S2-7 | rest panel, finish sheet, New/Edit exercise | Contrast nearly passed, "Skip rest", "Save workout", "Save" | white on the accent, 3.10:1 (16 pt bold) | Excluded by label (F09-S5-1) |
 | F15-S2-8 | workout detail | Contrast failed and Dynamic Type partially unsupported, the system's bar button "Edit" | (0, 0, 0) on the glass's (253, 253, 249), 20.5:1 | Excluded by identifier |
 | F15-S2-9 | receipt | Hit area is too small, the date (12 pt) | no control; VoiceOver's escape is set on the receipt's stack and so on each element (`ReceiptTests.escape_isDone`) | Excluded |
-| F15-S2-10 | cover header, XXXL | Text clipped, "Minimize" | drawn "Minimi / ze"; "Finish" is drawn "Finis / h" (not reported) | **Open**, expected failure; follow-up PR lays the header out for the accessibility sizes (layout: for Pete). Pictures: "solo card, light, Accessibility XXXL: screen" |
-| F15-S2-11 | Edit exercise, XXXL | Text clipped, the name field | "Landmine Squ…" (whole at the default size) | **Open**, expected failure; follow-up PR ports Program's `NameField` pattern or moves it to LedgerDesign |
-| F15-S2-12 | Settings, default size | Potentially inaccessible text, twice, no element, no frame | still there scrolled to the end (not the bar); absent at XXXL. **Hypothesis refuted**: with SegmentedChoice's options labelled by their drawn "LB"/"KG" (an uncommitted experiment, reverted) both issues remain | **Open, unexplained**; expected failure on exactly two per way, a third or one elsewhere fails |
+| F15-S2-10 | cover header, XXXL | Text clipped, "Minimize" | drawn "Minimi / ze"; "Finish" is drawn "Finis / h" (not reported) | **Fixed in S2b**: `HeaderRowLayout`, one row while it fits, else the time over the two buttons, never a broken word (layout: for Pete); pinned by `WorkoutHeaderLayoutTests` at Accessibility 3 and 5 |
+| F15-S2-11 | Edit exercise, XXXL | Text clipped, the name field | "Landmine Squ…" (whole at the default size) | **Fixed in S2b**: the name drawn as wrapping text under the field (`NameField`'s pattern, ported); `CreateExerciseLayoutTests.name_longerThanItsLine_isDrawnWhole`. The field's own hidden line is still reported, and excused as F15-S2-4 (measured whole) |
+| F15-S2-12 | Settings, default size | Potentially inaccessible text, twice, no element, no frame | still there scrolled to the end (not the bar); absent at XXXL. **Hypothesis refuted**: with SegmentedChoice's options labelled by their drawn "LB"/"KG" (an uncommitted experiment, reverted) both issues remain | **Fixed in S2b**: bisected to the "Week starts on" row's title and line, drawn beside its menu and hidden from VoiceOver; now drawn inside the menu's button |
 
 Round 1 reported 151 issues on 13 screens with nothing excluded; the last run, 0 unexcused.
 
@@ -387,3 +387,110 @@ leg 5.
   ended 1 pt under the foot's rule by its frame, its text well above).
 - **N2.** The letter's test resolves the colours in both schemes and asserts 4.5:1 on both fills (it replaces the
   scheme-only test). **N3.** The report's open findings are counted among the issues not excused. **N4/N5** above.
+
+## S2b — as built (G1 implementer, 2026-11-14)
+
+Branch `feat/F15-s2b`, cut from `main` at `80b330c` (S2a merged). Scope from the orchestrator's brief: fix the open
+findings, prove sheet reachability, criterion 7 (`DynamicType`), criterion 8 (`docs/accessibility-labels.md` and its
+source test), the §2.7 rewrite, and nightly placement. One PR (the orchestrator's ruling on the plan); the M1-exit
+nightly link is the orchestrator's, after merge.
+
+### What landed
+
+- **F15-S2-10, fixed.** `WorkoutHeader`'s row is `HeaderRowLayout`, a `Layout` of its three subviews, each at its own
+  width: one row while they fit (the time centred between the buttons, as before); else the time on its own line
+  over "Minimize" and "Finish" at either edge; else each on its own line. No smaller type, no truncation, no
+  tracking. The lines touch: the pills' own padding parts them, and the rest panel's room tests (ruling 17: at least
+  120 pt of the page, and the page's measured room) failed by 4 pt with an 8 pt gap. VoiceOver's order stays
+  Minimize, time, Finish (sort priorities inside a containing element: by itself VoiceOver read the time first when
+  it stood above, which `WorkoutAccessibilityTests` caught past an hour at Accessibility 3). `WorkoutHeaderLayoutTests`: at
+  Accessibility 3 and 5, in all eight settings (both widths, bold, right to left), each button is as wide as by
+  itself and no taller, and nothing leaves the phone or overlaps; at the default size it is one row.
+  - First built with `ViewThatFits` (three arrangements). The audit then reported "Dynamic Type font sizes are
+    partially unsupported" on "Minimize", "Finish" and the time at the default size, light and dark, and three
+    element-less "Text clipped" at Accessibility XXXL: the header held three copies of its controls. A layout
+    keeps one of each; the audit reports nothing on the header in any way now.
+- **F15-S2-11, fixed, by porting `NameField`'s pattern** into `CreateExerciseNameField`, not by moving `NameField`
+  to LedgerDesign: moving it would re-point the pins of `ProgramViewsSourceAdversarialTests` and four Program test
+  files that read `FeatureProgram/Views/NameField.swift`, and the Library's field differs (body role, outlined box,
+  identifier, a store-owned text and no draft). Unfocused, the name is drawn as wrapping text under the field,
+  whose own text is `inkConcealed`; focused, the field draws it on one line. `CreateExerciseLayoutTests
+  .name_longerThanItsLine_isDrawnWhole` (Accessibility 3 and 5: the field grows by every further line the name
+  takes). At Accessibility XXXL the audit still reports "Text clipped" on the field (its hidden one-line text); the
+  picture shows "Landmine / Squeeze Press" whole, so F15-S2-4's `wholeName` now takes every way.
+- **F15-S2-12, fixed.** Bisected in Debug runs (reverted), light only, Settings' audit:
+  - Units and Week starts on hidden: both issues gone;
+  - Units alone hidden: both remain;
+  - Week starts on alone hidden: both gone.
+  The two were the row's title and line (`SettingsRowLabel`, hidden from VoiceOver), drawn beside the menu that
+  speaks for them. They are now drawn inside the menu's button (a tap anywhere on the row opens the menu); the label,
+  value and hint VoiceOver reads are unchanged. Units' label, drawn the same way beside `SegmentedChoice`, is not
+  reported. The open finding and its test are gone.
+- **Runner.** `ScreenAudit.run(_:launching:walk:)` takes the ways (`threeWays` calls it with all three);
+  `audit(_:screen:pinned:types:)` takes the audit types; `reach(_:screen:_:in:)`, in the Accessibility XXXL way only,
+  pictures the screen and scrolls each primary action into reach (`Steps.scrollIntoReach`, up then down) and
+  asserts it is hittable. `expectScrollsClear`'s "lowest element" counts text fields too (Delete all's last row is
+  its field).
+- **Criterion 7.** In S2a's walks, the XXXL way reaches each screen's primary actions (the orchestrator's ruling: no
+  second clip audit of a screen S2a audits). `DynamicType.swift` audits `.textClipped` at Accessibility XXXL on the
+  screens no audit covers at that size, and reaches their actions: Today on a session day (Settings, Start
+  workout), the Program builder (+ Add training day), the Library root (New exercise, search; audited by
+  `LibraryAuditAdversarial`), the History list (the newest workout), Today on a rest day (Settings, Train
+  off-schedule) and the off-schedule sheet (Cancel, a day). Onboarding is audited at the largest size by
+  `OnboardingAdversarial`, which taps its pinned button on every step. The text size is UIKit's launch argument,
+  `-UIPreferredContentSizeCategoryName`, per launch (no new seam).
+- **Sheet reachability.** `expectScrollsClear` in every way (default and Accessibility XXXL included) on New exercise
+  (last row: the movement pattern's chips), Bar and plates ("Reset to standard") and Delete all data (its field), on
+  top of S2a's picker and edit sets.
+- **Criterion 8.** `docs/accessibility-labels.md` and `AccessibilityLabelsDocTests` (LedgerAppKitTests, a source
+  rule like `ModuleCopyTests`).
+- §2.7 rewritten; `nightly-shards.txt`: `AuditProgramLibrary` moves to leg 5.
+
+### Findings (S2b)
+
+| ID | Screen | Issue | Measured | Verdict |
+|---|---|---|---|---|
+| F15-S2-4 (S2b) | Today, Today rest day, Program builder (XXXL) | Text clipped: the date, "Week 5 of 8 · ~38 min", "Lower A — Squat focus"; "Thursday, September 17", "SCHEDULED REST", "No session today"; "BLOCK · 8 WEEKS" | every glyph whole in the screen's picture, each wrapped between words | Excluded by label per screen (`DynamicType.exclusions`), near misses in `AuditExclusionsTests` |
+| F15-S2-4 (S2b) | Edit exercise (XXXL) | Text clipped, the name field | drawn whole on two lines | `wholeName` takes every way |
+
+No layout bug was found among the clipped texts: each wraps between words and draws whole.
+
+### Sanctioned edits
+
+- `AuditWorkout`, `AuditProgramLibrary`, `AuditHistorySettings`: the open findings F15-S2-10, 11 and 12 removed (fixed),
+  with `AuditExclusionsTests+Open.swift`; their walks gain `reach` and the new scrolls-clear proofs.
+- `AuditExclusionsTests`: `Edit exercise`'s name at XXXL moves from near miss to excused (re-pinned: F15-S2-11 fixed,
+  measured whole).
+- Five `CreateExerciseSnapshotTests` references re-recorded: the name is drawn by a text, not the field (about 1 pt
+  higher at the default size), and wraps whole at Accessibility 3.
+- Eight `SettingsSnapshotTests` references re-recorded: "Week starts on"'s row is the menu's label now; its value
+  "Sunday" moves by a fraction of a point (the difference image shows only its glyphs' edges). The menu centred the
+  row's wrapped line until the label took `.multilineTextAlignment(.leading)`.
+- No workout reference changed: the header's layout at `.large`, `.xLarge` and the two `.accessibility3` covers is
+  the one row it was.
+
+### Times (local Mac, iPhone 17, iOS 27.0; the last run of each, on the final code)
+
+| Test | Seconds |
+|---|--:|
+| AuditWorkout.test_cardSwapSheetAndRestPanel_passTheAudit | 169.5 |
+| AuditWorkout.test_supersetFinishSheetAndReceipt_passTheAudit | 127.9 |
+| AuditProgramLibrary.test_dayEditorAndItsPicker_passTheAudit | 323.5 |
+| AuditProgramLibrary.test_historyNewAndEditExercise_passTheAudit | 539.1 |
+| AuditHistorySettings.test_workoutDetailAndEditSets_passTheAudit | 296.3 |
+| AuditHistorySettings.test_settingsAndBarAndPlates_passTheAudit | 158.1 |
+| DynamicType.test_todayBuilderLibraryAndHistory_atAccessibilityXXXL | 88.1 |
+| DynamicType.test_restDayAndOffScheduleSheet_atAccessibilityXXXL | 22.7 |
+| AuditExclusionsTests (6 tests) | under 0.1 each |
+| Smoke (4 tests) | 101.7 |
+
+The reach steps and the three new scrolls-clear proofs add about 375 s to S2a's audits (1,175 s before, 1,614 s
+now), and `DynamicType` adds 111 s. **Nightly placement** (runner time estimated as local × 1.5, the orchestrator's
+rule; `docs/ci-cd.md` measured 2.4–3.1 times on package targets, so these are lower bounds): `AuditProgramLibrary`
+(863 s, ~1,290 on the runner) moves to leg 5. Leg 4 holds `LedgerUITests`' other classes (1,840) plus `Flows`,
+`AuditWorkout`, `AuditHistorySettings` and `DynamicType` (~1,525) and the package targets (775): about 4,140 s. Leg 5
+is about 4,820 s (2,244 + 1,277 + 1,290). Both are under the ~6,300 s rebalance mark.
+
+Other gates on the final code: `FeatureWorkoutTests` (726 tests, 3 known issues), `FeatureLibraryTests` (159),
+`FeatureSettingsTests` (156) and `LedgerAppKitTests` (426) whole on the PR plan with recording off, snapshots included:
+green. `check.sh --lint-only`: green. `pr-shards.adv.sh`: 31 passed.

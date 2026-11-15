@@ -24,16 +24,18 @@ final class AuditHistorySettings: XCTestCase {
             newest.tap()
             XCTAssertTrue(app.staticTexts["history.workout.title"].waitForExistence(timeout: 5), "its detail")
             try audit.audit(steps, screen: "workout detail")
+            let edit = app.buttons["history.workout.edit"]
+            audit.reach(steps, screen: "workout detail", [app.buttons["history.workout.delete"], edit])
             audit.expectScrollsClear(steps, screen: "workout detail", anchor: "LOGGED", last: "Delete workout") {
                 app.tabBars.firstMatch.frame.minY
             }
 
-            let edit = app.buttons["history.workout.edit"]
             XCTAssertTrue(edit.waitForExistence(timeout: 5))
             edit.tap()
             XCTAssertTrue(app.buttons["history.edit.save"].waitForExistence(timeout: 5), "the edit-sets sheet")
             let foot = PinnedPart.sheetFoot(app.buttons["history.edit.save"])
             try audit.audit(steps, screen: "edit sets", pinned: foot)
+            audit.reach(steps, screen: "edit sets", [app.buttons["history.edit.cancel"], foot.top])
             // The sheet's last line: the reps of Cable Lateral Raise's last set.
             audit.expectScrollsClear(
                 steps, screen: "edit sets", anchor: "Set 1 weight", last: "16"
@@ -44,22 +46,31 @@ final class AuditHistorySettings: XCTestCase {
     /// Today's gear: Settings; then "Bar and plates" and its sheet.
     @MainActor
     func test_settingsAndBarAndPlates_passTheAudit() throws {
-        let audit = ScreenAudit(for: self, exclusions: Self.exclusions, open: [Self.unlabelledText])
+        let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
         try audit.threeWays(launching: Self.arguments) { steps in
             let app = steps.app
             XCTAssertTrue(steps.todayTitle.waitForExistence(timeout: 10))
             app.buttons["Settings"].tap()
             XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5), "Settings")
             try audit.audit(steps, screen: "Settings")
-
             let plates = steps.element(startingWith: "Bar and plates")
+            let rows = [app.buttons["settings.deleteAll"], app.buttons["settings.export"], plates]
+            audit.reach(steps, screen: "Settings", rows)
+
             steps.scrollUntilHittable(plates)
             plates.tap()
             let cancel = app.buttons["settings.plates.cancel"]
             XCTAssertTrue(cancel.waitForExistence(timeout: 5), "Bar and plates")
             try audit.audit(steps, screen: "Bar and plates")
+            let done = PinnedPart.sheetFoot(app.buttons["settings.plates.done"])
+            audit.reach(steps, screen: "Bar and plates", [cancel, done.top])
+            // The sheet's last row scrolls clear of its foot (S2b).
+            audit.expectScrollsClear(steps, screen: "Bar and plates", anchor: "Bar", last: "Reset to standard") {
+                done.minY
+            }
             cancel.tap()
             XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the sheet went down")
+            try expectDeleteAllScrollsClear(audit, steps)
 
             // The version line, "Ledger 0.21.1 · build 1", whose version changes: matched by its start.
             audit.expectScrollsClear(steps, screen: "Settings", anchor: "TRAINING", last: "Ledger ") {
@@ -70,6 +81,28 @@ final class AuditHistorySettings: XCTestCase {
 }
 
 extension AuditHistorySettings {
+    /// "Delete all data"'s sheet: its last row, the typed word's field, scrolls clear of its foot (S2b). Not audited
+    /// here: `SettingsDeleteAllVoiceOver` audits it.
+    @MainActor
+    private func expectDeleteAllScrollsClear(_ audit: ScreenAudit, _ steps: Steps) throws {
+        let app = steps.app
+        let row = app.buttons["settings.deleteAll"]
+        steps.scrollIntoReach(row)
+        row.tap()
+        let warning = app.alerts["Delete all data?"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 5), "the warning")
+        warning.buttons["Continue"].tap()
+        let foot = PinnedPart.sheetFoot(app.buttons["settings.deleteAll.confirm"])
+        XCTAssertTrue(foot.top.waitForExistence(timeout: 5), "Delete all data's sheet")
+        audit.reach(steps, screen: "Delete all data", [foot.top])
+        audit.expectScrollsClear(
+            steps, screen: "Delete all data", anchor: "This can't be undone.", last: "Type DELETE to confirm"
+        ) { foot.minY }
+        let cancel = app.buttons["Cancel"]
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the sheet went down")
+    }
+
     /// The measured exclusions of the workout's detail, its edit sheet, Settings and Bar and plates (F15-S2-3 to 8).
     static var exclusions: [ScreenExclusion] {
         [
@@ -81,24 +114,6 @@ extension AuditHistorySettings {
             .underThePinnedPart(on: ["edit sets"]),
             systemEditButton
         ]
-    }
-
-    /// F15-S2-12, open: Settings at rest, at the default size, light and dark, reports "Potentially inaccessible
-    /// text" twice with no element and no frame; still so with the page scrolled to its end (not the tab bar's
-    /// glass), and not at Accessibility XXXL. The units control's "LB" and "KG" (labelled "pounds" and "kilograms")
-    /// were tried and **refuted**: with the options labelled by their drawn words both issues remained. Unexplained;
-    /// the follow-up PR after S2 looks further. Until then an expected failure, with no element to name it by but
-    /// the screen, the way and the count.
-    static var unlabelledText: ScreenExclusion {
-        ScreenExclusion(
-            finding: "F15-S2-12",
-            issue: "two drawn texts no element carries, Settings",
-            perScreenAndWay: 2
-        ) {
-            $0.type == .elementDetection && $0.summary == "Potentially inaccessible text" && $0.screen == "Settings"
-                && $0.way != .largest
-                && $0.elementType == .any && $0.frame.isNull
-        }
     }
 
     /// F15-S2-8: the detail's "Edit", a plain `Button` in the navigation bar that the system draws on its own glass

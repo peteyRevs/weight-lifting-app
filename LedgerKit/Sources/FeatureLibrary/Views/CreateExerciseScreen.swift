@@ -63,6 +63,12 @@ struct CreateExercisePage: View {
 
 /// The name: its heading over a one-line field in an outlined box, at least 44 pt high, whose placeholder and spoken
 /// label are the heading's word; then the rule Save found it breaks. Each change is handed on as typed.
+///
+/// **Drawn whole (F15-S2-11), as Program's `NameField`.** A one-line field cuts a name longer than its line, and at
+/// the accessibility sizes an ordinary name is longer ("Landmine Squ…"). So while the field has no focus its own
+/// text is concealed, and the name is drawn as text that wraps onto as many lines as it needs, with the field over
+/// its first line. With the focus the field draws its text itself, on its one line, and the box is one line high.
+/// The field is the one thing VoiceOver reads; the drawn text is hidden from it.
 struct CreateExerciseNameField: View {
     let model: CreateExerciseModel.Name
     let send: (CreateExerciseAction) -> Void
@@ -71,28 +77,53 @@ struct CreateExerciseNameField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.s) {
             Eyebrow(model.label)
-            TextField(text: binding, prompt: Text(model.label).foregroundStyle(LedgerColor.inkFaint)) {
-                Text(model.label)
-            }
-            .ledgerFieldFont(.body)
-            .foregroundStyle(LedgerColor.ink)
-            .submitLabel(.done)
-            .focused($isEditing)
-            .accessibilityIdentifier("library.create.name")
-            .padding(.horizontal, LedgerSpacing.m)
-            .padding(.vertical, LedgerSpacing.s)
-            .ledgerHitTarget(alignment: .leading)
-            .onTapGesture { isEditing = true }
-            .background {
-                RoundedRectangle(cornerRadius: LedgerRadius.row)
-                    .strokeBorder(LedgerColor.hairlineStrong, lineWidth: LedgerHairline.width)
-            }
+            box
             if let problem = model.problem {
                 Text(problem)
                     .ledgerFont(.caption)
                     .foregroundStyle(LedgerColor.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// The outlined box: the name drawn whole, the field over its first line.
+    private var box: some View {
+        ZStack(alignment: .topLeading) {
+            // The label on one unseen line of no width: an empty name keeps the field's one line.
+            Text(model.label)
+                .ledgerFont(.body)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: 0, alignment: .leading)
+                .hidden()
+            Text(model.text)
+                .ledgerFont(.body)
+                .foregroundStyle(isEditing ? LedgerColor.inkConcealed : LedgerColor.ink)
+                .multilineTextAlignment(.leading)
+                // With the focus the text keeps to one line, as the field over it does, and is not drawn.
+                .fixedSize(horizontal: isEditing, vertical: false)
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .accessibilityHidden(true)
+        .overlay(alignment: .topLeading) {
+            TextField(text: binding, prompt: Text(model.label).foregroundStyle(LedgerColor.inkFaint)) {
+                Text(model.label)
+            }
+            .ledgerFieldFont(.body)
+            .multilineTextAlignment(strategy: .layoutBased)
+            // Concealed ink while unfocused, never a clear colour: the audit reads the field's text colour.
+            .foregroundStyle(isEditing ? LedgerColor.ink : LedgerColor.inkConcealed)
+            .submitLabel(.done)
+            .focused($isEditing)
+            .accessibilityIdentifier("library.create.name")
+        }
+        .padding(.horizontal, LedgerSpacing.m)
+        .padding(.vertical, LedgerSpacing.s)
+        .ledgerHitTarget(alignment: .leading)
+        .onTapGesture { isEditing = true }
+        .background {
+            RoundedRectangle(cornerRadius: LedgerRadius.row)
+                .strokeBorder(LedgerColor.hairlineStrong, lineWidth: LedgerHairline.width)
         }
     }
 

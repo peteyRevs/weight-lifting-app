@@ -136,6 +136,20 @@ struct Steps {
         XCTAssertTrue(element.isHittable, "\(element) cannot be reached")
     }
 
+    /// Swipes `page` (else the screen's first scroll view) up, at most ten times, then down, at most twenty, until
+    /// `element` can be tapped: an action above or below what is shown is reached either way.
+    func scrollIntoReach(_ element: XCUIElement, in page: XCUIElement? = nil) {
+        let scroller = page ?? app.scrollViews.firstMatch
+        let reached = { element.exists && element.isHittable }
+        for _ in 0 ..< 10 where !reached() {
+            scroller.swipeUp(velocity: .slow)
+        }
+        for _ in 0 ..< 20 where !reached() {
+            scroller.swipeDown(velocity: .slow)
+        }
+        XCTAssertTrue(reached(), "\(element) cannot be reached")
+    }
+
     /// Kept with the result, so a run shows the screens it checked.
     func attachScreenshot(named name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())

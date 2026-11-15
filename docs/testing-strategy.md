@@ -352,50 +352,87 @@ Concrete test names (file = suite = source type; see §6):
 
 ### 2.7 UI (`LedgerUITests`, `LedgerWatchUITests`)
 
-- Critical flows, iOS: `Smoke.freshInstall_skipsSetupToToday`, `Onboarding.threeStepsGenerateProgram`,
-  `Workout.startLogThreeSetsRestFinishReceipt`, `Workout.swapExercise`,
-  `Workout.minimizeAndResume`, `Builder.addDayAddExerciseChangeProgression`,
-  `Library.searchOpensHistoryChart`, `History.editThenDeleteWorkout`,
-  `Settings.switchUnitsToKg`, `Settings.exportCSV`,
-  `Onboarding.voiceOverReadsEachStepInOrder_insideTheScrollView_atAnAccessibilitySize`,
-  `Onboarding.eachStepOpensAtItsTop_atAnAccessibilitySize`,
-  `Accessibility.auditEveryTabRoot`, `LaunchPerformance.test_launchToFirstFrame`
-  (`XCTApplicationLaunchMetric`, nightly; reports, never gates: decision #30). watchOS:
-  `Smoke.launchesToToday` (`launchesToIdle` once F18 replaces the placeholder),
-  `Watch.startFromIdleToSetReady`, `Watch.doneSetRestSkipReady`,
-  `Watch.listEndSaveSummaryDone`, `Watch.accessibilityAuditEveryMode`.
-- `performAccessibilityAudit(for: .all)` (iOS 17+ / watchOS 10+, R3 §2) runs
-  on every tab root and watch mode; known false positives are excluded in
-  the issue handler with a comment naming the element and the radar/issue.
-- Identifiers: `.accessibilityIdentifier` uses `<feature>.<screen>.<element>[.<index>]`
-  in lowerCamelCase, e.g. `today.upNext.startButton`, `workout.active.setRow.2`,
-  `watch.ready.doneSetButton`. The UI test targets link no package product, so
-  they spell identifiers as strings (F07: `today.title`, `debug.menu.*`,
-  `debug.diagnostics.*`); a renamed identifier fails a UI run, not the build.
-- UI tests launch with `-LEDGER_UITEST 1`, so the app opens a fresh database
-  file in a new temporary directory (a file, not in-memory, so the launch runs
-  as on a device; F07 S2), seeded with the catalog as every launch is. A fresh
-  database has no program, so the app opens on onboarding (F08): a test of
-  onboarding, or of what "Skip setup" saves, launches `XCUIApplication.fresh()`
-  and calls `skipSetupToToday()` (`Apps/LedgerUITests/Support/LaunchedApp.swift`).
-  Every other test adds `-LEDGER_UITEST_PROGRAM seed` to its launch arguments
-  (Debug builds only, as `-LEDGER_UITEST_NOW` and `-LEDGER_UITEST_FAIL_FINISH`):
-  the spec's seed program (`Fixtures.seedProgram()`, a block from Monday
-  2026-08-17) is saved as the active one after the launch's pass, before the
-  root first reads it, so the app opens on Today. A new UI test that waits for
-  `today.title` on a fresh launch needs one or the other. A test that needs
-  past workouts adds `-LEDGER_UITEST_HISTORY <1–16>` beside
-  `-LEDGER_UITEST_PROGRAM seed` (Debug builds only; F15): the seed program's
-  finished workouts of that many weeks (`Fixtures.history(weeks:)`) are saved
-  with it, in one write. They are anchored to the fixture's own week (Wednesday
-  2026-09-16), so pair it with `-LEDGER_UITEST_NOW` in that week. Every launch is a
-  fresh database, a relaunch too, so what needs the same database twice is not
-  a UI test until F15's test mode.
-- A UI test in light or dark launches with `-LEDGER_UITEST_APPEARANCE light|dark`
-  (Debug builds only; `LaunchAppearance` in `Apps/LedgerUITests/Support/Appearance.swift`
-  adds it) and checks that the app drew in it (`assertDrawn(in:_:)`), never with
-  `XCUIDevice.shared.appearance`: the iOS 27.0 simulator reads that back as set but
-  goes on drawing light, so a "dark" audit of it audits light.
+`Apps/LedgerUITests` is a flat, synchronized folder: one file per feature flow, plus `Support/` (F15's shared steps
+and audit runner). The `PR` plan runs `Smoke` alone; the `Nightly` plan runs the whole target, in the legs of
+`scripts/nightly-shards.txt`. Each test launches its own app, owns its state, ends a workout it started, and waits
+only with `waitForExistence` or a predicate, never a sleep.
+
+**The suites, iOS**
+- `Smoke` (PR lane, under 90 s per test on the runner): `test_onboardToFirstSet` (a fresh install, "Skip setup",
+  Today's real "Start workout", a logged set and its rest panel, then Discard); the sample workout started,
+  minimized, resumed and discarded; the "workout in progress" conflict; a set logged, saved and shown on Today.
+- `Flows` (nightly), the M1 exit's critical paths, each one launch: `test_fullWorkoutToHistory` (onboarding, three
+  sets with rests and "Skip rest", a swap, "+ Add set", a superset round, Finish, the receipt, History, the
+  exercise's chart); `test_programEditReflectsOnToday` (the Day editor's change on Today's card, in the same
+  launch: every launch is a fresh database); `test_unitsSwitch_convertsAFinishedSet` (a finished set's pounds
+  read in kilograms after Settings' switch, computed by the Domain's rule).
+- The feature suites (nightly): `Onboarding*`, `Today*`, `Builder`, `DayEditor`, `ProgramTabAdversarial`,
+  `Library*`, `Workout*`, `HistoryVoiceOverAdversarial`, `Settings*`, `Tabs*`, `DebugMenu`.
+- `LaunchPerformance.test_launchToFirstFrame` (`XCTApplicationLaunchMetric`, nightly; reports, never gates:
+  decision #30).
+
+**The audits.** `performAccessibilityAudit(for: .all)` runs on every iPhone screen of product-spec §2.2:
+- the tab roots (`TabsAdversarial`), onboarding (`OnboardingAdversarial+Audit`), Today (`TodayAuditAdversarial`)
+  and the Library root (`LibraryAuditAdversarial`), each with its own exclusions;
+- every screen under the tab roots through F15's one runner (`Support/Audit.swift`, `ScreenAudit`): the workout's
+  cover, sheets and receipt (`AuditWorkout`), the Day editor, its picker, New and Edit exercise and the exercise
+  history (`AuditProgramLibrary`), the workout detail, its edit sheet, Settings and Bar and plates
+  (`AuditHistorySettings`). Each is audited three ways (`AuditWay`): light and dark at the default size, and light
+  at Accessibility XXXL. Every issue is attached to the result with its verdict and a picture of its element.
+
+**Dynamic Type.** At `accessibility5` (Accessibility XXXL) each §2.2 screen is pictured, its primary actions are
+scrolled to and must be hittable (`ScreenAudit.reach`), and no text may be clipped. S2a's audits do this in their
+Accessibility XXXL way. `DynamicType` audits `.textClipped` on the screens no other audit covers at that size:
+Today on a session day and a rest day, the off-schedule sheet, the Program builder and the History list. It also
+reaches the Library root's actions.
+
+**Exclusion rules.** An issue the audit reports may be excused only when all of these hold:
+- It is measured: the picture, the colours or the frame, recorded in the feature's implementation notes.
+- It is named by the audit's words plus the element and the screen, and carries a finding ID (`F15-S2-<n>`).
+- It has table-driven near misses, run with no app launched: the same issue on another element or screen, or
+  another issue on the same element, still fails (`AuditExclusionsTests`, `*Adversarial` "excuse nothing wider").
+- Contrast problems in our own tokens are fixed in the tokens (or on the element), never excused.
+- Anything excused because it sits under the tab bar's glass or a pinned part (the rest panel, a sheet's foot)
+  needs a proof that the page scrolls clear of it (`ScreenAudit.expectScrollsClear`). Every sheet with a pinned
+  foot has one, at the default size and at Accessibility XXXL: the picker, edit sets, New exercise, Bar and plates,
+  and Delete all data.
+- A real finding not yet fixed is an *open* finding: a strict `XCTExpectFailure` on exactly what it names, so the
+  test stays green, catches everything else, and goes red the day the finding is fixed.
+
+A test is never weakened to pass. Re-pinning a test whose subject legitimately changed is allowed, and the commit
+says so.
+
+**watchOS.** `Smoke.test_launchesToToday` and `DebugMenu.test_diagnostics_showsTheSeededCatalog`. The watch's flows
+and its audit of every mode come with F18 and F20.
+
+**Seams.** Every seam is a launch argument, Debug builds only, so a test never touches the simulator's shared state:
+- `-LEDGER_UITEST 1` opens a fresh database file in a new temporary directory (a file, not in-memory, so the launch
+  runs as on a device; F07 S2), seeded with the catalog as every launch is. A fresh database has no program, so the
+  app opens on onboarding (F08). A test of onboarding, or of what "Skip setup" saves, launches
+  `XCUIApplication.fresh()` and calls `skipSetupToToday()` (`Support/LaunchedApp.swift`).
+- `-LEDGER_UITEST_PROGRAM seed` saves the spec's seed program (`Fixtures.seedProgram()`, a block from Monday
+  2026-08-17) as the active one before the root first reads it, so the app opens on Today. A new UI test that waits
+  for `today.title` on a fresh launch needs this or onboarding.
+- `-LEDGER_UITEST_HISTORY <1–16>`, beside the seed program, saves that many weeks of its finished workouts
+  (`Fixtures.history(weeks:)`) in one write. They are anchored to the fixture's own week (Wednesday 2026-09-16), so
+  pair it with that week's clock.
+- `-LEDGER_UITEST_NOW <instant>` moves the app's clock. The cover's elapsed time is drawn by the system from the
+  wall clock, so it does not follow.
+- `-LEDGER_UITEST_FAIL_FINISH <n>` fails the next saves.
+- `-LEDGER_UITEST_APPEARANCE light|dark` makes the app draw in that appearance (`LaunchAppearance`,
+  `Support/Appearance.swift`), checked with `assertDrawn(in:_:)`. Never use `XCUIDevice.shared.appearance`: the
+  iOS 27.0 simulator reads it back as set but goes on drawing light.
+- The text size is UIKit's own launch argument, `-UIPreferredContentSizeCategoryName
+  UICTContentSizeCategoryAccessibilityXXXL` (`AuditWay.largest`). It sets that launch only, never the simulator's
+  setting.
+
+Every launch is a fresh database, a relaunch too: what needs the same database twice is not a UI test.
+
+**Identifiers.** `.accessibilityIdentifier` uses `<feature>.<screen>.<element>[.<index>]` in lowerCamelCase, e.g.
+`workout.header.minimize`, `history.workout.edit`. A product element gains one only where a test cannot name it by a
+stable label. The UI test targets link no package product, so they spell identifiers as strings; a renamed identifier
+fails a UI run, not the build. The icon-only buttons and the words VoiceOver reads for them are listed in
+`docs/accessibility-labels.md`, which `AccessibilityLabelsDocTests` keeps in step with the sources.
 
 ### 2.8 Device protocol (manual, scripted) — `tasks/features/F20-device-protocol/`
 

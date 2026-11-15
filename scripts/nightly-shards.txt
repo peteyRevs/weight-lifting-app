@@ -24,7 +24,8 @@
 2 LedgerHealthTests                                 #     2
 2 LedgerActivityKitTests                            #     2
 3 FeatureWorkoutTests/WorkoutAnnouncementAdversarialTests # 4,365
-4 LedgerUITests                                     # 1,840 without the classes in leg 5
+4 LedgerUITests                                     # 1,840 without the classes in leg 5, + ~1,510 for F15's
+#   Flows, AuditWorkout, AuditHistorySettings and DynamicType (local seconds x 1.5, F15 S2b notes): leg 4 ~4,130
 4 LedgerDesignTests                                 #   301
 4 FeatureOnboardingTests                            #   203
 4 FeatureTodayTests                                 #   166
@@ -36,6 +37,7 @@
 5 LedgerUITests/TabsAdversarial
 5 LedgerUITests/WorkoutHistory
 5 LedgerUITests/Builder
+5 LedgerUITests/AuditProgramLibrary                 # ~1,300 (local x 1.5): leg 5 ~4,820
 5 LedgerSyncTests                                   # 1,277
 6 LedgerPersistenceTests                            # 2,406 without the suite in leg 8
 6 FeatureWorkoutTests                               # 1,539 without the suites in legs 1, 2 and 3

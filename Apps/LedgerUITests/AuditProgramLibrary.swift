@@ -26,17 +26,19 @@ final class AuditProgramLibrary: XCTestCase {
             card.tap()
             XCTAssertTrue(app.textFields["Day name"].waitForExistence(timeout: 5), "the Day editor")
             try audit.audit(steps, screen: "Day editor")
+            let open = app.buttons["+ Add exercise from library"]
+            audit.reach(steps, screen: "Day editor", [app.buttons["Delete day"], open])
             audit.expectScrollsClear(steps, screen: "Day editor", anchor: "SUPERSET", last: "Delete day") {
                 app.tabBars.firstMatch.frame.minY
             }
 
-            let open = app.buttons["+ Add exercise from library"]
             steps.scrollUntilHittable(open)
             open.tap()
             let search = app.textFields["Search exercises"]
             XCTAssertTrue(search.waitForExistence(timeout: 5), "the exercise picker")
             let foot = PinnedPart.sheetFoot(app.buttons["Select exercises to add"])
             try audit.audit(steps, screen: "exercise picker", pinned: foot)
+            audit.reach(steps, screen: "exercise picker", [foot.top, search])
             expectThePickerScrollsClear(audit, steps, foot: foot)
         }
     }
@@ -44,7 +46,7 @@ final class AuditProgramLibrary: XCTestCase {
     /// The bench press's history over four weeks, then New exercise, saved, and its history's Edit.
     @MainActor
     func test_historyNewAndEditExercise_passTheAudit() throws {
-        let audit = ScreenAudit(for: self, exclusions: Self.exclusions, open: [Self.truncatedName])
+        let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
         try audit.threeWays(launching: Self.arguments + ["-LEDGER_UITEST_HISTORY", "4"]) { steps in
             let app = steps.app
             XCTAssertTrue(steps.todayTitle.waitForExistence(timeout: 10))
@@ -56,12 +58,15 @@ final class AuditProgramLibrary: XCTestCase {
             let title = app.staticTexts["library.history.title"]
             XCTAssertTrue(title.waitForExistence(timeout: 10), "its history")
             try audit.audit(steps, screen: "exercise history")
+            // A catalog exercise's history offers no Edit (the lifter's own do): its one action is Back.
+            let back = app.navigationBars.buttons["BackButton"]
+            audit.reach(steps, screen: "exercise history", [back])
             audit.expectScrollsClear(
                 steps, screen: "exercise history", anchor: "SESSION LOG", last: "Aug 24"
             ) {
                 app.tabBars.firstMatch.frame.minY
             }
-            app.navigationBars.buttons["BackButton"].tap()
+            back.tap()
             XCTAssertTrue(title.waitForNonExistence(timeout: 5), "back on the Library")
             try auditNewAndEditExercise(audit, steps)
         }
@@ -89,14 +94,24 @@ final class AuditProgramLibrary: XCTestCase {
         let name = app.textFields["library.create.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5), "New exercise")
         try audit.audit(steps, screen: "New exercise")
+        let save = app.buttons["library.create.save"]
+        audit.reach(steps, screen: "New exercise", [app.buttons["library.create.cancel"], save, name])
+        // The sheet's last row, the movement pattern's chips ("Movement pattern: Core work"), scrolls clear of its
+        // foot (S2b).
+        let foot = PinnedPart.sheetFoot(save)
+        audit.expectScrollsClear(steps, screen: "New exercise", anchor: "EQUIPMENT", last: "Movement pattern: ") {
+            foot.minY
+        }
+        steps.scrollIntoReach(name)
         name.tap()
         name.typeText("Landmine Squeeze Press")
-        app.buttons["library.create.save"].tap()
+        save.tap()
         XCTAssertTrue(name.waitForNonExistence(timeout: 5), "the sheet closed once saved")
         openTheHistory(of: "Landmine Squeeze Press", steps)
         app.buttons["library.history.edit"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Edit exercise"].waitForExistence(timeout: 5), "Edit exercise")
         try audit.audit(steps, screen: "Edit exercise")
+        audit.reach(steps, screen: "Edit exercise", [app.buttons["library.create.cancel"], save])
     }
 
     /// The Library's search, `exercise` typed, and its row: the exercise's history.
@@ -146,23 +161,13 @@ extension AuditProgramLibrary {
         ]
     }
 
-    /// F15-S2-4 on Edit exercise's name field (its label is empty, so by identifier): at the default size the
-    /// field's picture shows "Landmine Squeeze Press" whole (measured in light). At Accessibility XXXL it is cut:
-    /// `truncatedName`.
+    /// F15-S2-4 on Edit exercise's name field (its label is empty, so by identifier): "Landmine Squeeze Press" is
+    /// drawn whole in the field's picture in every way, on one line at the default size and on two at Accessibility
+    /// XXXL, where the name wraps under the field since S2b (F15-S2-11, fixed); the field's own one-line text, which
+    /// is not shown, is what the audit measures.
     static var wholeName: ScreenExclusion {
         ScreenExclusion(finding: "F15-S2-4", issue: "Text clipped on the whole name, Edit exercise") {
-            $0.summary == "Text clipped" && $0.identifier == "library.create.name" && $0.way != .largest
-                && $0.screen == "Edit exercise"
-        }
-    }
-
-    /// F15-S2-11, open: at Accessibility XXXL the one-line name field draws "Landmine Squ…". A real finding, an
-    /// expected failure until its own fix: the follow-up PR after S2 ports Program's `NameField` pattern (the
-    /// unfocused name drawn as wrapping text under the field) or moves `NameField` into LedgerDesign.
-    static var truncatedName: ScreenExclusion {
-        ScreenExclusion(finding: "F15-S2-11", issue: "the name is cut at Accessibility XXXL, Edit exercise") {
-            $0.summary == "Text clipped" && $0.identifier == "library.create.name" && $0.way == .largest
-                && $0.screen == "Edit exercise"
+            $0.summary == "Text clipped" && $0.identifier == "library.create.name" && $0.screen == "Edit exercise"
         }
     }
 }
