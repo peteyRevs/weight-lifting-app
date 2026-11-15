@@ -83,7 +83,7 @@ extension AuditWorkout {
     /// The screens whose header the audit reported "Minimize" on.
     static let headerScreens: Set = ["solo card", "rest panel", "superset block"]
 
-    /// The workout cover's measured exclusions (F15-S2-3 to 9, the implementation notes).
+    /// The workout cover's measured exclusions (F15-S2-3 to 9 and 15, the implementation notes).
     static var exclusions: [ScreenExclusion] {
         [
             .eyebrows([
@@ -103,8 +103,24 @@ extension AuditWorkout {
             .accentButtons(["Skip rest", "Save workout"], on: ["rest panel", "finish sheet"]),
             receiptDate,
             receiptDateLine,
-            skipRestUnnamed
+            skipRestUnnamed,
+            hiddenSetNumberNearPass
         ]
+    }
+
+    /// F15-S2-15: a set's number wholly under the rest panel, which F15-S2-6 excuses as "Contrast failed", reported
+    /// once (nightly 43732295990, dark) as "Contrast nearly passed". The number is hidden: its frame (26, 702.3,
+    /// 7 × 12) holds only the panel's sheet, #131316, in the pictures; it ends at the pixel column before the ring's
+    /// outer edge (`workout.rest.status` from x 33.75), whose antialiased orange there, #CA4F25, is 4.11:1 on the
+    /// sheet, a near pass. Drawn, the number (`inkMuted`) is 5.04:1 on the sheet and 5.05:1 on the ground. Excused on
+    /// the rest panel at the default size (the ring is not drawn at the accessibility sizes), for a number wholly
+    /// under the panel only; the page scrolls clear of it as for F15-S2-6.
+    static var hiddenSetNumberNearPass: ScreenExclusion {
+        ScreenExclusion(finding: "F15-S2-15", issue: "Contrast nearly passed on a set's number under the rest panel") {
+            $0.summary == "Contrast nearly passed" && $0.screen == "rest panel" && $0.way != .largest
+                && $0.elementType == .staticText && Int($0.label) != nil && !$0.pinned.isNull
+                && $0.frame.minY >= $0.pinned.minY && !$0.inPinnedPart
+        }
     }
 
     /// F15-S2-7 on "Skip rest" (white on the accent, 3.10:1) when the audit reports it without its element. From
