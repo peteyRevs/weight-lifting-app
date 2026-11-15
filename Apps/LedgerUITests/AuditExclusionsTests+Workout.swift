@@ -12,6 +12,8 @@ extension AuditExclusionsTests {
             issue("solo card", clipped, "Minimize", type: .button, identifier: minimize),
             issue("rest panel", contrast, "5", frame: under, pinned: panel),
             issue("rest panel", contrast, "+ Add set", type: .button, frame: under, pinned: panel),
+            issue("rest panel", nearly, "5", frame: under, pinned: panel, way: .dark),
+            issue("rest panel", nearly, "5", frame: under, pinned: panel),
             issue("finish sheet", nearly, "Save workout", type: .button),
             issue("solo card", clipped, "Finish", type: .button, identifier: "workout.header.finish"),
             issue("receipt", clipped, "Saturday, November 14"),
@@ -56,6 +58,24 @@ extension AuditExclusionsTests {
                 "Resting",
                 frame: CGRect(x: 110, y: 690, width: 80, height: 15),
                 pinned: panel,
+                inPinnedPart: true
+            ),
+            // F15-S2-15's near pass on a set's number: one reaching above the panel's top, one above it, at
+            // Accessibility XXXL, on a screen with no panel, on what is not a number, and on the panel's own time.
+            issue("rest panel", nearly, "4", frame: CGRect(x: 26, y: 660, width: 7, height: 12), pinned: panel),
+            issue("rest panel", nearly, "5", frame: above, pinned: panel, way: .dark),
+            issue("rest panel", nearly, "5", frame: under, pinned: panel, way: .largest),
+            issue("solo card", nearly, "5", frame: under, way: .dark),
+            issue("rest panel", nearly, "+ Add set", type: .button, frame: under, pinned: panel, way: .dark),
+            issue("rest panel", nearly, "Incline DB Press", frame: under, pinned: panel, way: .dark),
+            issue("rest panel", nearly, "5", type: .other, frame: under, pinned: panel, way: .dark),
+            issue(
+                "rest panel",
+                nearly,
+                "2",
+                frame: CGRect(x: 34, y: 700, width: 60, height: 20),
+                pinned: panel,
+                way: .dark,
                 inPinnedPart: true
             ),
             // An eyebrow and a short line measured on one screen, met on another.

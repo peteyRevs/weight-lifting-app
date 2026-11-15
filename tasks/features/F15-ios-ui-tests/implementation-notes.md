@@ -606,3 +606,22 @@ run's bundles. The shards file's own note says the slowest build seen was 2,092 
 
 Leg 4 becomes 2,615 + `AuditHistorySettings` 309 × 3 = 926 + `DynamicType` 97 × 3 = 291 = 3,832 s of tests, 5,932 with a
 2,100 s build; the other legs are as in round 1's table.
+
+## Follow-up: fix/rest-panel-contrast (2026-11-15)
+
+The M1 nightly 43732295990 (`main` 43758a8, leg 2) failed `AuditWorkout.test_cardSwapSheetAndRestPanel_passTheAudit`
+on one issue: "rest panel, dark: Contrast nearly passed [48 "5" x 26 y 702 w 7 h 12]".
+
+| ID | Screen | Issue as the audit says it | Measured | Verdict |
+|---|---|---|---|---|
+| F15-S2-15 | rest panel, default size | Contrast nearly passed, a set's number wholly under the panel | set 5's number (26, 702.3, 7 × 12; the panel's top at 668): only the sheet, #131316, in its frame in the run's pictures. Its frame ends at the pixel column before the ring's outer edge (`workout.rest.status` from x 33.75), where the antialiased orange is #CA4F25 (4.11:1 on the sheet, the near-pass band), #8B3D23 (2.46:1) and #723522 (1.98:1). Drawn, the number (`inkMuted`) is 5.04:1 on the sheet and 5.05:1 on the ground | Excluded by frame and label (`hiddenSetNumberNearPass`): a number wholly under the panel, in light or dark; the page scrolls clear of the panel (`WorkoutRest`, as F15-S2-6) |
+
+- **The same element, another word.** The nightly before (43692994418, 82e4619) and five local runs report the same
+  frame as "Contrast failed" in light and dark, excused as F15-S2-6; the failing run reports it so in light. The
+  pictures of both nightlies are alike (the ring at 2:21 and 2:25, its left edge in the same pixel column). What the
+  audit samples for a hidden text cannot be read from outside it; the ring's edge is the only colour beside the frame
+  that falls in the near-pass band, and nothing in light does (the edge is ≥ 4.51:1 on the white card).
+- **Not a token problem.** No drawn text is under 4.5:1: the number reads 5.04:1 where it shows. Neither a token nor
+  the panel changes, and F15-S2-6 stays "Contrast failed" only: the new finding takes the other word on hidden numbers
+  only (no button, no line of words, nothing reaching above the panel, never at Accessibility XXXL, where the panel
+  draws no ring), with its near misses in `AuditExclusionsTests+Workout`.
