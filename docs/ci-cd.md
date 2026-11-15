@@ -288,6 +288,13 @@ authoritative; the plan differs:
       chore(test) branch), more than any lighter leg could take. Leg 3 now runs that suite alone, and the
       rest of FeatureWorkoutTests (1,539 s) joins LedgerPersistenceTests in leg 6, then the lightest (3,625 s
       in all). Every leg's entry times in `nightly-shards.txt` are that run's.
+    - *The legs (2026-11-15, round 4).* Run 43250355937 predates #99, which moved `RestCover` off `TestClock`
+      (whose `advance` and `checkSuspension()` each ran a `megaYield` of 20 detached tasks per second of a
+      rest, 92% of the walk's time) onto `RestCoverClock`. In run 43364073342 (`main` at c92e963, after #99)
+      the announcement suite tested for 481 s (118 s on this Mac, the walk's 2,000 seeds 461 s of it) and
+      the rest suite for 548 s (3,072 before). So FeatureWorkoutTests is whole in leg 3 again, less the rest
+      and save walks (about 2,000 s), and leg 6 holds LedgerPersistenceTests alone (2,517 s). The save suite
+      (2,716 s) is unchanged by #99 and keeps leg 2.
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
   `--skip-static` since the split above; step 2 then runs in `Static checks`, and `--shard` since
   2026-11-11; step 5 then runs in `Coverage`): steps 0–3 and 5, no watchOS step, and the coverage gate
