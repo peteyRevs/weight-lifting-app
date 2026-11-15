@@ -158,6 +158,151 @@ the build. The two failures are known, outside S1, and recorded earlier: `TabsAd
 | WorkoutSuperset.test_superset_loggedRoundByRound | passed | 20.248 |
 | WorkoutSwap.test_swapTheFirstExercise_logFinish_receiptListsTheReplacement | passed | 21.449 |
 
+## S2a — as built (G1 implementer, 2026-11-13)
+
+Branch `feat/F15-s2`, cut from `main` at `a10a2c2` (S1 merged). The orchestrator took the plan's split up front: S2a is
+the audit runner, the audits of every screen C7 lists as not audited, the measured exclusions, the "excuses nothing
+wider" tests and the fixes; `DynamicType.swift`, `docs/accessibility-labels.md` and its test, the §2.7 rewrite and the
+M1-exit run are S2b's.
+
+### What landed
+
+- **`Apps/LedgerUITests/Support/Audit.swift`**: `AuditWay` (light, dark, light at Accessibility XXXL; question 6, A),
+  `ScreenIssue`, `ScreenExclusion` and `ScreenAudit`, the one runner. `threeWays(launching:walk:)` launches once per
+  way and runs the walk; the walk calls `audit(_:screen:pinned:)` on each screen, which runs
+  `performAccessibilityAudit(for: .all)`, keeps each issue with the element's type, identifier, label and frame (and the
+  tab bar's and a pinned part's frames), and attaches the screen and each reported element. The verdict attaches every
+  issue with its verdict and fails on any no exclusion excuses. `expectScrollsClear` (from review round 1) is the "scrolls clear"
+  proof each "under the tab bar" exclusion needs. **Open findings** (`open:`): a real finding not fixed in S2a is a
+  strict `XCTExpectFailure` on exactly what it names, so the test stays green, catches everything else, and goes red
+  the day the finding is fixed.
+- **`Support/Audit+Kinds.swift`**: the five kinds of measured false positive (F15-S2-3 to 7), each F08's, F09's or
+  F12's precedent; each screen names the screens and elements it excuses.
+- **`AuditWorkout.swift`** (the solo card, swap sheet, rest panel, superset block, finish sheet, receipt; through the
+  Debug menu's sample), **`AuditProgramLibrary.swift`** (Day editor, its picker; with `-LEDGER_UITEST_HISTORY 4`, the
+  bench press's history, New exercise, Edit exercise), **`AuditHistorySettings.swift`** (with history: the newest
+  workout's detail and its edit-sets sheet; Settings and Bar and plates). Nightly only (leg 4 holds `LedgerUITests`
+  whole); `PR.xctestplan` is unchanged.
+- **`AuditExclusionsTests.swift`**: no launch; per screen family, the excused issues as measured and their near misses,
+  and the open findings naming only their issue.
+- `Support/Steps.swift`: `startSampleWorkout()`, and `scrollUntilHittable(_:back:)` can swipe down.
+- **Dark.** On the iOS 27.0 simulator `XCUIDevice.appearance` (and `simctl ui appearance`) does not reach a launched
+  app: round 1's "dark" pictures were the light ones, pixel for pixel. The dark way launches with
+  `-LEDGER_UITEST_APPEARANCE dark`, the Debug seam of the tabs fix (`fix/tabs-audit`), which merges before this PR; until
+  it is merged here the dark way draws light. **The dark passes are to be run after that merge** (with the shared
+  "really dark" guard of `Support/Appearance.swift` called in `threeWays`).
+
+### Findings (F15-S2-n)
+
+| ID | Screen(s) | Issue as the audit says it | Measured | Verdict |
+|---|---|---|---|---|
+| F15-S2-1 | superset block | Contrast failed, the legend letter "B" | (193, 193, 191) on (255, 255, 255): 1.80:1; `inkFaint` | **Fixed**: `inkMuted` on that element (≥ 4.5:1 on the surface, `MutedTextContrastAdversarialTests`); no token changed |
+| F15-S2-2 | cover header | Hit area is too small, "Elapsed time" (other, 42 × 15) | an element of no kind, no action | **Fixed**: the static-text trait; the audit no longer reports it |
+| F15-S2-3 | every family | Dynamic Type partially unsupported, the eyebrows | 10 pt at the default size, 37 pt tall at XXXL | Excluded by label (F09-S5-2) |
+| F15-S2-4 | every family | Text clipped, texts in the caption, eyebrow, button, heading and title roles; the Day name and Edit exercise name fields at the default size | every glyph whole in the element's picture | Excluded by label or identifier (F09-S5-3/4) |
+| F15-S2-5 | Day editor (XXXL), exercise history, workout detail, Settings | Contrast failed under the tab bar | inside the bar's frame; each page scrolls clear (proved in the walk) | Excluded by frame, never a tab |
+| F15-S2-6 | rest panel, exercise picker, edit sets | Contrast failed on a line under a pinned part | hidden in the pictures; the panel starts 17 pt over `workout.rest.status`, a sheet's rule 11 pt over its button (margin 24) | Excluded by frame; the rest page scrolls clear (`WorkoutRest`); **a sheet's last row scrolling clear of its button is not proven**: S2b's reachability pass |
+| F15-S2-7 | rest panel, finish sheet, New/Edit exercise | Contrast nearly passed, "Skip rest", "Save workout", "Save" | white on the accent, 3.10:1 (16 pt bold) | Excluded by label (F09-S5-1) |
+| F15-S2-8 | workout detail | Contrast failed and Dynamic Type partially unsupported, the system's bar button "Edit" | (0, 0, 0) on the glass's (253, 253, 249), 20.5:1 | Excluded by identifier |
+| F15-S2-9 | receipt | Hit area is too small, the date (12 pt) | no control; VoiceOver's escape is set on the receipt's stack and so on each element (`ReceiptTests.escape_isDone`) | Excluded |
+| F15-S2-10 | cover header, XXXL | Text clipped, "Minimize" | drawn "Minimi / ze"; "Finish" is drawn "Finis / h" (not reported) | **Open**, expected failure; follow-up PR lays the header out for the accessibility sizes (layout: for Pete). Pictures: "solo card, light, Accessibility XXXL: screen" |
+| F15-S2-11 | Edit exercise, XXXL | Text clipped, the name field | "Landmine Squ…" (whole at the default size) | **Open**, expected failure; follow-up PR ports Program's `NameField` pattern or moves it to LedgerDesign |
+| F15-S2-12 | Settings, default size | Potentially inaccessible text, twice, no element, no frame | still there scrolled to the end (not the bar); absent at XXXL. **Hypothesis refuted**: with SegmentedChoice's options labelled by their drawn "LB"/"KG" (an uncommitted experiment, reverted) both issues remain | **Open, unexplained**; expected failure on exactly two per way, a third or one elsewhere fails |
+
+Round 1 reported 151 issues on 13 screens with nothing excluded; the last run, 0 unexcused.
+
+### Fixes, hosted tests, references
+
+- `SupersetLegendRow.letterInk(isCurrent:)` (FeatureWorkout), pinned by
+  `SupersetBlockTests.letterInk_isReadableOnBothFills`.
+- `WorkoutHeader`'s elapsed time `.isStaticText`, pinned by `WorkoutAccessibilityTrees.header` (sanctioned edit:
+  `Stop("Elapsed time", [])` becomes `.staticText`).
+- The legend letter's change lies inside the references' tolerance: the 723 tests of `FeatureWorkoutTests` pass with
+  no reference re-recorded (`cover_supersetRound2*` and the drop set's, which draw the block), so none was.
+
+### Decisions (autopilot, and the orchestrator's rulings during the slice)
+
+1. The split was taken up front (orchestrator). The audits are grouped by path: one launch per way walks several
+   screens (six tests, not thirteen), each screen still audited three ways and named in every issue.
+2. Own appearance mechanism dropped for the tabs fix's `-LEDGER_UITEST_APPEARANCE` (orchestrator).
+3. Real findings that need a layout change (F15-S2-10, 11) and the unexplained one (F15-S2-12) are open findings,
+   strict expected failures matched as narrowly as the exclusions (orchestrator, B); all three go to one follow-up PR.
+   F15-S2-12 matches only exactly two element-less issues per way on Settings at the default size.
+4. The fixes are per element, never a token: `inkFaint` keeps its value and its other uses.
+5. The Settings walk reaches Bar and plates before the "scrolls clear" proof: from the page's end a swipe back did
+   not bring the row within reach at XXXL. The page is audited at rest only; an audit of it scrolled to its end
+   (an experiment) reports the rows under the navigation bar's glass, which no exclusion covers.
+6. No shard change: leg 4's estimate stays under `nightly-shards.txt`'s ~6,300 s rebalance mark (below).
+
+### Times (local Mac, iPhone 17, iOS 27.0; the dark way drew light, see above)
+
+| Test | Seconds |
+|---|--:|
+| AuditWorkout.test_cardSwapSheetAndRestPanel_passTheAudit | 114.2 |
+| AuditWorkout.test_supersetFinishSheetAndReceipt_passTheAudit | 104.9 |
+| AuditProgramLibrary.test_dayEditorAndItsPicker_passTheAudit | 117.2 |
+| AuditProgramLibrary.test_historyNewAndEditExercise_passTheAudit | 247.5 |
+| AuditHistorySettings.test_workoutDetailAndEditSets_passTheAudit | 99.7 |
+| AuditHistorySettings.test_settingsAndBarAndPlates_passTheAudit | 91.6 |
+| AuditExclusionsTests (5 tests) | 0.04 each |
+
+775 s on the Mac, about 1,160 s on the runner (× 1.5). Leg 4 (`nightly-shards.txt`: `LedgerUITests` 1,840, the
+package targets 775, S1's `Flows` about 210) becomes about 3,990 s of tests, short of the ~6,300 s rebalance mark and ~3,800 s short
+of the 7,800 s deadline with a 1,500 s build: no rebalance.
+
+Other runs: `FeatureWorkoutTests` whole (PR plan): 723 tests passed, 3 known issues, 620 s. `check.sh --lint-only`:
+green.
+
+### Review round 1 (G3: request changes), phase 1: light and Accessibility XXXL
+
+Phase 2 (after `main`'s appearance seam is merged here) runs the dark passes and re-measures every contrast excuse
+in dark; until then every "light and dark" above means light only (the dark way drew light).
+
+- **B1, pinned parts.** `PinnedPart` names a part's top element, its measured margin (17 pt over
+  `workout.rest.status`, 11 pt over a sheet's button; the old blanket 24 pt is gone) and its own elements. Each issue
+  records whether its element is one of the part's (`inPinnedPart`, by identifier, else label), and F15-S2-6 never
+  excuses those: "Skip rest", the rest status, the picker's and the edit sheet's buttons.
+- **B2/B3, scrolls clear.** `expectScrollsClear(_:screen:anchor:last:above:)` replaces the tab-bar-only proof: the
+  page is the scroll view holding `anchor` (never a page behind a push or a sheet), dragged near its leading edge
+  from above the bar or foot until two drags leave its picture unchanged; its lowest labelled text or button must be
+  the one named (`last`, or its start) and stand above the bar's top or the foot's. Proved on: Day editor ("Delete
+  day"), exercise history ("Aug 24"), workout detail ("Delete workout"), Settings ("Ledger …", the version line),
+  edit sets ("16", the last set's reps), and the picker's "Press" list ("Smith Machine Overhead Press").
+- The picker's proof at Accessibility XXXL first failed with its last row below the screen: the drags started on the
+  sheet's foot, which moves nothing. They now start above the bar or foot, and it passes; no finding.
+- **B4, per screen.** F15-S2-3 and 4 are keyed by screen, as measured (`[screen: labels]`). "Day name" is measured
+  whole at both sizes in the screen's pictures (at XXXL the field's own frame cuts the drawn name's second line).
+- **S1.** `letterInk`'s doc and test no longer claim the current row: its accent on the dark `ink` fill (#F4F2ED) is
+  about 2.8:1, for phase 2 to measure and fix (token or element). The test is
+  `letterInk_offTheCurrentRow_isInkMuted`.
+- **S2.** F15-S2-5 takes texts and buttons only, whose middle lies inside the bar; a button wholly inside the bar is
+  the bar's own, whatever its label.
+- **S3, F15-S2-9 kept.** With `ReceiptScreen` containing its elements under the escape action
+  (`.accessibilityElement(children: .contain)`) the audit stopped reporting the date's hit area, but
+  `ReceiptTests.escape_isDone` failed: the first element no longer performs the escape. Reverted; the exclusion
+  stays, now by the frozen clock's label. Why the date alone: SwiftUI hands the stack's escape to each element,
+  which the audit counts as a control, and of the pinned header's three only the date (12 pt) is under the size;
+  the name is 29 pt, "Done" 44 pt. In the contained run the date's "Text clipped" (caption role) was reported too,
+  and it is excused by label on the receipt (F15-S2-4).
+- **S4.** The "Audit issues" report is attached in a teardown block, also when a walk stops midway; each line gives
+  the issue's type and its verdict (excused, open, or not excused).
+- **S6.** F15-S2-12's hypothesis is recorded as refuted; its issue type is `.elementDetection` (2), which the open
+  finding now also matches.
+- **Nits.** `AuditWorkout` freezes the clock (Wednesday 2026-09-16); the Library's search is found by its label's
+  start and the history's back by "BackButton". "Finish" is reported "Text clipped" from this round on: at the default
+  size with "Minimize" (whole, F15-S2-4), and at XXXL with it in F15-S2-10 (open).
+- **Settling.** Each audit now waits (at most ten pictures, no sleep) until two pictures of the screen in a row are
+  the same, so a selection or sheet still moving is not measured half-way.
+- **The simulator turned dark mid-round.** From about 13:25 on 2026-11-14 the shared simulator's own appearance was
+  dark (another lane's work), and without the seam every way drew dark. That run reported three issues the light
+  runs never did, all dark: "Contrast failed" on the current legend row's accent "A" on the dark `ink` fill (S1's
+  2.8:1), on the Day editor's name field, and an element-less "Contrast nearly passed" on the rest panel. They are
+  phase 2's to measure and fix. The last all-light run of every audit (12:49 build) passed but for the picker proof's
+  then-expected failure, since removed.
+- `AuditWorkout`'s frozen clock leaves the header's elapsed time counting from the frozen start to the wall clock
+  ("1424:17:08" on 2026-11-14): the test mode moves the app's clock, not the timeline's. The header's issues are the
+  same as with the real clock; noted for the follow-up PR's header layout.
+
 ## Follow-up from fix/tabs-audit (2026-11-13)
 
 - `LedgerKit/Sources/LedgerAppKit/AppComposition.swift` is at 300 lines, the lint's warning limit, after
@@ -167,3 +312,78 @@ the build. The two failures are known, outside S1, and recorded earlier: `TabsAd
   (`Apps/LedgerUITests/Support/Appearance.swift`); the iOS 27.0 simulator does not apply
   `XCUIDevice.shared.appearance`. `assertDrawn` reads the top of the screen, so it holds on paper-ground screens
   only: S2a's audits of dark-by-design screens (the workout cover) need another signal.
+
+### Review round 1, phase 2: the appearance seam and dark (2026-11-14, after `main` e7cbbcc was merged)
+
+- **The seam.** `AuditWay` takes its appearance from `LaunchAppearance` (`-LEDGER_UITEST_APPEARANCE light|dark`), and
+  each launch calls `assertDrawn(in:)` on Today, before the walk: no pass depends on the shared simulator.
+- **Dark findings, fixed or open:**
+  - **F15-S2-14, fixed.** The current superset member's accent letter on its inverted `ink` fill: in dark the plain
+    accent on #F4F2ED is 2.8:1 ("Contrast failed" on "A"). The letter now reads `accentText` in the other scheme:
+    the plain accent on the near-black fill in light (unchanged), the deep accent #B2390E on #F4F2ED in dark. No
+    token changed (`SupersetLegendRow.letterScheme`, pinned by `SupersetBlockTests.letterScheme_isInvertedOnTheCurrentRowOnly`).
+  - **F15-S2-13, open.** "Contrast failed" on the Day editor's name field in dark only. `NameField` draws the field's
+    own text clear while unfocused and the name as wrapping text under it; the audit reads the field's text colour,
+    not its pixels (black on paper passes, black on #0B0B0D fails). The drawn name is 17:1. Changing how the field's
+    text is hidden touches `NameField`'s measured layout and hosted tests, so it goes to the follow-up PR; a strict
+    expected failure, dark, that field only.
+  - **The rest panel's element-less near pass** is not a dark finding: from this phase on it comes in light and dark
+    alike, one a way, while the labelled "Skip rest" near pass is gone from the same runs; the panel has no other
+    accent control. It is F15-S2-7 with its element lost, excused once a way on the rest panel only
+    (`skipRestUnnamed`, count-checked like F15-S2-12; exclusions now take a per-way count too).
+- **Dark re-measured** (all excused in the last run): F15-S2-5 under the tab bar (Settings' "DATA", "Apple Health",
+  "Not connected"; the detail's "Delete workout"; the history's last session) and each page scrolls clear in dark;
+  F15-S2-6 under the edit sheet's foot and the rest panel; F15-S2-7, white on the accent, which is #FF5B22 in both
+  schemes: 3.10:1; F15-S2-8, the bar's "Edit", its picture's ink 20.5:1; F15-S2-12: two element-less issues on
+  Settings in dark too.
+- **The frozen clock** is dropped from `AuditWorkout`: the header's elapsed time is `Text(timerInterval:)`, drawn by
+  the system from the wall clock, so it cannot read the test mode's moved clock without a timeline of its own
+  (more than this slice). The receipt's date is matched by its shape ("Saturday, November 14"), for its hit area
+  (F15-S2-9) and its native line (F15-S2-4).
+- **The last run** (Nightly plan, the audits and `AuditExclusionsTests` only): 12 tests passed; 222 issues reported
+  (85 light, 86 dark, 51 at XXXL), 213 excused, 9 open (F15-S2-10 ×3, 11 ×1, 12 ×4, 13 ×1), none left.
+
+| Test | Seconds |
+|---|--:|
+| AuditWorkout.test_cardSwapSheetAndRestPanel_passTheAudit | 135.4 |
+| AuditWorkout.test_supersetFinishSheetAndReceipt_passTheAudit | 114.4 |
+| AuditProgramLibrary.test_dayEditorAndItsPicker_passTheAudit | 268.9 |
+| AuditProgramLibrary.test_historyNewAndEditExercise_passTheAudit | 272.6 |
+| AuditHistorySettings.test_workoutDetailAndEditSets_passTheAudit | 279.8 |
+| AuditHistorySettings.test_settingsAndBarAndPlates_passTheAudit | 104.1 |
+| AuditExclusionsTests (6 tests) | under 0.1 each |
+
+1,175 s on the Mac, about 1,760 s on the runner (× 1.5): the scroll proofs added about 400 s. Leg 4 becomes about
+4,590 s of tests, under `nightly-shards.txt`'s ~6,300 s rebalance mark; the next rebalance could move an audit class to
+leg 5.
+
+### Review round 2 (G3: small changes)
+
+- **SF1, the element-less "Skip rest".** The excuse now also needs the default size, a detail naming a
+  `SwiftUI.AccessibilityNode` (as the labelled one's did), and no labelled "Skip rest" near pass on the same screen in
+  the same way; near misses for XXXL, a labelled one beside it, and a frame. Which change lost the element, from the
+  runs already made (no further run was needed to separate the two): the frozen clock is ruled out, as the 12:49
+  run had it and named "Skip rest", and the 13:25 run had it too and did not; the appearance seam is ruled out, as
+  the 13:25 run had no seam and already lost the element. What changed between those two runs was outside the
+  code: the shared simulator's own appearance turned dark (with the app's code for the cover unchanged but for the
+  receipt's revert). Not fixable in this slice; it stays excused as narrowed.
+- **SF2, F15-S2-13 fixed (ruling A, as a token).** The ink at no opacity in `NameField` made the dark audit pass
+  (one run), but a raw alpha in a view breaks the token rule and the Program views' source tests. So it is a
+  LedgerDesign token: `LedgerColor.inkConcealed`, ink's own colour at alpha 0 (Increase Contrast too), "text drawn
+  but not shown", which an audit reads as ink. `NameField` draws its hidden text and its unfocused field in it, and
+  spells no `Color` at all; the one sanctioned edit is `ProgramViewsSourceAdversarialTests`' colour pin, now empty
+  (F15-S2-13). The token is listed wherever the token tests list every token (`PhoneToken`, `TokenValueTests`, the
+  gallery and its names). Closed for the Day editor's "Day name" and the builder's "Program name", the same
+  `NameField` (the latter not audited in dark here: the builder root is the tabs lane's).
+- **SF1, observation.** The element-less "Skip rest" tracks the shared simulator's own appearance: present from the
+  moment it turned dark, absent before, whatever the app was told by the seam.
+- **SF3.** `settle` compares the screen's first scroll view, not the whole screen, so the cover's running clock
+  and the rest ring no longer keep it from settling.
+- **SF4.** "Wednesday, September 30", the longest date the receipt writes, measured at Accessibility XXXL with the
+  clock at 2026-09-30 (one run, reverted): frame 240 × 76 at (26, 78), two lines, whole in the picture; reported
+  "Text clipped" and excused as F15-S2-4. The date excuses (F15-S2-4 and 9) take no date longer than it.
+- **N1.** `expectScrollsClear` stops as soon as `last` ends above the bar or foot, and measures where `last` ends by
+  its text where it has one: a row's button reaches below its text by its padding (the picker's last row at XXXL
+  ended 1 pt under the foot's rule by its frame, its text well above).
+- **N2.** The letter's test resolves the colours in both schemes and asserts 4.5:1 on both fills (it replaces the
+  scheme-only test). **N3.** The report's open findings are counted among the issues not excused. **N4/N5** above.

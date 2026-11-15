@@ -9,6 +9,7 @@
     struct ColorTokenPage: View {
         static let phone: [(name: String, color: Color)] = [
             ("ground", LedgerColor.ground), ("surface", LedgerColor.surface), ("ink", LedgerColor.ink),
+            ("inkConcealed", LedgerColor.inkConcealed),
             ("inkSecondary", LedgerColor.inkSecondary), ("inkMuted", LedgerColor.inkMuted),
             ("inkFaint", LedgerColor.inkFaint), ("inkDim", LedgerColor.inkDim), ("hairline", LedgerColor.hairline),
             ("hairlineStrong", LedgerColor.hairlineStrong), ("accent", LedgerColor.accent),

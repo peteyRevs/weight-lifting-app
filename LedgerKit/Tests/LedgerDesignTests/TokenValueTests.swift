@@ -28,6 +28,7 @@ nonisolated struct TokenValueTests {
         Case("ground", LedgerColor.ground, 0x0B0B0D),
         Case("surface", LedgerColor.surface, 0x131316),
         Case("ink", LedgerColor.ink, 0xF4F2ED),
+        Case("inkConcealed", LedgerColor.inkConcealed, 0xF4F2ED, 0),
         Case("inkSecondary", LedgerColor.inkSecondary, 0xF4F2ED, 0.72),
         Case("inkMuted", LedgerColor.inkMuted, 0xF4F2ED, 0.51), // F06 fix round 3: AA on accentSoft
         Case("inkFaint", LedgerColor.inkFaint, 0xF4F2ED, 0.32),
@@ -45,6 +46,7 @@ nonisolated struct TokenValueTests {
         Case("ground", LedgerColor.ground, 0xEFEDE6),
         Case("surface", LedgerColor.surface, 0xFFFFFF),
         Case("ink", LedgerColor.ink, 0x16150F),
+        Case("inkConcealed", LedgerColor.inkConcealed, 0x16150F, 0),
         Case("inkSecondary", LedgerColor.inkSecondary, 0x16150F, 0.72),
         Case("inkMuted", LedgerColor.inkMuted, 0x16150F, 0.62), // F06 fix round 3: AA on accentSoft
         Case("inkFaint", LedgerColor.inkFaint, 0x16150F, 0.32),

@@ -122,5 +122,44 @@
                 #expect(step.toTop ? offset < 1 : abs(offset - 250) < 1, "step \(index): the page stands at \(offset)")
             }
         }
+
+        /// F15-S2-1 and 14: the letter as `SupersetLegendRow` paints it, resolved in its scheme (`letterScheme`: the
+        /// other one on the current member's inverted fill) over its fill in the screen's: at least 4.5:1 on both
+        /// fills, light and dark. Off the current row it was `inkFaint` (1.8:1); on it, the plain accent in dark
+        /// was 2.8:1.
+        @Test("The letter holds 4.5:1 on the current member's fill and on the surface, light and dark")
+        func letter_holdsAA_onBothFillsInBothSchemes() {
+            for scheme in [ColorScheme.light, .dark] {
+                let letterScheme = SupersetLegendRow.letterScheme(isCurrent: true, in: scheme)
+                let onFill = SupersetLegendRow.letterInk(isCurrent: true)
+                let onSurface = SupersetLegendRow.letterInk(isCurrent: false)
+                let current = Self.contrast(onFill, letterScheme, on: LedgerColor.ink, scheme)
+                let other = Self.contrast(onSurface, scheme, on: LedgerColor.surface, scheme)
+                #expect(current >= 4.5 && other >= 4.5, "\(scheme): current \(current), other \(other)")
+            }
+        }
+
+        /// WCAG contrast of `ink`, resolved in `inkScheme` and laid over `ground` resolved in `groundScheme`.
+        static func contrast(
+            _ ink: Color, _ inkScheme: ColorScheme, on ground: Color, _ groundScheme: ColorScheme
+        ) -> Double {
+            func rgba(_ color: Color, _ scheme: ColorScheme) -> [CGFloat] {
+                var (red, green, blue, alpha) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+                let traits = UITraitCollection(userInterfaceStyle: scheme == .dark ? .dark : .light)
+                UIColor(color).resolvedColor(with: traits).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+                return [red, green, blue, alpha]
+            }
+            func luminance(_ rgb: [CGFloat]) -> Double {
+                let linear = rgb.prefix(3).map { $0 <= 0.039_28 ? Double($0) / 12.92 : pow(
+                    (Double($0) + 0.055) / 1.055,
+                    2.4
+                ) }
+                return 0.212_6 * linear[0] + 0.715_2 * linear[1] + 0.072_2 * linear[2]
+            }
+            let (top, bottom) = (rgba(ink, inkScheme), rgba(ground, groundScheme))
+            let laid = (0 ..< 3).map { top[$0] * top[3] + bottom[$0] * (1 - top[3]) }
+            let (lighter, darker) = (max(luminance(laid), luminance(bottom)), min(luminance(laid), luminance(bottom)))
+            return (lighter + 0.05) / (darker + 0.05)
+        }
     }
 #endif

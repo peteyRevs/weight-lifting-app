@@ -51,6 +51,9 @@ struct WorkoutHeader: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(model.elapsedLabel)
+        // F15-S2-2: a text, as VoiceOver reads it. Without the trait the element is of no kind, and the system's
+        // audit took it for a control 15 pt tall ("Hit area is too small").
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityIdentifier("workout.header.elapsed")
     }
 }

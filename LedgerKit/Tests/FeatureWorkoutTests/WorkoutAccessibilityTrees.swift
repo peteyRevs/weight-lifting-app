@@ -56,12 +56,12 @@
         }
 
         /// The header's five stops: its row, left to right, then the workout's name and its progress. The
-        /// elapsed time is its name alone, with no time for VoiceOver to read stale.
+        /// elapsed time is its name alone, with no time for VoiceOver to read stale, and a text (F15-S2-2).
         static func header(progress: String, isEnabled: Bool = true) -> [Stop] {
             let button: UIAccessibilityTraits = isEnabled ? .button : [.button, .notEnabled]
             return [
                 Stop("Minimize", button),
-                Stop("Elapsed time", []),
+                Stop("Elapsed time", .staticText),
                 Stop("Finish", button),
                 Stop("Upper A — Push focus", [.header, .staticText]),
                 Stop("Workout progress", value: progress, [])

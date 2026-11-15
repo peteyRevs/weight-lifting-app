@@ -15,6 +15,7 @@
                 ("LedgerColor.ground", LedgerColor.ground),
                 ("LedgerColor.surface", LedgerColor.surface),
                 ("LedgerColor.ink", LedgerColor.ink),
+                ("LedgerColor.inkConcealed", LedgerColor.inkConcealed),
                 ("LedgerColor.inkSecondary", LedgerColor.inkSecondary),
                 ("LedgerColor.inkMuted", LedgerColor.inkMuted),
                 ("LedgerColor.inkFaint", LedgerColor.inkFaint),

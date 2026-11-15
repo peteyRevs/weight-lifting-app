@@ -9,7 +9,7 @@ import Testing
 /// The phone tokens with their spec values. Light is v1 "paper / ink" (§8.1), dark is v2
 /// (§8.2); decision #1 ships both. Alphas are the brief's (.72/.45/.32/.08/.14) plus `DIM` .28.
 nonisolated enum PhoneToken: String, CaseIterable, Sendable {
-    case ground, surface, ink, inkSecondary, inkMuted, inkFaint, inkDim, hairline, hairlineStrong
+    case ground, surface, ink, inkConcealed, inkSecondary, inkMuted, inkFaint, inkDim, hairline, hairlineStrong
     case accent, accentText, accentSoft, accentLine, onAccent
 
     static let paper: UInt32 = 0xEFEDE6, card: UInt32 = 0xFFFFFF, inkHex: UInt32 = 0x16150F
@@ -24,6 +24,7 @@ nonisolated enum PhoneToken: String, CaseIterable, Sendable {
         case .ground: LedgerColor.ground
         case .surface: LedgerColor.surface
         case .ink: LedgerColor.ink
+        case .inkConcealed: LedgerColor.inkConcealed
         case .inkSecondary: LedgerColor.inkSecondary
         case .inkMuted: LedgerColor.inkMuted
         case .inkFaint: LedgerColor.inkFaint
@@ -42,6 +43,7 @@ nonisolated enum PhoneToken: String, CaseIterable, Sendable {
     private func inkAlpha(light: Bool) -> Double? {
         switch self {
         case .ink: 1
+        case .inkConcealed: 0
         case .inkSecondary: 0.72
         case .inkMuted: light ? 0.62 : 0.51
         case .inkFaint: 0.32
