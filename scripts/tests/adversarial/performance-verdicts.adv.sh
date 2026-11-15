@@ -7,8 +7,6 @@ set -uo pipefail
 source "$(dirname "$0")/lib.sh"
 
 T="$ADV_TMP"
-# Files that time code but hold no budget: a bound that only proves a loop ends (seconds, not a performance claim).
-EXEMPT="ExercisePickerModelAdversarialTests.swift WrapLayoutAdversarialTests.swift"
 
 # faults <tests dir>: each file that measures a time with no verdict through PerformanceRunner, or that has an
 # #expect comparing with < or <= of its own: a timing against a budget, an inline Duration or a local variable alike.
@@ -16,7 +14,6 @@ EXEMPT="ExercisePickerModelAdversarialTests.swift WrapLayoutAdversarialTests.swi
 faults() {
     grep -rlE 'clock\.measure|\.measure \{' "$1" --include='*.swift' | sort | while read -r file; do
         name="$(basename "$file")"
-        [[ " $EXEMPT " == *" $name "* ]] && continue
         grep -q 'PerformanceRunner\.verdict' "$file" || echo "$name: times code with no PerformanceRunner.verdict"
         if grep -E '#expect\(.*[^<]<=? ' "$file" | grep -qv 'not a timing'; then
             echo "$name: compares a timing to a budget itself"
@@ -30,11 +27,6 @@ check "V01 every test that times code against a budget reaches its verdict throu
 check "V02 ... and no budget is scaled anywhere else (the verdict scales it once)" \
     is "$(grep -rlE 'PerformanceRunner\.factor *\*|\* *PerformanceRunner\.factor|PerformanceRunner\.budget' "$ROOT/LedgerKit/Tests" \
         --include='*.swift' | grep -v '/PerformanceRunnerTests.swift$' || true)" ""
-for name in $EXEMPT; do
-    file="$(find "$ROOT/LedgerKit/Tests" -name "$name")"
-    check "V03 the exempt $name still bounds a loop in seconds, with no budget" \
-        is "$([[ -n "$file" ]] && grep -cE 'PerformanceBudget|budget' "$file")" "0"
-done
 
 # The rule itself, against tests that break it as a later edit could.
 mkdir -p "$T/Tests/A"

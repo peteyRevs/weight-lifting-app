@@ -10,11 +10,13 @@ extension Tag {
     @Tag static var snapshot: Self
     /// Longer than 2 s; runs in the nightly lane only (testing-strategy §6).
     @Tag static var slow: Self
+    /// A timing: nightly lane only (testing-strategy §6).
+    @Tag static var performance: Self
 }
 
 /// The lane a test plan runs in, from its `LEDGER_TEST_LANE` variable (testing-strategy §6).
 nonisolated enum TestLane {
-    /// `.slow` tests run only in the nightly plans; the PR plans and `swift test` skip them.
+    /// `.slow` and `.performance` tests run only in the nightly plans; the PR plans and `swift test` skip them.
     static var runsSlowTests: Bool {
         ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly"
     }
