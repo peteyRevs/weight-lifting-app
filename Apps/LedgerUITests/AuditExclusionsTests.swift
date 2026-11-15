@@ -143,6 +143,7 @@ final class AuditExclusionsTests: XCTestCase {
             Self.issue("Program builder", Self.clipped, "BLOCK · 8 WEEKS", way: .largest)
         ], nearMisses: [
             Self.issue("Today", Self.clipped, "SCHEDULED REST", way: .largest),
+            Self.issue("Today", Self.clipped, "Week 5 of 8 · ~38 min"),
             Self.issue("History", Self.clipped, "Lower A — Squat focus", way: .largest),
             Self.issue("Program builder", Self.clipped, "Upper / Lower", type: .textField, way: .largest),
             Self.issue("Today", Self.contrast, "Week 5 of 8 · ~38 min", way: .largest),

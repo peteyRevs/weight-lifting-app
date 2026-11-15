@@ -55,6 +55,41 @@
             #expect(isOneRow, "\(minimize), \(time), \(finish)")
         }
 
+        /// G3 N5: VoiceOver reads "Minimize", the time, then "Finish", whatever the arrangement: one line, the time
+        /// over the buttons, or one line each (a phone narrower than any, 200 pt, at the largest size).
+        @Test(
+            "VoiceOver reads Minimize, the time, then Finish on one line, two or three",
+            arguments: [DynamicTypeSize.large, .accessibility3, .accessibility5]
+        )
+        func readingOrder_staysTheRows(_ size: DynamicTypeSize) throws {
+            let model = try Self.header()
+            let header = WorkoutHeader(model: model) { _ in }
+                .environment(\.workoutTimeline, .fixed(at: WorkoutPreview.minutes.now))
+            let expected = [model.minimize, model.elapsedLabel, model.finish]
+            for setting in LayoutSetting.everySetting(size) + [LayoutSetting(size: size, width: 200)] {
+                let labels = Array(setting.elements(of: header).prefix(3).map(\.label))
+                #expect(labels == expected, "\(setting.testDescription): \(labels)")
+            }
+            guard size == .accessibility5 else {
+                return
+            }
+            let narrow = LayoutSetting(size: size, width: 200).elements(of: header)
+            let minimize = try #require(narrow.first { $0.label == model.minimize }).frame
+            let finish = try #require(narrow.first { $0.label == model.finish }).frame
+            #expect(finish.minY >= minimize.maxY - 0.5, "at 200 pt each button has a line: \(minimize), \(finish)")
+        }
+
+        /// The three arrangements, by the subviews' own widths (Minimize, the time, Finish) and the width there is.
+        @Test("One line while all three fit, then the time over the buttons, then one line each")
+        func rows_byTheWidthThereIs() {
+            let sizes = [CGSize(width: 100, height: 44), CGSize(width: 60, height: 20), CGSize(width: 80, height: 44)]
+            let rows = { (width: CGFloat) in HeaderRowLayout.rows(sizes, within: width, spacing: 8) }
+            #expect(rows(256) == [[0, 1, 2]])
+            #expect(rows(255) == [[1], [0, 2]])
+            #expect(rows(188) == [[1], [0, 2]])
+            #expect(rows(187) == [[1], [0], [2]])
+        }
+
         /// The header's two pill styles, to measure a button by itself.
         enum PillStyle {
             case ghost, outline

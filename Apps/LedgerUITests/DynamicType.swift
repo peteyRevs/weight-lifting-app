@@ -77,12 +77,12 @@ extension DynamicType {
     /// the caption, eyebrow, heading and title roles whose frame is the role's native line. Every glyph of each is
     /// whole in the screen's picture at Accessibility XXXL, and each wraps between words.
     static var exclusions: [ScreenExclusion] {
-        [
-            .shortLines([
-                "Today": ["Wednesday, September 16", "Week 5 of 8 · ~38 min", "Lower A — Squat focus"],
-                "Today, rest day": ["Thursday, September 17", "SCHEDULED REST", "No session today"],
-                "Program builder": ["BLOCK · 8 WEEKS"]
-            ])
-        ]
+        let lines = ScreenExclusion.shortLines([
+            "Today": ["Wednesday, September 16", "Week 5 of 8 · ~38 min", "Lower A — Squat focus"],
+            "Today, rest day": ["Thursday, September 17", "SCHEDULED REST", "No session today"],
+            "Program builder": ["BLOCK · 8 WEEKS"]
+        ])
+        // Measured at Accessibility XXXL only: the same report in another way is not this finding.
+        return [ScreenExclusion(finding: lines.finding, issue: lines.issue) { lines.excuses($0) && $0.way == .largest }]
     }
 }

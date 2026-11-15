@@ -123,31 +123,21 @@ struct Steps {
         return XCTWaiter().wait(for: [hittable], timeout: 5) == .completed
     }
 
-    /// Swipes the screen's first scroll view up (or, `back`, down) until `element` can be tapped, at most ten times.
+    /// Swipes the screen's first scroll view toward `element` until it can be tapped, at most twenty times: down
+    /// while the element stands above the page's middle, up while it stands below (or under a pinned bar). An element
+    /// a lazy list has not made yet has no place: `back` says it lies above; else it is looked for below.
     func scrollUntilHittable(_ element: XCUIElement, back: Bool = false) {
-        for _ in 0 ..< 10 where !(element.exists && element.isHittable) {
-            if back {
-                app.scrollViews.firstMatch.swipeDown(velocity: .slow)
+        let page = app.scrollViews.firstMatch
+        for _ in 0 ..< 20 where !(element.exists && element.isHittable) {
+            let isAbove = element.exists ? element.frame.midY < page.frame.midY : back
+            if isAbove {
+                page.swipeDown(velocity: .slow)
             } else {
-                app.scrollViews.firstMatch.swipeUp(velocity: .slow)
+                page.swipeUp(velocity: .slow)
             }
         }
         XCTAssertTrue(element.exists, "\(element) is not on the screen")
         XCTAssertTrue(element.isHittable, "\(element) cannot be reached")
-    }
-
-    /// Swipes `page` (else the screen's first scroll view) up, at most ten times, then down, at most twenty, until
-    /// `element` can be tapped: an action above or below what is shown is reached either way.
-    func scrollIntoReach(_ element: XCUIElement, in page: XCUIElement? = nil) {
-        let scroller = page ?? app.scrollViews.firstMatch
-        let reached = { element.exists && element.isHittable }
-        for _ in 0 ..< 10 where !reached() {
-            scroller.swipeUp(velocity: .slow)
-        }
-        for _ in 0 ..< 20 where !reached() {
-            scroller.swipeDown(velocity: .slow)
-        }
-        XCTAssertTrue(reached(), "\(element) cannot be reached")
     }
 
     /// Kept with the result, so a run shows the screens it checked.

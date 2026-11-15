@@ -444,7 +444,7 @@ nightly link is the orchestrator's, after merge.
   top of S2a's picker and edit sets.
 - **Criterion 8.** `docs/accessibility-labels.md` and `AccessibilityLabelsDocTests` (LedgerAppKitTests, a source
   rule like `ModuleCopyTests`).
-- §2.7 rewritten; `nightly-shards.txt`: `AuditProgramLibrary` moves to leg 5.
+- §2.7 rewritten; nightly placement: superseded in review round 1 (below).
 
 ### Findings (S2b)
 
@@ -485,7 +485,7 @@ No layout bug was found among the clipped texts: each wraps between words and dr
 | Smoke (4 tests) | 101.7 |
 
 The reach steps and the three new scrolls-clear proofs add about 375 s to S2a's audits (1,175 s before, 1,614 s
-now), and `DynamicType` adds 111 s. **Nightly placement** (runner time estimated as local × 1.5, the orchestrator's
+now), and `DynamicType` adds 111 s. **Nightly placement** (superseded in review round 1, below) (runner time estimated as local × 1.5, the orchestrator's
 rule; `docs/ci-cd.md` measured 2.4–3.1 times on package targets, so these are lower bounds): `AuditProgramLibrary`
 (863 s, ~1,290 on the runner) moves to leg 5. Leg 4 holds `LedgerUITests`' other classes (1,840) plus `Flows`,
 `AuditWorkout`, `AuditHistorySettings` and `DynamicType` (~1,525) and the package targets (775): about 4,140 s. Leg 5
@@ -494,3 +494,83 @@ is about 4,820 s (2,244 + 1,277 + 1,290). Both are under the ~6,300 s rebalance 
 Other gates on the final code: `FeatureWorkoutTests` (726 tests, 3 known issues), `FeatureLibraryTests` (159),
 `FeatureSettingsTests` (156) and `LedgerAppKitTests` (426) whole on the PR plan with recording off, snapshots included:
 green. `check.sh --lint-only`: green. `pr-shards.adv.sh`: 31 passed.
+
+### Review round 1 (G3: one blocker, four should-fixes; the orchestrator's rulings)
+
+- **B1, under the nightly's 600 s a test.**
+  - `Steps.scrollUntilHittable` is the one scroll helper (`scrollIntoReach` folded in). It swipes toward the
+    element: down while it stands above the page's middle, up while below. `back` is kept for an element a lazy
+    list has not made. Each way used to waste ten upward swipes after a scrolls-clear proof.
+  - The walks are split so no UI test takes over 240 s on a Mac:
+    - by screen: Day editor and picker; the exercise history, New exercise and Edit exercise (new class
+      `AuditLibrary`); the workout detail and edit sets; Settings in a class of its own (`AuditSettings`), so the
+      nightly can place it;
+    - by way, where one screen's three ways still took over four minutes (the picker; New exercise): light and dark
+      apart from Accessibility XXXL.
+- **S1, placement at local × 3.** Every leg, with a build of up to 2,100 s, ends at most at about 6,050 s (the table
+  below).
+- **S2, the labels document bound to the shipped label.**
+  - A "Wired by" column names the presentation file that hands the button its copy; the test checks the file names it.
+  - "Pinned by" must hold the English words (each `\(…)` matched by any text) or the copy (the component, for a row
+    with no copy), not only exist.
+  - "Log drop set" is pinned by `AccessibilityTreeSetRowTables`. "Undo drop set" is pinned by
+    `WorkoutPresentationCardTests` (the label handed to the row), as no hosted tree draws a logged drop set; the
+    document says so.
+- **S3, the detector.** It reads `Button(`, `Button {`, `Menu(` and `Menu {` with an icon label (`LedgerIconView`,
+  `SetRowCheck`, `Image(`) on the same line or the line after the brace or `label: {`, and `.labelStyle(.iconOnly)`.
+  A fixture test checks each form, two buttons with words and a comment. A malformed row throws `MalformedRow` with
+  its line (N6).
+- **S4, the guard of `wholeName`.** The reference `CreateExerciseSnapshotTests.longName_accessibility5_matchesReference`
+  (the field alone, a four-line name, light, AX5), cited in the exclusion's comment beside
+  `name_longerThanItsLine_isDrawnWhole`.
+- **N1.** `DynamicType.exclusions` take Accessibility XXXL only, with a near miss at the default size.
+- **N2.** The open-finding machinery is removed (none is left, and an untested strict path is dead code); §2.7
+  says a real finding is fixed or reported. `reach` lost its unused `in page:`.
+- **N3.** `OnboardingAdversarial`'s largest-size audit pictures each step and checks "Skip setup", Continue or
+  "Start training", and "Back" after the first step, can be tapped.
+- **N5.** `WorkoutHeaderLayoutTests.readingOrder_staysTheRows`: Minimize, time, Finish in all eight settings at
+  `.large`, AX3 and AX5, and on a 200 pt phone, where at AX5 each button has a line of its own (checked). And
+  `rows_byTheWidthThereIs` pins the three arrangements' boundaries. Known and accepted: crossing an hour widens the
+  time ("59:59" to "1:00:00"), which can move the header from one arrangement to the next at a boundary width.
+- **N4 and N8:** skipped by the orchestrator's ruling; known gaps, as G3's review records them.
+- W97 of `check-wiring.adv.sh` re-pinned (sanctioned: its subject, leg 7's selection, changed).
+
+**Times after the change** (local Mac, iPhone 17, iOS 27.0, Nightly plan):
+
+| Class | Test | Seconds |
+|---|---|--:|
+| AuditWorkout | test_cardSwapSheetAndRestPanel_passTheAudit | 145.0 |
+| AuditWorkout | test_supersetFinishSheetAndReceipt_passTheAudit | 125.3 |
+| AuditProgramLibrary | test_dayEditor_passesTheAudit | 97.4 |
+| AuditProgramLibrary | test_exercisePicker_lightAndDark_passesTheAudit | 113.4 |
+| AuditProgramLibrary | test_exercisePicker_atAccessibilityXXXL_passesTheAudit | 148.2 |
+| AuditLibrary | test_exerciseHistory_passesTheAudit | 97.1 |
+| AuditLibrary | test_newExercise_lightAndDark_passesTheAudit | 137.9 |
+| AuditLibrary | test_newExercise_atAccessibilityXXXL_passesTheAudit | 117.7 |
+| AuditLibrary | test_editExercise_passesTheAudit | 122.0 |
+| AuditHistorySettings | test_workoutDetail_passesTheAudit | 87.1 |
+| AuditHistorySettings | test_editSets_passesTheAudit | 227.0 |
+| AuditSettings | test_settingsAndBarAndPlates_passTheAudit | 142.5 |
+| DynamicType | test_todayBuilderLibraryAndHistory_atAccessibilityXXXL | 76.6 |
+| DynamicType | test_restDayAndOffScheduleSheet_atAccessibilityXXXL | 22.3 |
+| OnboardingAdversarial | test_eachStep_passesTheSystemsAccessibilityAudit_atTheLargestTextSize | 29.3 |
+| Flows | the three | 45.4, 81.5, 29.3 |
+| Smoke | the four | 20.1, 22.4, 23.5, 33.4 |
+
+**Legs** (test seconds on the runner from `nightly-shards.txt`; F15's classes at local × 3; + a build of up to
+2,100 s; the rebalance mark is ~6,300 s):
+
+| Leg | Tests | + F15 | Tests total | With a 2,100 s build |
+|---|---|---|--:|--:|
+| 1 | 3,072 + 84 + 55 + 38 = 3,249 | Flows 156 × 3 = 469 | 3,718 | 5,818 |
+| 2 | 2,736 + 31 + 15 + 2 + 2 = 2,786 | AuditWorkout 270 × 3 = 811 | 3,597 | 5,697 |
+| 3 | 4,365 | none | 4,365 | **6,465** |
+| 4 | 1,840 + 301 + 203 + 166 + 105 = 2,615 | AuditHistorySettings 314 × 3 = 942, DynamicType 99 × 3 = 297 | 3,854 | 5,954 |
+| 5 | 2,244 + 1,277 = 3,521 | AuditSettings 143 × 3 = 428 | 3,949 | 6,049 |
+| 6 | 2,406 + 1,539 = 3,945 | none | 3,945 | 6,045 |
+| 7 | 2,767 | AuditProgramLibrary 359 × 3 = 1,077 | 3,844 | 5,944 |
+| 8 | 985 + 1,451 = 2,436 | AuditLibrary 475 × 3 = 1,424 | 3,860 | 5,960 |
+
+F15's tests put no leg past about 6,050 s. **Leg 3 is over the mark on its own**: `WorkoutAnnouncementAdversarialTests`
+is one suite of 4,365 s, and leg 6 is near it. Neither holds an F15 test. This is for the next rebalance, from a newer
+run's bundles. The shards file's own note says the slowest build seen was 2,092 s.

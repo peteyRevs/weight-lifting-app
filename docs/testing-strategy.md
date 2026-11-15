@@ -375,16 +375,18 @@ only with `waitForExistence` or a predicate, never a sleep.
 - the tab roots (`TabsAdversarial`), onboarding (`OnboardingAdversarial+Audit`), Today (`TodayAuditAdversarial`)
   and the Library root (`LibraryAuditAdversarial`), each with its own exclusions;
 - every screen under the tab roots through F15's one runner (`Support/Audit.swift`, `ScreenAudit`): the workout's
-  cover, sheets and receipt (`AuditWorkout`), the Day editor, its picker, New and Edit exercise and the exercise
-  history (`AuditProgramLibrary`), the workout detail, its edit sheet, Settings and Bar and plates
+  cover, sheets and receipt (`AuditWorkout`), the Day editor and its picker (`AuditProgramLibrary`), the exercise
+  history, New and Edit exercise (`AuditLibrary`), the workout detail, its edit sheet, Settings and Bar and plates
   (`AuditHistorySettings`). Each is audited three ways (`AuditWay`): light and dark at the default size, and light
   at Accessibility XXXL. Every issue is attached to the result with its verdict and a picture of its element.
+- Each UI test stays under about four minutes on a Mac (the nightly allows 600 s a test on the runner, which runs
+  two to three times slower): a walk that grows past that is split by screen.
 
 **Dynamic Type.** At `accessibility5` (Accessibility XXXL) each §2.2 screen is pictured, its primary actions are
-scrolled to and must be hittable (`ScreenAudit.reach`), and no text may be clipped. S2a's audits do this in their
-Accessibility XXXL way. `DynamicType` audits `.textClipped` on the screens no other audit covers at that size:
-Today on a session day and a rest day, the off-schedule sheet, the Program builder and the History list. It also
-reaches the Library root's actions.
+scrolled to and must be hittable (`ScreenAudit.reach`), and no text may be clipped. F15's audits do this in their
+Accessibility XXXL way, and `OnboardingAdversarial` in its largest-size audit of each step. `DynamicType` audits
+`.textClipped` on the screens no other audit covers at that size: Today on a session day and a rest day, the
+off-schedule sheet, the Program builder and the History list. It also reaches the Library root's actions.
 
 **Exclusion rules.** An issue the audit reports may be excused only when all of these hold:
 - It is measured: the picture, the colours or the frame, recorded in the feature's implementation notes.
@@ -396,8 +398,8 @@ reaches the Library root's actions.
   needs a proof that the page scrolls clear of it (`ScreenAudit.expectScrollsClear`). Every sheet with a pinned
   foot has one, at the default size and at Accessibility XXXL: the picker, edit sets, New exercise, Bar and plates,
   and Delete all data.
-- A real finding not yet fixed is an *open* finding: a strict `XCTExpectFailure` on exactly what it names, so the
-  test stays green, catches everything else, and goes red the day the finding is fixed.
+- A real finding is fixed in its slice or reported to the orchestrator, never carried as a passing test. S2a's
+  strict expected failures for open findings left with the last of them (S2b).
 
 A test is never weakened to pass. Re-pinning a test whose subject legitimately changed is allowed, and the commit
 says so.

@@ -1,35 +1,41 @@
 import XCTest
 
 /// F15 S2, criterion 6 (C7): the system's accessibility audit, three ways (`AuditWay`), on a finished workout's
-/// detail and its edit-sets sheet (with the seed's four weeks of history), and on Settings and its "Bar and plates"
-/// sheet. On the seed program at noon on Wednesday of its week 5. What the audit reports and is excused is each
-/// screen's exclusions' (measured, in the implementation notes); anything else fails. Nightly only.
+/// detail and its edit-sets sheet (with the seed's four weeks of history); Settings's screens are `AuditSettings`'s,
+/// with these exclusions. On the seed program at noon on Wednesday of its week 5.
+/// What the audit reports and is excused is each screen's exclusions' (measured, in the implementation notes);
+/// anything else fails. Each test stays under about four minutes on a Mac (S2b). Nightly only.
 final class AuditHistorySettings: XCTestCase {
-    private static let arguments = ["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z", "-LEDGER_UITEST_PROGRAM", "seed"]
+    static let arguments = ["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z", "-LEDGER_UITEST_PROGRAM", "seed"]
 
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
-    /// The History list's newest workout (that Monday's Upper A), then its "Edit".
+    /// The History list's newest workout (that Monday's Upper A).
     @MainActor
-    func test_workoutDetailAndEditSets_passTheAudit() throws {
+    func test_workoutDetail_passesTheAudit() throws {
         let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
         try audit.threeWays(launching: Self.arguments + ["-LEDGER_UITEST_HISTORY", "4"]) { steps in
             let app = steps.app
-            XCTAssertTrue(steps.todayTitle.waitForExistence(timeout: 10))
-            app.tabBars.buttons["History"].tap()
-            let newest = app.buttons.matching(NSPredicate(format: "value CONTAINS ' pounds'")).firstMatch
-            XCTAssertTrue(newest.waitForExistence(timeout: 10), "History lists the seeded workouts")
-            newest.tap()
-            XCTAssertTrue(app.staticTexts["history.workout.title"].waitForExistence(timeout: 5), "its detail")
+            Self.openTheNewestWorkout(steps)
             try audit.audit(steps, screen: "workout detail")
             let edit = app.buttons["history.workout.edit"]
             audit.reach(steps, screen: "workout detail", [app.buttons["history.workout.delete"], edit])
             audit.expectScrollsClear(steps, screen: "workout detail", anchor: "LOGGED", last: "Delete workout") {
                 app.tabBars.firstMatch.frame.minY
             }
+        }
+    }
 
+    /// The newest workout's "Edit": the edit-sets sheet.
+    @MainActor
+    func test_editSets_passesTheAudit() throws {
+        let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
+        try audit.threeWays(launching: Self.arguments + ["-LEDGER_UITEST_HISTORY", "4"]) { steps in
+            let app = steps.app
+            Self.openTheNewestWorkout(steps)
+            let edit = app.buttons["history.workout.edit"]
             XCTAssertTrue(edit.waitForExistence(timeout: 5))
             edit.tap()
             XCTAssertTrue(app.buttons["history.edit.save"].waitForExistence(timeout: 5), "the edit-sets sheet")
@@ -37,72 +43,23 @@ final class AuditHistorySettings: XCTestCase {
             try audit.audit(steps, screen: "edit sets", pinned: foot)
             audit.reach(steps, screen: "edit sets", [app.buttons["history.edit.cancel"], foot.top])
             // The sheet's last line: the reps of Cable Lateral Raise's last set.
-            audit.expectScrollsClear(
-                steps, screen: "edit sets", anchor: "Set 1 weight", last: "16"
-            ) { foot.minY }
+            audit.expectScrollsClear(steps, screen: "edit sets", anchor: "Set 1 weight", last: "16") { foot.minY }
         }
     }
 
-    /// Today's gear: Settings; then "Bar and plates" and its sheet.
+    /// The History tab, then its newest workout's detail.
     @MainActor
-    func test_settingsAndBarAndPlates_passTheAudit() throws {
-        let audit = ScreenAudit(for: self, exclusions: Self.exclusions)
-        try audit.threeWays(launching: Self.arguments) { steps in
-            let app = steps.app
-            XCTAssertTrue(steps.todayTitle.waitForExistence(timeout: 10))
-            app.buttons["Settings"].tap()
-            XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5), "Settings")
-            try audit.audit(steps, screen: "Settings")
-            let plates = steps.element(startingWith: "Bar and plates")
-            let rows = [app.buttons["settings.deleteAll"], app.buttons["settings.export"], plates]
-            audit.reach(steps, screen: "Settings", rows)
-
-            steps.scrollUntilHittable(plates)
-            plates.tap()
-            let cancel = app.buttons["settings.plates.cancel"]
-            XCTAssertTrue(cancel.waitForExistence(timeout: 5), "Bar and plates")
-            try audit.audit(steps, screen: "Bar and plates")
-            let done = PinnedPart.sheetFoot(app.buttons["settings.plates.done"])
-            audit.reach(steps, screen: "Bar and plates", [cancel, done.top])
-            // The sheet's last row scrolls clear of its foot (S2b).
-            audit.expectScrollsClear(steps, screen: "Bar and plates", anchor: "Bar", last: "Reset to standard") {
-                done.minY
-            }
-            cancel.tap()
-            XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the sheet went down")
-            try expectDeleteAllScrollsClear(audit, steps)
-
-            // The version line, "Ledger 0.21.1 · build 1", whose version changes: matched by its start.
-            audit.expectScrollsClear(steps, screen: "Settings", anchor: "TRAINING", last: "Ledger ") {
-                app.tabBars.firstMatch.frame.minY
-            }
-        }
+    static func openTheNewestWorkout(_ steps: Steps) {
+        let app = steps.app
+        app.tabBars.buttons["History"].tap()
+        let newest = app.buttons.matching(NSPredicate(format: "value CONTAINS ' pounds'")).firstMatch
+        XCTAssertTrue(newest.waitForExistence(timeout: 10), "History lists the seeded workouts")
+        newest.tap()
+        XCTAssertTrue(app.staticTexts["history.workout.title"].waitForExistence(timeout: 5), "its detail")
     }
 }
 
 extension AuditHistorySettings {
-    /// "Delete all data"'s sheet: its last row, the typed word's field, scrolls clear of its foot (S2b). Not audited
-    /// here: `SettingsDeleteAllVoiceOver` audits it.
-    @MainActor
-    private func expectDeleteAllScrollsClear(_ audit: ScreenAudit, _ steps: Steps) throws {
-        let app = steps.app
-        let row = app.buttons["settings.deleteAll"]
-        steps.scrollIntoReach(row)
-        row.tap()
-        let warning = app.alerts["Delete all data?"]
-        XCTAssertTrue(warning.waitForExistence(timeout: 5), "the warning")
-        warning.buttons["Continue"].tap()
-        let foot = PinnedPart.sheetFoot(app.buttons["settings.deleteAll.confirm"])
-        XCTAssertTrue(foot.top.waitForExistence(timeout: 5), "Delete all data's sheet")
-        audit.reach(steps, screen: "Delete all data", [foot.top])
-        audit.expectScrollsClear(
-            steps, screen: "Delete all data", anchor: "This can't be undone.", last: "Type DELETE to confirm"
-        ) { foot.minY }
-        let cancel = app.buttons["Cancel"]
-        cancel.tap()
-        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the sheet went down")
-    }
-
     /// The measured exclusions of the workout's detail, its edit sheet, Settings and Bar and plates (F15-S2-3 to 8).
     static var exclusions: [ScreenExclusion] {
         [
