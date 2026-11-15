@@ -204,7 +204,10 @@ Concrete test names (file = suite = source type; see §6):
   `snapshotAppearance(_:)`: the text size and scheme also go into SwiftUI's
   environment (the library measures before it applies traits), and the view
   takes its own height (the library proposes a zero size, which cuts
-  wrapping text to one line with "…"; F06 review S1). 1.19.6's newest `ViewImageConfig` is
+  wrapping text to one line with "…"; F06 review S1). The view is measured
+  hosted in a window at the drawing's 1× scale and framed to that size
+  (`PhonePage`): measured on the 3× screen, a long page grew in the drawing
+  and was cut 1–23 pt at each end (`tasks/chores/2026-10-12-m1-batch-b.md` §4). 1.19.6's newest `ViewImageConfig` is
   `.iPhone13ProMax`; there is no iPhone 17 config (checked in F06), so
   components render at `SnapshotConfig.phoneWidth` (402 pt). Watch: always
   dark, fixed sizes 42 mm 187×223, 46 mm 208×248, 49 mm 205×251 pt
@@ -212,7 +215,7 @@ Concrete test names (file = suite = source type; see §6):
   1.19.6 has no image strategy on watchOS (its view and `UIImage` strategies
   are `#if os(iOS) || os(tvOS)`), so watch snapshots go through
   `RenderedImage.render` (`ImageRenderer`, 1×) and the `.png` strategy in
-  `LedgerSnapshotTesting`, which applies the same precision and ΔE threshold.
+  `LedgerSnapshotTesting`, which applies the same pixel budget and ΔE threshold.
   It measures ΔE as CIE76, which is never smaller than the CIE94 that Core
   Image measures for the library on iOS, so it is at least as strict. Watch
   components go through `assertWatchSnapshot(of:_:)` over
@@ -220,8 +223,18 @@ Concrete test names (file = suite = source type; see §6):
   42 mm, `.xLarge` at 46 and 49 mm) and at `.accessibility3`, the largest
   watch text size (HIG, Typography), at the case's width and the view's own
   height = 6 images per component state.
-- Precision: `precision: 0.995, perceptualPrecision: 0.98`, set once in
-  `SnapshotConfig` and never overridden per test.
+- Precision: a pixel budget, `pixelBudget: 8, perceptualPrecision: 0.98`,
+  set once in `SnapshotConfig` and never overridden per test: at most 8
+  pixels of an image may differ from its reference by more than ΔE 2,
+  whatever its size (0.5 % of an image under 1,800 pixels; a phone reference
+  over 4,000,000 pixels fails, so split the page), so a long page is held as
+  tightly as a short one (a
+  fraction, 0.995, let a 1,009 pt cover pass with a new 44 pt button drawn:
+  F10 review SF3). The
+  budget came from runs at a budget of 0 on the pinned simulators, where every
+  reference matched every pixel; 8 is under the smallest real change caught
+  (16 pixels) and under 0.5 % of the smallest reference (102 pixels).
+  `SnapshotConfig.pixelBudget` says how it was chosen.
 - Storage: PNGs in `__Snapshots__/` next to the test file, committed to git
   (~270 images ≈ 15 MB at launch; move to Git LFS if `__Snapshots__` exceeds
   300 MB). Record policy: swift-snapshot-testing's default `.missing` (a

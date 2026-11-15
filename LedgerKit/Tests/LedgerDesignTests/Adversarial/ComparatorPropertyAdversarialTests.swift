@@ -24,7 +24,7 @@ nonisolated struct SplitMix64: RandomNumberGenerator {
 
 extension RenderingSuites {
     /// Round 3: the `.png` comparator after fix round 2, as properties over seeded image sizes rather
-    /// than round 2's six fixed ones — the 0.995 boundary with the changed pixels anywhere and
+    /// than round 2's six fixed ones — the pixel budget with the changed pixels anywhere and
     /// sub-threshold noise everywhere else, and the difference image of a size change.
     @Suite("Snapshot comparator properties (adversarial, round 3)", .tags(.design, .snapshot))
     struct ComparatorPropertyAdversarialTests {
@@ -52,16 +52,16 @@ extension RenderingSuites {
         }
 
         @Test(
-            "Any size, changed pixels anywhere, sub-threshold noise elsewhere: floor(0.5 %) pass, one more fails.",
+            "Any size, changed pixels anywhere, sub-threshold noise elsewhere: what is allowed passes, one more fails.",
             arguments: 0 ..< 40
         )
-        func precisionBoundary_anySizeAnyPositions_isFloorHalfPercent(seed: Int) throws {
+        func pixelBudget_anySizeAnyPositions_isExact(seed: Int) throws {
             var random = SplitMix64(seed: seed)
             // Every fifth seed is a whole multiple of 200 pixels, where 0.5 % is exact.
             let width = Int.random(in: 1 ... 402, using: &random)
             let height = seed % 5 == 0 ? 200 : Int.random(in: 1 ... 60, using: &random)
             let pixels = width * height
-            let allowed = pixels * 5 / 1000
+            let allowed = SnapshotConfig.allowedPixels(of: pixels)
             let order = (0 ..< pixels).shuffled(using: &random)
             let changed = Dictionary(uniqueKeysWithValues: order.prefix(allowed + 1).enumerated().map { ($1, $0) })
             let noisy = Set(order.dropFirst(allowed + 1).filter { $0 % 3 == seed % 3 })

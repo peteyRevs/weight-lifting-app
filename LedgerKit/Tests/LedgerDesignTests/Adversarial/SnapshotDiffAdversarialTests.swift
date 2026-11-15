@@ -5,7 +5,8 @@ import LedgerSnapshotTesting
 import SnapshotTesting
 import Testing
 
-/// An image size for the precision boundary: `0.5 %` of its pixels, rounded down, may differ.
+/// An image size for the pixel budget's boundary: `SnapshotConfig.pixelBudget` of its pixels may differ, or 0.5 %
+/// of an image too small for the budget.
 nonisolated struct PrecisionCase: Sendable, CustomTestStringConvertible {
     let width: Int
     let height: Int
@@ -14,25 +15,23 @@ nonisolated struct PrecisionCase: Sendable, CustomTestStringConvertible {
         width * height
     }
 
-    /// Integer arithmetic, so the boundary itself carries no floating-point error.
     var allowed: Int {
-        pixels * 5 / 1000
+        SnapshotConfig.allowedPixels(of: pixels)
     }
 
     var testDescription: String {
         "\(width)×\(height), \(allowed) may differ"
     }
 
-    /// 402 pt is the phone snapshot width; 402×999 is the first phone-width size where a `Float`
-    /// match fraction rounds one pixel too many up to 0.995.
+    /// 402 pt is the phone snapshot width; 402×2,000 is a long page, where 0.5 % was 4,020 pixels.
     static let all = [
         Self(width: 200, height: 1), Self(width: 999, height: 1), Self(width: 1000, height: 1),
-        Self(width: 1001, height: 1), Self(width: 402, height: 874), Self(width: 402, height: 999)
+        Self(width: 1001, height: 1), Self(width: 402, height: 874), Self(width: 402, height: 2000)
     ]
 }
 
 extension RenderingSuites {
-    /// Round 2: the `.png` comparator after the fix — its 0.995 boundary from both sides at several
+    /// Round 2: the `.png` comparator after the fix — its pixel budget from both sides at several
     /// image sizes, and the difference image it now attaches.
     @Suite("Snapshot diff (adversarial, round 2)", .tags(.design, .snapshot))
     struct SnapshotDiffAdversarialTests {
@@ -59,7 +58,10 @@ extension RenderingSuites {
             }
         }
 
-        @Test("At each size, floor(0.5 %) differing pixels pass and one more fails.", arguments: PrecisionCase.all)
+        @Test(
+            "At each size, the allowed differing pixels pass and one more fails.",
+            arguments: PrecisionCase.all
+        )
         func precision_boundary_holdsFromBothSides(size: PrecisionCase) throws {
             let reference = try #require(Self.image(size, changed: 0))
             let atLimit = try #require(Self.image(size, changed: size.allowed))
