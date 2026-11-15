@@ -116,7 +116,7 @@ final class WorkoutConflictAdversarial: XCTestCase {
 
     @MainActor
     private func elapsedSeconds(in app: XCUIApplication) throws -> Int {
-        let drawn = app.otherElements["workout.header.elapsed"].staticTexts.firstMatch.label
+        let drawn = app.descendants(matching: .any)["workout.header.elapsed"].staticTexts.firstMatch.label
         let parts = try drawn.split(separator: ":").map { try XCTUnwrap(Int($0), "not a time: \(drawn)") }
         XCTAssertTrue((2 ... 3).contains(parts.count), "not a time: \(drawn)")
         return parts.reduce(0) { $0 * 60 + $1 }

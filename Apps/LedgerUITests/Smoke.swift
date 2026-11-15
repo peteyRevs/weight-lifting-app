@@ -61,7 +61,7 @@ final class Smoke: XCTestCase {
         XCTAssertEqual(app.staticTexts["workout.header.title"].label, "Upper A — Push focus")
         XCTAssertEqual(app.otherElements["workout.header.progress"].value as? String, "Exercise 1 of 5")
         XCTAssertFalse(today.isHittable, "the cover is over the tabs")
-        XCTAssertEqual(app.otherElements["workout.header.elapsed"].label, "Elapsed time")
+        XCTAssertEqual(app.staticTexts["workout.header.elapsed"].label, "Elapsed time")
         attachScreenshot(of: app, named: "Workout, just started")
         let counted = XCTNSPredicateExpectation(
             predicate: NSPredicate { [self] _, _ in (try? elapsedSeconds(in: app)).map { $0 > atStart } ?? false },
@@ -141,7 +141,7 @@ final class Smoke: XCTestCase {
     /// element VoiceOver knows as "Elapsed time" ("0:07", "1:01:05").
     @MainActor
     private func elapsedSeconds(in app: XCUIApplication) throws -> Int {
-        let drawn = app.otherElements["workout.header.elapsed"].staticTexts.firstMatch.label
+        let drawn = app.descendants(matching: .any)["workout.header.elapsed"].staticTexts.firstMatch.label
         let parts = try drawn.split(separator: ":").map { try XCTUnwrap(Int($0), "not a time: \(drawn)") }
         XCTAssertTrue((2 ... 3).contains(parts.count), "not a time: \(drawn)")
         return parts.reduce(0) { $0 * 60 + $1 }
