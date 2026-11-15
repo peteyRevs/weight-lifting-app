@@ -189,3 +189,18 @@ extension RestCover {
         }
     }
 }
+
+extension RestCoverClock {
+    /// Moves time on by `duration` as `TestClock.advance(by:)` does, a wait at a time: each wait that ends on
+    /// the way is woken, and time moves past it only once the woken task sleeps again or `isDone` holds, where
+    /// `TestClock` moves on when its yields run out.
+    @MainActor
+    func run(_ duration: Duration, until isDone: @MainActor () -> Bool) async {
+        let end = now.advanced(by: duration)
+        while !isDone(), let due, due <= end {
+            advance(to: due)
+            await eventually("the woken task asleep again or ended") { self.asleep > 0 || isDone() }
+        }
+        advance(to: end)
+    }
+}

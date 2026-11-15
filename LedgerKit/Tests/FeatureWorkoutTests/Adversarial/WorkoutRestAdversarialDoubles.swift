@@ -5,18 +5,29 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
+/// A clock a bench's test moves, and the date with it: `RestProbeClock`, or `RestCoverClock` for a test that
+/// moves time over many of the rest's waits (`TestClock` runs four `megaYield`s of background tasks for each).
+nonisolated protocol BenchClock: Clock<Duration> where Instant == TestClock<Duration>.Instant {
+    /// The time since the clock was made.
+    var elapsed: Duration { get }
+}
+
+extension RestProbeClock: BenchClock {}
+extension RestCoverClock: BenchClock {}
+
 /// A store on a `PumpSession` (S5's: held calls, a stream kept behind), with a date and a clock the test
 /// moves together and haptics it reads.
 @MainActor
-struct LaggingRestBench {
+struct LaggingRestBench<Moved: BenchClock> {
     let session: PumpSession
     let store: WorkoutStore
     let haptics = FakeHaptics()
-    let clock = RestProbeClock()
+    let clock: Moved
     let running: WorkoutState
     var following: Task<Void, Never>
 
-    init() async throws {
+    init(clock: Moved) async throws {
+        self.clock = clock
         let workout = EventBuilders.seedSession()
         running = workout
         let client = PumpSession(live: workout)
@@ -40,6 +51,12 @@ struct LaggingRestBench {
     func played() async -> [Haptic] {
         await giveWay()
         return await haptics.played
+    }
+}
+
+extension LaggingRestBench where Moved == RestProbeClock {
+    init() async throws {
+        try await self.init(clock: RestProbeClock())
     }
 }
 
