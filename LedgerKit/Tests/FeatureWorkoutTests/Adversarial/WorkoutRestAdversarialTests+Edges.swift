@@ -130,7 +130,9 @@ extension WorkoutRestAdversarialTests {
         let running = try Fixtures.seedSession()
         let scene = try WorkoutScene.onFake(live: running)
         let haptics = GatedHaptics()
-        let clock = RestProbeClock()
+        // `RestCoverClock`, moved a wait at a time: one `TestClock` jump over the 150 s let a woken wait sleep
+        // again after the jump, where nothing ended it, past the suite's time limit (issue #116, run 43797221034).
+        let clock = RestCoverClock()
         let store = scene.store {
             $0.haptics = haptics
             $0.continuousClock = clock
@@ -144,10 +146,22 @@ extension WorkoutRestAdversarialTests {
         await eventually("the logged set to be felt") { await haptics.played == [.setLogged] }
         try #require(await haptics.played == [.setLogged], "the logged set was never felt")
         await haptics.hold()
-        let waits = [Task { await store.keepRestTime() }, Task { await store.keepRestTime() }]
-        await eventually("both waits asleep") { clock.sleeps.value == 2 }
-        await clock.base.advance(by: .seconds(150))
-        await giveWay()
+        let ended = LockIsolated(0)
+        let waits = (0 ..< 2).map { _ in
+            Task { [ended] in
+                await store.keepRestTime()
+                ended.withValue { $0 += 1 }
+            }
+        }
+        await eventually("both waits asleep") { clock.asleep == 2 }
+        await clock.run(.seconds(150), tasks: 2) { store.restPanel?.isOver == true }
+        // One wait plays the buzz and is held in it; the other comes to zero meanwhile and ends without one.
+        await eventually("one wait ended, the other held in the slow haptic") {
+            guard ended.value == 1 else {
+                return false
+            }
+            return await haptics.played.contains(.restOver)
+        }
         #expect(await haptics.played == [.setLogged, .restOver])
         await haptics.release()
         for wait in waits {
@@ -247,19 +261,19 @@ extension WorkoutRestAdversarialTests {
     /// page; if it reaches zero in between, the skipped rest is felt.
     @Test("F10-S6-2: a rest the session has skipped is not felt at zero, though the page has not heard yet")
     func skipped_withThePageBehind_isNotFelt() async throws {
-        let bench = try await LaggingRestBench()
+        let bench = try await LaggingRestBench(clock: RestCoverClock())
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: bench.running.exercises[0].sets[0].id)))
         await bench.store.drain()
         await observed("the rest on the page") { bench.store.shownRest != nil }
-        let keeper = Task { await bench.store.keepRestTime() }
-        await giveWay()
-        await bench.clock.base.advance(by: .seconds(149))
+        await eventuallyPlayed(bench.haptics, [.setLogged])
+        let keeper = await bench.keepingTime()
+        await bench.run(.seconds(149), keeper)
         await bench.session.keepStreamsBehind()
         bench.store.send(.edit(.skipRest))
         await bench.store.drain()
         #expect(await bench.session.current()?.rest == nil, "the session has skipped it")
-        await bench.clock.base.advance(by: .seconds(1))
-        await keeper.value
+        await bench.run(.seconds(1), keeper)
+        await keeper.task.value
         #expect(await bench.played() == [.setLogged])
         bench.following.cancel()
     }
