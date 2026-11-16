@@ -55,8 +55,27 @@ struct LaggingRestBench<Moved: BenchClock> {
 }
 
 extension LaggingRestBench where Moved == RestProbeClock {
+    /// A bench whose clock nothing sleeps on (no rest's task is started): one jump of time only moves the
+    /// date. A test that keeps a rest's time takes `RestCoverClock` and moves it with `run`.
     init() async throws {
         try await self.init(clock: RestProbeClock())
+    }
+}
+
+extension LaggingRestBench where Moved == RestCoverClock {
+    /// Starts the task that keeps the shown rest's time, as the root does, and returns once it is asleep on
+    /// the clock or has ended.
+    func keepingTime() async -> RestKeeper {
+        let keeper = RestKeeper(store)
+        await eventually("the rest's task asleep") { clock.asleep == 1 || keeper.isDone }
+        return keeper
+    }
+
+    /// `duration` goes by a wait at a time (`RestCoverClock.run`): time moves past each of the rest's waits
+    /// only once `keeper` sleeps again or has ended. A single `TestClock` jump over a long rest can leave the
+    /// woken task to start its next wait after the jump, a wait nothing ends (issue #116).
+    func run(_ duration: Duration, _ keeper: RestKeeper) async {
+        await clock.run(duration) { keeper.isDone }
     }
 }
 

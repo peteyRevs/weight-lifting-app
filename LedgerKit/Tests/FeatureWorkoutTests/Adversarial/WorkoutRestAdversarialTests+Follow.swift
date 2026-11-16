@@ -135,20 +135,20 @@ extension WorkoutRestAdversarialTests {
 
     @Test("An answer ahead of the page that holds the same rest does not take the buzz at zero away")
     func answerAhead_sameRest_stillFelt() async throws {
-        let bench = try await LaggingRestBench()
+        let bench = try await LaggingRestBench(clock: RestCoverClock())
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
         await observed("the rest on the page") { bench.store.shownRest != nil }
-        let keeper = Task { await bench.store.keepRestTime() }
-        await giveWay()
-        await bench.clock.base.advance(by: .seconds(149))
+        await eventuallyPlayed(bench.haptics, [.setLogged])
+        let keeper = await bench.keepingTime()
+        await bench.run(.seconds(149), keeper)
         await bench.session.keepStreamsBehind()
         bench.store.send(.edit(.stepReps(exerciseIndex: 0, setID: rows[1].id, .increment)))
         await bench.store.drain()
         #expect(bench.store.ahead != nil, "the stepper's answer is ahead of the page")
-        await bench.clock.base.advance(by: .seconds(1))
-        await keeper.value
+        await bench.run(.seconds(1), keeper)
+        await keeper.task.value
         #expect(await bench.played() == [.setLogged, .restOver])
         bench.following.cancel()
     }
@@ -162,31 +162,22 @@ extension WorkoutRestAdversarialTests {
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
         await observed("the rest on the page") { bench.store.shownRest != nil }
-        var ended = LockIsolated(false)
-        var keeper = Task { [ended] in
-            await bench.store.keepRestTime()
-            ended.setValue(true)
-        }
-        await eventually("the rest's task asleep") { bench.clock.asleep == 1 }
-        await bench.clock.run(.seconds(149)) { ended.value }
+        await eventuallyPlayed(bench.haptics, [.setLogged])
+        var keeper = await bench.keepingTime()
+        await bench.run(.seconds(149), keeper)
         await bench.session.keepStreamsBehind()
         bench.store.send(.edit(.extendRest))
         await bench.store.drain()
-        await bench.clock.run(.seconds(1)) { ended.value }
-        await keeper.value
+        await bench.run(.seconds(1), keeper)
+        await keeper.task.value
         #expect(await bench.played() == [.setLogged], "the rest was extended: its old end is not felt")
         // The page hears; the root starts the task again for the longer rest.
         await bench.session.keepStreamsBehind(false)
         await observed("the longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
         #expect(bench.store.restPanel?.status == "Resting")
-        ended = LockIsolated(false)
-        keeper = Task { [ended] in
-            await bench.store.keepRestTime()
-            ended.setValue(true)
-        }
-        await eventually("the longer rest's task asleep") { bench.clock.asleep == 1 }
-        await bench.clock.run(.seconds(30)) { ended.value }
-        await keeper.value
+        keeper = await bench.keepingTime()
+        await bench.run(.seconds(30), keeper)
+        await keeper.task.value
         #expect(await bench.played() == [.setLogged, .restOver])
         #expect(bench.store.restPanel?.status == "Rest over")
         bench.following.cancel()
@@ -199,21 +190,21 @@ extension WorkoutRestAdversarialTests {
     /// same for "Skip rest": felt at zero, then the panel goes. Reported, not ruled.
     @Test("As built (S6-R2-N1): +30s tapped before zero and applied after it is felt at the old end and at the new")
     func extendTappedBeforeZero_appliedAfter_asBuilt() async throws {
-        let bench = try await LaggingRestBench()
+        let bench = try await LaggingRestBench(clock: RestCoverClock())
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
         await observed("the rest on the page") { bench.store.shownRest != nil }
-        var keeper = Task { await bench.store.keepRestTime() }
-        await giveWay()
-        await bench.clock.base.advance(by: .seconds(148))
+        await eventuallyPlayed(bench.haptics, [.setLogged])
+        var keeper = await bench.keepingTime()
+        await bench.run(.seconds(148), keeper)
         await bench.session.holdEveryApply()
         bench.store.send(.edit(.stepReps(exerciseIndex: 0, setID: rows[1].id, .increment)))
         bench.store.send(.edit(.extendRest))
         let draining = Task { await bench.store.drain() }
         await eventually("the stepper's call held") { bench.session.waiting.value > 0 }
-        await bench.clock.base.advance(by: .seconds(2))
-        await keeper.value
+        await bench.run(.seconds(2), keeper)
+        await keeper.task.value
         #expect(bench.store.restPanel?.status == "Rest over")
         #expect(await bench.played() == [.setLogged, .restOver], "felt at the old end")
         await bench.session.holdEveryApply(false)
@@ -221,11 +212,10 @@ extension WorkoutRestAdversarialTests {
         await draining.value
         await observed("the longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
         #expect(bench.store.shownRest?.endsAt == Fixtures.now.addingTimeInterval(180), "extended, by the tap's instant")
-        keeper = Task { await bench.store.keepRestTime() }
-        await giveWay()
+        keeper = await bench.keepingTime()
         #expect(bench.store.restPanel?.clock == "0:30")
-        await bench.clock.base.advance(by: .seconds(30))
-        await keeper.value
+        await bench.run(.seconds(30), keeper)
+        await keeper.task.value
         #expect(await bench.played() == [.setLogged, .restOver, .restOver], "and at the new one")
         bench.following.cancel()
     }
@@ -236,11 +226,12 @@ extension WorkoutRestAdversarialTests {
     /// meanwhile ends without a buzz.
     @Test("As built (F17): an answer older than the page, kept as the newest, takes the buzz of a peer's longer rest")
     func staleAnswer_takesThePeersBuzz_asBuilt() async throws {
-        let bench = try await LaggingRestBench()
+        let bench = try await LaggingRestBench(clock: RestCoverClock())
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
         await observed("the rest on the page") { bench.store.shownRest != nil }
+        await eventuallyPlayed(bench.haptics, [.setLogged])
         await bench.session.holdEveryAnswer()
         bench.store.send(.edit(.stepReps(exerciseIndex: 0, setID: rows[1].id, .increment)))
         let draining = Task { await bench.store.drain() }
@@ -252,10 +243,9 @@ extension WorkoutRestAdversarialTests {
         await bench.session.release()
         await draining.value
         #expect(bench.store.ahead?.rest?.total == .seconds(150), "the older answer is kept as the newest")
-        let keeper = Task { await bench.store.keepRestTime() }
-        await giveWay()
-        await bench.clock.base.advance(by: .seconds(180))
-        await keeper.value
+        let keeper = await bench.keepingTime()
+        await bench.run(.seconds(180), keeper)
+        await keeper.task.value
         #expect(bench.store.restPanel?.status == "Rest over")
         #expect(await bench.played() == [.setLogged])
         bench.following.cancel()
