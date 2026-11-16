@@ -687,10 +687,11 @@ check "W97 a leg holding a target whole runs it, less the suite another leg hold
 0 -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests|\
 0 -only-testing:FeatureProgramTests|\
 0 -only-testing:LedgerPersistenceTests -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests|"
-check "W97 ... and in nightly-shards.txt, leg 7 selects FeatureProgramTests and one UI class (F15 S2b), leg 3 FeatureWorkoutTests less the rest and save walks, leg 6 one target less 1 suite" \
-    is "$(selection 7 nightly)|$(selection 3 nightly)|$(selection 6 nightly)" " -only-testing:FeatureProgramTests -only-testing:LedgerUITests/AuditProgramLibrary|\
+check "W97 ... and in nightly-shards.txt, leg 7 selects FeatureProgramTests alone (its UI class went to leg 1), leg 3 FeatureWorkoutTests less the rest and save walks, leg 6 one target less 1 suite, leg 9 LedgerDomainTests alone (its ~466,000-file bundle)" \
+    is "$(selection 7 nightly)|$(selection 3 nightly)|$(selection 6 nightly)|$(selection 9 nightly)" " -only-testing:FeatureProgramTests|\
  -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests|\
- -only-testing:LedgerPersistenceTests -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests"
+ -only-testing:LedgerPersistenceTests -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests|\
+ -only-testing:LedgerDomainTests"
 
 # ---- a test runner that never connected (the nightly's watch leg 1, run 43170933804) ----------------------
 # xcodebuild failed with "The test runner hung before establishing connection." and no test ran: check.sh tests

@@ -20,7 +20,7 @@ jobs:
     # Legs (docs/ci-cd.md, "Nightly legs"): the first nightly's one iOS job reached its 120 min while testing,
     # and its one watch job lost its runner at 61 min (run 43144335050); neither left a result bundle. Each
     # leg now tests the entries scripts/nightly-shards.txt (iOS) or nightly-watch-shards.txt gives it, balanced
-    # by run 43250355937's runner times to end at least ~1,300 s short of the deadline below.
+    # by run 43797221034's runner times to end at least ~2,000 s short of the deadline below.
     name: ${{ matrix.platform }} leg ${{ matrix.leg }}/${{ matrix.legs }}
     runs-on: xcode-27 # a preview image; rolling back to 26.6 means reverting F32 as a whole (pr.yml)
     timeout-minutes: 145 # the step's 132, plus checkout, Xcode, mise, and packing and uploading the bundles
@@ -30,14 +30,15 @@ jobs:
       fail-fast: false # every leg reports
       matrix: # each shards file's legs, 1 to its count (WF76)
         include:
-          - { platform: ios, leg: 1, legs: 8 }
-          - { platform: ios, leg: 2, legs: 8 }
-          - { platform: ios, leg: 3, legs: 8 }
-          - { platform: ios, leg: 4, legs: 8 }
-          - { platform: ios, leg: 5, legs: 8 }
-          - { platform: ios, leg: 6, legs: 8 }
-          - { platform: ios, leg: 7, legs: 8 }
-          - { platform: ios, leg: 8, legs: 8 }
+          - { platform: ios, leg: 1, legs: 9 }
+          - { platform: ios, leg: 2, legs: 9 }
+          - { platform: ios, leg: 3, legs: 9 }
+          - { platform: ios, leg: 4, legs: 9 }
+          - { platform: ios, leg: 5, legs: 9 }
+          - { platform: ios, leg: 6, legs: 9 }
+          - { platform: ios, leg: 7, legs: 9 }
+          - { platform: ios, leg: 8, legs: 9 }
+          - { platform: ios, leg: 9, legs: 9 }
           - { platform: watch, leg: 1, legs: 3 }
           - { platform: watch, leg: 2, legs: 3 }
           - { platform: watch, leg: 3, legs: 3 }
@@ -83,10 +84,11 @@ jobs:
         timeout-minutes: 132 # fails the step before the job times out, so the bundles still upload
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild, which finalizes the bundle.
-          # An iOS leg's tests take at most ~4,400 s on the runner (nightly-shards.txt), after a build of up to
-          # 2,092 s (the slowest seen, run 43250355937) and ~30 s of tools, catalogs and boot: about 6,500 s at
-          # worst, ~5,750 s with each leg's own build in that run. 7,800 s leaves room for that build's spread
-          # and check.sh's one retry of a runner that never connected, if the hang is short.
+          # An iOS leg's tests take at most ~3,450 s on the runner (nightly-shards.txt), after a build of up to
+          # 2,167 s (the slowest seen, run 43797221034) and ~30 s of tools, catalogs and boot: about 5,800 s at
+          # worst, ~5,250 s with each leg's own build in that run. 7,800 s leaves room for that build's spread,
+          # a slow runner (run 43857732010's leg 8 tested 1.33 times as long as the run before), and check.sh's
+          # one retry of a runner that never connected, if the hang is short.
           LEDGER_XCODEBUILD_DEADLINE: 7800
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           LEDGER_WATCH_DEST: ${{ steps.watch-sim.outputs.destination }} # empty on an iOS leg: check.sh's default

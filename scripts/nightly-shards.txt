@@ -1,51 +1,53 @@
-# The nightly's iOS legs (docs/ci-cd.md, "Nightly legs"): `check.sh --nightly --ios-only --shard <n>/8` runs leg
+# The nightly's iOS legs (docs/ci-cd.md, "Nightly legs"): `check.sh --nightly --ios-only --shard <n>/9` runs leg
 # <n>'s entries of TestPlans/Nightly.xctestplan. One "<leg> <entry>" per line: a test target, or one suite of a
 # target, "<target>/<suite>" (a Swift Testing type, or an XCTest class), for a target too long for one leg. Every leg
 # runs exactly its entries (-only-testing), and the leg that holds a target whole skips its suites listed elsewhere.
 # Every target the plan enables is whole in exactly one leg, and each suite entry names a suite of a target whole
 # in another leg, once (scripts/tests/adversarial/pr-shards.adv.sh, which checks every shards file).
 #
-# Balanced by each entry's test time on the runner, in seconds: run 43250355937 (this branch at 3b26895, builds
-# of 1,111-2,092 s), from the "Launch <target>" sections of each bundle's action log and, per suite, the log's
-# "Suite ... after" (Swift Testing) lines; legs 1, 2, 3 and 6 by run 43364073342 (main at c92e963), from its
-# bundles' test durations. With the deadline at 7,800 s, each leg should end at least ~1,500 s short of it.
-# WorkoutAnnouncementAdversarialTests took 4,365 s in run 43250355937 and had a leg of its own; that run predates
-# #99 (RestCoverClock), and in run 43364073342 it took 481 s (118 s on a Mac), and the rest walk 548 s against
-# 3,072. So FeatureWorkoutTests is whole in leg 3 again, less the rest and save walks, and leg 6 holds
-# LedgerPersistenceTests alone. Each leg now tests for 1,200-3,950 s: with its own build of that run, every leg
-# ends by ~5,750 s; with the slowest build seen (2,092 s), by ~6,100 s. Rebalance from a newer run's bundles when
-# a leg's total nears 6,300 s.
-1 FeatureWorkoutTests/WorkoutRestAdversarialTests   #   548
-1 FeatureLibraryTests                               #    78
-1 FeatureHistoryTests                               #    63
-1 FeatureSettingsTests                              #    34
-1 LedgerUITests/Flows                               #  ~470 (local x 3): leg 1 ~1,190
+# Balanced by each entry's test time on the runner, in seconds: run 43797221034 (main at f7e4ff1; legs 1 and 8
+# from its attempt 2), from the "Launch <target>" sections of legs 1, 5, 7 and 8's bundles' action logs; legs 2,
+# 3, 4 and 6 by their xcodebuild's "elapsed -- Testing started completed" in that run, their entries' times by
+# run 43250355937 or 43364073342 as before. With the deadline at 7,800 s, each leg should end at least ~1,500 s
+# short of it. Until 2026-11-16 leg 8 also held LedgerDomainTests, and ran out its step in that run's first
+# attempt and in run 43857732010 (tests 5,555 s); its second attempt took 7,170 s: a 2,167 s build, 4,163 s of
+# tests and ~790 s after them. At 2,000 seeds LedgerDomainTests records ~230,000 test-case arguments: its bundle
+# holds ~466,000 files (2 GB), ~13 min passed between the tests' end and check.sh's verdict (other legs: 3 min
+# at most), and the pack step's tar took ~9 min. Its tests are compute-bound (1,304 of its 1,419 s inside the
+# arguments' bodies), so it has leg 9 to itself, and AuditProgramLibrary moved from leg 7 (5,730 s) to leg 1.
+# Each leg now tests for 1,960-3,443 s: with its own build of that run, every leg ends by ~5,250 s; with the
+# slowest build (2,167 s), by ~5,800 s. Rebalance from a newer run's bundles when a leg's total nears 6,300 s.
+1 FeatureWorkoutTests/WorkoutRestAdversarialTests   # 1,192 (two launches in that attempt)
+1 FeatureLibraryTests                               #   108
+1 FeatureHistoryTests                               #    83
+1 FeatureSettingsTests                              #    55
+1 LedgerUITests/Flows                               #   410
+1 LedgerUITests/AuditProgramLibrary                 #   894: leg 1 ~2,760
 2 FeatureWorkoutTests/WorkoutSaveAdversarialTests   # 2,716
 2 LedgerTests                                       #    31
 2 LedgerDependenciesTests                           #    15
 2 LedgerHealthTests                                 #     2
 2 LedgerActivityKitTests                            #     2
-2 LedgerUITests/AuditWorkout                        #  ~810 (local x 3): leg 2 ~3,600
+2 LedgerUITests/AuditWorkout                        #  ~810 (local x 3): leg 2 3,124
 3 FeatureWorkoutTests                               # 1,998 without the suites in legs 1 and 2, the announcement
-#   walk 481 of it
+#   walk 481 of it: leg 3 2,091
 4 LedgerUITests                                     # 1,840 without the classes in other legs, + ~1,220 for
-#   F15's AuditHistorySettings and DynamicType (F15 S2b: local seconds x 3, the notes' table): leg 4 ~3,830
+#   F15's AuditHistorySettings and DynamicType (F15 S2b: local seconds x 3, the notes' table): leg 4 3,126
 4 LedgerDesignTests                                 #   301
 4 FeatureOnboardingTests                            #   203
 4 FeatureTodayTests                                 #   166
 4 LedgerAppKitTests                                 #   105
-5 LedgerUITests/WorkoutFinishAdversarial            # these seven classes: 2,244
+5 LedgerUITests/WorkoutFinishAdversarial            # these eight classes: 2,324
 5 LedgerUITests/LibraryAuditAdversarial
 5 LedgerUITests/OnboardingAdversarial
 5 LedgerUITests/DayEditor
 5 LedgerUITests/TabsAdversarial
 5 LedgerUITests/WorkoutHistory
 5 LedgerUITests/Builder
-5 LedgerUITests/AuditSettings                       # ~430 (local x 3): leg 5 ~3,950
-5 LedgerSyncTests                                   # 1,277
-6 LedgerPersistenceTests                            # 2,517 without the suite in leg 8
-7 FeatureProgramTests                               # 2,767
-7 LedgerUITests/AuditProgramLibrary                 # ~1,080 (local x 3): leg 7 ~3,840
-8 LedgerPersistenceTests/HistoryModelAdversarialTests # 985
-8 LedgerDomainTests                                 # 1,451
-8 LedgerUITests/AuditLibrary                        # ~1,420 (local x 3): leg 8 ~3,860
+5 LedgerUITests/AuditSettings
+5 LedgerSyncTests                                   # 1,097: leg 5 3,443
+6 LedgerPersistenceTests                            # 2,517 without the suite in leg 8: leg 6 1,960
+7 FeatureProgramTests                               # 3,129: leg 7 ~3,150
+8 LedgerPersistenceTests/HistoryModelAdversarialTests # 1,274
+8 LedgerUITests/AuditLibrary                        # 1,415: leg 8 ~2,690
+9 LedgerDomainTests                                 # 1,419, and ~790 s of finishing its bundle: leg 9 ~2,210
