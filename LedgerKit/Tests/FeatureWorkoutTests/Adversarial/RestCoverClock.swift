@@ -2,16 +2,19 @@ import Dependencies
 import Foundation
 import Testing
 
-/// The rest cover's clock (`RestCover`): time moves only when the cover moves it, and the clock says the
-/// moment the rest's task's sleep is registered, so the cover can wait for that rather than poll for it.
+/// The clock of every store test that moves time (`RestCover`, `RestBench`, `LaggingRestBench`, the hosted
+/// root): time moves only when the test moves it, and the clock says the moment the rest's task's sleep is
+/// registered, so the test can wait for that rather than poll for it.
 ///
-/// The cover moves time one wait at a time and lets the task sleep again after each (`RestCover.run`). On
-/// `RestProbeClock`, a `TestClock`, a registered sleep can only be told by `checkSuspension()`, which first
-/// runs `megaYield` (20 detached tasks, one after another), and each `advance` runs three more: four
-/// `megaYield`s for every second of a rest, 92% of the announcement walk's time (measured 2026-11-12). Here
-/// a sleep is registered under the clock's lock in the step that suspends the task, so `due` is set exactly
-/// when moving time to it wakes it; `advance` wakes what is due without yielding; and `changed()` returns
-/// once a sleep has been registered or `signal()` called.
+/// Never a `TestClock`. A registered sleep on one can only be told by `checkSuspension()`, which first runs
+/// `megaYield` (20 detached tasks, one after another), and each `advance` runs three more: four `megaYield`s
+/// for every second of a rest, 92% of the announcement walk's time (measured 2026-11-12). Those tasks are of
+/// background priority, which any other work on the machine goes before: on the PR runner, with the
+/// simulator busy, a 150 s rest stepped a second at a time took over a minute (issue #121, 0.3 s on an idle
+/// Mac). Here a sleep is registered under the clock's lock in the step that suspends the task, so `due` is
+/// set exactly when moving time to it wakes it; `advance` wakes what is due without yielding, so the test
+/// then waits for what it wants to see (the task asleep again, or ended); and `changed()` returns once a
+/// sleep has been registered or `signal()` called.
 final nonisolated class RestCoverClock: Clock, Sendable {
     typealias Instant = TestClock<Duration>.Instant
     private typealias Wake = CheckedContinuation<Void, any Error>
@@ -62,6 +65,14 @@ final nonisolated class RestCoverClock: Clock, Sendable {
     /// How many sleeps are registered: one for each task asleep on the clock.
     var asleep: Int {
         state.value.sleepers.count
+    }
+
+    /// Whether a sleep begun after the first `sleeps` is registered: for a test with one task on the clock,
+    /// that the task woken last is asleep again, so that moving time ends its wait. A sleep is counted when it
+    /// begins and registered a step later, and time moved in between would leave the wait at a deadline that
+    /// time has already reached, which nothing then ends.
+    func isAsleep(after sleeps: Int) -> Bool {
+        state.withValue { $0.sleeps > sleeps && !$0.sleepers.isEmpty }
     }
 
     /// When the first registered sleep ends, so that `advance(to: due)` wakes it (and any other that ends
@@ -123,6 +134,11 @@ final nonisolated class RestCoverClock: Clock, Sendable {
         for wake in woken {
             wake.resume()
         }
+    }
+
+    /// Moves time on by `duration` (`advance(to:)`): every sleep that ends by then is woken.
+    func advance(by duration: Duration) {
+        advance(to: now.advanced(by: duration))
     }
 
     /// Returns once a sleep has been registered, or `signal()` called, since it last returned: at once if one
