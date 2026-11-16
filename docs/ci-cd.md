@@ -217,7 +217,7 @@ authoritative; the plan differs:
     `--nightly` makes steps 3 and 4 test the Nightly plans (bundles `Nightly-iOS…`, `Nightly-watchOS…`, a test
     without its own allowance 600 s, the plans' maximum, against the PR plans' 60) and skips step 5;
     `--watch-only` is `--ios-only`'s other half. `--shard` reads the tested plan's file,
-    `scripts/<plan, lowercase>-shards.txt`: `nightly-shards.txt` (eight iOS legs) and `nightly-watch-shards.txt`
+    `scripts/<plan, lowercase>-shards.txt`: `nightly-shards.txt` (nine iOS legs since 2026-11-16, eight before) and `nightly-watch-shards.txt`
     (three). `pr-shards.adv.sh` holds every shards file to its plan (every enabled target in exactly one leg),
     and `workflows.adv.sh` the matrix to the files (WF76). The leg's own bundles and snapshot diffs are packed
     into one tar and uploaded as `nightly-<platform>-leg<n>-<run>-<attempt>` on a red or interrupted leg too
@@ -243,6 +243,24 @@ authoritative; the plan differs:
       concurrent macOS jobs, so some legs queue: the run's wall time grows, no leg's time does. The runner
       took 2.4–3.1 times this Mac's time per target (Domain 1,148 against 369 s, Sync 1,075 against 370),
       not the 1.3–1.5 assumed in round 1. Rebalance from a newer run's bundles when a leg's total nears 75 min.
+    - *Leg 9: LedgerDomainTests alone (2026-11-16).* Leg 8 (the history-model suite, LedgerDomainTests and
+      `AuditLibrary`) ran out its 132 min step twice: run 43797221034's first attempt, and run 43857732010,
+      whose tests took 5,555 s and whose bundle `xcodebuild` was still finishing when the deadline interrupted
+      it. The second attempt of run 43797221034 passed in 7,170 s: a 2,167 s build, 4,163 s of tests
+      (LedgerDomainTests 1,419, the history-model suite 1,274, `AuditLibrary` 1,415, from the bundle's action
+      log), and ~790 s between the tests' end and `check.sh`'s verdict, against 3 min at most on every other
+      leg; the pack step's tar then took ~9 min. At 2,000 seeds LedgerDomainTests records each seed of its
+      ~115 seeded tests as one test-case argument, ~230,000 in all, and its bundle holds ~466,000 files (2 GB
+      unpacked, 331 MB packed). Its time is the tests' own, not the per-argument bookkeeping: 1,304 of its
+      1,419 s fall inside the arguments' bodies, and on this Mac the target takes 869 s of CPU under
+      `swift test` at 2,000 seeds. So one test case looping over its seeds would save only the bundle's
+      ~20 min, on one leg, at the price of rewriting every seeded test and of Xcode's per-seed rerun. Instead
+      LedgerDomainTests has a leg to itself, leg 9 (`nightly.yml`'s matrix, WF76; check-wiring W97), and
+      `AuditProgramLibrary` (894 s) moved from leg 7 (5,730 s in that run) to leg 1, the shortest. Each iOS leg
+      now tests for 1,960–3,443 s (`nightly-shards.txt`): every leg ends by ~5,250 s with its own build of that
+      run, by ~5,800 s with the slowest build seen (2,167 s), at least ~2,000 s short of the 7,800 s deadline.
+      Twelve macOS jobs now queue for the account's concurrent macOS runners; the run's wall time grows, no
+      leg's time does.
     - *Performance budgets.* Each leg sets `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR` to 3, iOS and watch:
       on the runner a timing test holds its median to its budget times that factor (testing-strategy §2.2,
       "Budgets and the runner", "The factor, measured"). Over six nightlies (runs 43294406441 to 43756652956)
