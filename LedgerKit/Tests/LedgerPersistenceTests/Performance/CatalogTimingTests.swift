@@ -18,13 +18,13 @@ import Testing
 struct CatalogTimingTests {
     static let catalog = Seeders.catalog(count: 214, version: 1)
 
-    @Test("Seeding 214 entries into a new database file takes under 300 ms (median of 5)")
+    @Test("Seeding 214 entries into a new database file takes under 300 ms (median of 20)")
     func seed214_underBudget() async throws {
         let directory = TemporaryDirectory()
         defer { try? directory.remove() } // cleanup only: a leftover temporary file fails nothing
         let clock = ContinuousClock()
         var all: [Duration] = []
-        for run in 0 ... PerformanceBudget.runs {
+        for run in 0 ... PerformanceBudget.statsRuns {
             let queue = try LedgerDatabase.open(at: directory.file("run-\(run)/ledger.sqlite"))
             let repository = GRDBExerciseRepository(queue, now: { EventBuilders.start })
             try await all.append(clock.measure {
@@ -36,7 +36,7 @@ struct CatalogTimingTests {
         #expect(verdict.isWithinBudget, "\(verdict)")
     }
 
-    @Test("Searching 214 seeded entries plus custom ones takes under 10 ms (median of 5)")
+    @Test("Searching 214 seeded entries plus custom ones takes under 10 ms (median of 20)")
     func search214_underBudget() async throws {
         let repository = try GRDBExerciseRepository(LedgerDatabase.inMemory(), now: { EventBuilders.start })
         try await repository.seedIfNeeded(Self.catalog.exercises, version: Self.catalog.version)
@@ -45,7 +45,7 @@ struct CatalogTimingTests {
         }
         let clock = ContinuousClock()
         var all: [Duration] = []
-        for _ in 0 ... PerformanceBudget.runs {
+        for _ in 0 ... PerformanceBudget.statsRuns {
             try await all.append(clock.measure {
                 _ = try await repository.search("press", equipment: nil, muscle: nil)
             })

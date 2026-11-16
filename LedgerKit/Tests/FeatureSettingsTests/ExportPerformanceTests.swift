@@ -6,7 +6,7 @@ import LedgerFakes
 import LedgerTestSupport
 import Testing
 
-/// F14 S2, N17 (amended): 10,000 sets written to the export's file in under 200 ms, the median of 5 runs, and the
+/// F14 S2, N17 (amended): 10,000 sets written to the export's file in under 200 ms, the median of 20 runs, and the
 /// footprint retained after the writes under 5 MB, a smoke figure (the file is streamed workout by workout, never one
 /// `String`). Nightly lane only.
 @Suite(
@@ -55,7 +55,7 @@ struct ExportPerformanceTests {
         return result == KERN_SUCCESS ? Int(info.phys_footprint) : 0
     }
 
-    @Test("N17. 10,000 sets are written in under 200 ms (median of 5), retaining under 5 MB after the write")
+    @Test("N17. 10,000 sets are written in under 200 ms (median of 20), retaining under 5 MB after the write")
     func tenThousandSets_withinBudget() throws {
         let workouts = try Self.history()
         #expect(workouts.reduce(0) { $0 + $1.totalSets } == 10000)
@@ -65,7 +65,7 @@ struct ExportPerformanceTests {
         let plan = ExportFile.Plan(name: "perf.csv", units: .lb, calendar: Fixtures.calendar, directory: directory)
         _ = try ExportFile.write(workouts, as: plan) // warm-up, untimed
         let before = Self.footprint()
-        let runs = try (0 ..< 5).map { _ in
+        let runs = try (0 ..< 20).map { _ in
             try clock.measure { _ = try ExportFile.write(workouts, as: plan) }
         }
         // A smoke figure (N17 as amended): what the writes retain, not their peak.

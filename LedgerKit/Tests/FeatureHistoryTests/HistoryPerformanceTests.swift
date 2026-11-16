@@ -5,7 +5,7 @@ import LedgerTestSupport
 import Testing
 
 /// F13 S1, N4, by measurement: the History list's model over 1,000 workouts (every week grouped, every row written)
-/// takes under 30 ms, at the median of five runs after one warm-up. The store builds it off the main actor, so it
+/// takes under 30 ms, at the median of 20 runs after one warm-up. The store builds it off the main actor, so it
 /// costs no frame either way. A timing is only meaningful without other suites competing for the CPU, so this is
 /// `.performance`: nightly lane only (testing-strategy §6). The query's budget is
 /// `HistoryQueriesPerformanceTests`'.
@@ -16,7 +16,7 @@ import Testing
 )
 struct HistoryPerformanceTests {
     static let model: Duration = .milliseconds(30)
-    static let runs = 5
+    static let runs = 20
 
     @Test("N4. The list's model over 1,000 workouts, four a week with records, takes under 30 ms")
     func model_underBudget() {

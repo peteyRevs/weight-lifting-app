@@ -7,7 +7,7 @@ import Testing
 /// F12 S1, N4, by measurement: over 250 exercises, the Library's first model (every row written, then laid out)
 /// takes under 100 ms, and one keystroke (the rows filtered and laid out again) under 10 ms; and (F12-S2-R1-2) an
 /// exercise's history model over 2,000 sets under a frame, 16 ms (its store builds it off the main actor, so the
-/// slower case of 2,000 different weights costs no frame either); each at the median of five runs after one
+/// slower case of 2,000 different weights costs no frame either); each at the median of 20 runs after one
 /// warm-up. A timing is only meaningful without other suites competing for the CPU, so this
 /// is `.performance`: nightly lane only (testing-strategy §6). The query budget, `bestSets` over 20,000 sets, is
 /// `StatsQueriesPerformanceTests`'.
@@ -20,7 +20,7 @@ struct LibraryPerformanceTests {
     static let firstModel: Duration = .milliseconds(100)
     static let keystroke: Duration = .milliseconds(10)
     static let historyModel: Duration = .milliseconds(16)
-    static let runs = 5
+    static let runs = 20
 
     /// The catalog and 26 exercises of the lifter's own: 250; five recent, and a best set for every one.
     static func input() -> LibraryInput {
