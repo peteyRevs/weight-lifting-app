@@ -130,12 +130,30 @@ Concrete test names (file = suite = source type; see §6):
   - *Runner* (the variable set): every test holds its median to its budget times
     the factor. Only `nightly.yml` sets it, as
     `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR` (`xcodebuild` hands the test
-    runner the variable without the prefix; `workflows.adv.sh` WF79): 2 on an
-    iOS leg, 3 on a watch leg. The runner's watch simulator ran every timed
-    query 2.2-3.3 times slower than a developer Mac's (run 43250355937, against
-    three local runs): `historyList`'s fetch had a median of 40.6 ms on it and
-    14.5-15.9 ms here, its budget 20 ms, so twice the budget failed it while the
-    budget held on the reference machine.
+    runner the variable without the prefix; `workflows.adv.sh` WF79): 3 on every
+    leg, iOS and watch.
+  - *The factor, measured (2026-11-15).* The rule: the 95th percentile of the
+    runner's median over the reference machine's, per timed quantity, over the
+    medians of 20 runs (the stable statistic), rounded up. From six nightlies
+    (runs 43294406441, 43325369679, 43364073342, 43692994418, 43732295990,
+    43756652956) against three local runs per platform of the same suites, for
+    every quantity of at least 1 ms here (the attachments' medians; 208 iOS
+    and 188 watch pairs): iOS median 2.07, 95th percentile 2.92, highest
+    3.35 for the medians of 20; watch 2.28, 2.91, 3.37. Both round up to 3.
+    The medians of 5 (the History list's and an exercise's history model, the
+    catalog, the first open, `WrapLayout`, the picker) spread wider: iOS median
+    2.60, highest 7.66, watch 2.55 and 4.43. The iOS factor was 2 from
+    2026-11-12 (the watch's 3 from run 43250355937), the runner's typical ratio
+    rather than its upper range, so half the timings ran more than twice the reference
+    machine's, and in three of these six runs an iOS median exceeded twice its
+    budget while it held here: an exercise's history model 42.8 of 32 ms
+    (5.2 times this Mac's 8.3 ms), `observeHistoryEntries`' fetch 41.7 of 40,
+    the History list's model 102 of 60. At 3 only the last still fails: its
+    five runs took 66-213 ms, 4.9-16 times this Mac's 13.3 ms, while the same
+    leg's other timing ran 2.4 times, a stall of the virtual machine, not a
+    speed. A regression still fails on the runner: a test at twice its budget
+    here fails there whenever the runner is more than 1.5 times slower, as it
+    was for 393 of the 396 pairs.
   - Every verdict reports the median, the 95th percentile and the runs, in the
     failure message and the attachments. On the runner a 95th percentile over
     the scaled budget is also recorded at the test's line as a warning issue
