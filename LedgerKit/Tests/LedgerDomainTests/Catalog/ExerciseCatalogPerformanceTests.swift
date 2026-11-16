@@ -13,11 +13,11 @@ import Testing
     .enabled(if: ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly", "nightly lane only")
 )
 struct ExerciseCatalogPerformanceTests {
-    @Test("seed() takes under 20 ms (median of 5)")
+    @Test("seed() takes under 20 ms (median of 20)")
     func seed_under20ms() throws {
         _ = try ExerciseCatalog.seed()
         let clock = ContinuousClock()
-        let timings = try (0 ..< 5).map { _ in try clock.measure { _ = try ExerciseCatalog.seed() } }.sorted()
+        let timings = try (0 ..< 20).map { _ in try clock.measure { _ = try ExerciseCatalog.seed() } }.sorted()
         let verdict = PerformanceRunner.verdict(timings, budget: .milliseconds(20), statistic: .median)
         #expect(verdict.isWithinBudget, "\(verdict)")
     }

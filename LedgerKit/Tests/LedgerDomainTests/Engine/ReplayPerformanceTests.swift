@@ -13,14 +13,14 @@ import Testing
     .enabled(if: ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly", "nightly lane only")
 )
 struct ReplayPerformanceTests {
-    @Test("Replaying 500 shuffled envelopes takes under 5 ms (median of 5)")
+    @Test("Replaying 500 shuffled envelopes takes under 5 ms (median of 20)")
     func replay_500Envelopes_under5ms() {
         var random = RandomWorkout(seed: 500)
         let log = random.shuffled(random.log(steps: 499))
         #expect(log.count == 500)
         _ = WorkoutEngine.replay(log)
         let clock = ContinuousClock()
-        let timings = (0 ..< 5).map { _ in clock.measure { _ = WorkoutEngine.replay(log) } }.sorted()
+        let timings = (0 ..< 20).map { _ in clock.measure { _ = WorkoutEngine.replay(log) } }.sorted()
         let verdict = PerformanceRunner.verdict(timings, budget: .milliseconds(5), statistic: .median)
         #expect(verdict.isWithinBudget, "\(verdict)")
     }

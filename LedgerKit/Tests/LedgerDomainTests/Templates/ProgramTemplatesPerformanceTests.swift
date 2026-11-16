@@ -14,13 +14,13 @@ import Testing
     .enabled(if: ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly", "nightly lane only")
 )
 struct ProgramTemplatesPerformanceTests {
-    @Test("program() takes under 5 ms for the largest split (median of 5)")
+    @Test("program() takes under 5 ms for the largest split (median of 20)")
     func program_sixDays_under5ms() throws {
         let block = TemplateCase(goal: .hypertrophy, days: .six)
         let catalog = try BundledCatalog.exercises()
         _ = try block.program(catalog: catalog)
         let clock = ContinuousClock()
-        let timings = try (0 ..< 5).map { _ in try clock.measure { _ = try block.program(catalog: catalog) } }.sorted()
+        let timings = try (0 ..< 20).map { _ in try clock.measure { _ = try block.program(catalog: catalog) } }.sorted()
         let verdict = PerformanceRunner.verdict(timings, budget: .milliseconds(5), statistic: .median)
         #expect(verdict.isWithinBudget, "\(verdict)")
     }

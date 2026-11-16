@@ -4,7 +4,7 @@ import LedgerTestSupport
 import Testing
 
 /// F11 S8 adversarial round 1, by measurement: `WrapLayout` arranges 5,000 children in a phone's width in under
-/// 4 ms, at the median of five runs after one warm-up (1.9-2.0 ms on the iPhone 17 and the Apple Watch Series 12
+/// 4 ms, at the median of 20 runs after one warm-up (1.9-2.0 ms on the iPhone 17 and the Apple Watch Series 12
 /// simulators, three runs each, 2026-11-15). That each is given a frame is
 /// `WrapLayoutAdversarialTests.arrangement_manyChildren_framesEach`'s. A timing is only meaningful without other
 /// suites competing for the CPU, so this is `.performance`: nightly lane only (testing-strategy §6).
@@ -15,7 +15,7 @@ import Testing
 )
 struct WrapLayoutPerformanceTests {
     static let arrangement: Duration = .milliseconds(4)
-    static let runs = 5
+    static let runs = 20
 
     @Test("5,000 children are arranged in under 4 ms")
     func manyChildren_underBudget() {

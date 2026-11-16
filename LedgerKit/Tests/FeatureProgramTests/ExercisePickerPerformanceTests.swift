@@ -5,7 +5,7 @@ import LedgerTestSupport
 import Testing
 
 /// F11 S8 adversarial round 1, by measurement: the exercise library's model over 10,000 stored exercises, a
-/// thousand of them picked (twice) and 500 already on the day, takes under 1 s, at the median of five runs after one
+/// thousand of them picked (twice) and 500 already on the day, takes under 1 s, at the median of 20 runs after one
 /// warm-up (0.51-0.53 s on an iPhone 17 simulator, three runs, 2026-11-15). The model's answers are
 /// `ExercisePickerModelAdversarialTests.tenThousandExercises_areOneModel`'s. A timing is only meaningful without
 /// other suites competing for the CPU (the PR lane's runner once took 2.076 s, PR #109), so this is `.performance`:
@@ -17,7 +17,7 @@ import Testing
 )
 struct ExercisePickerPerformanceTests {
     static let model: Duration = .seconds(1)
-    static let runs = 5
+    static let runs = 20
 
     @Test("The model over 10,000 exercises, 1,000 of them picked, takes under 1 s")
     func tenThousandExercises_underBudget() {

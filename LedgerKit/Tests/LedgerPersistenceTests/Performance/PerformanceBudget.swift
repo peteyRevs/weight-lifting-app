@@ -31,9 +31,7 @@ enum PerformanceBudget {
     /// the
     /// `TRUNCATE` checkpoint, on a file, at the 95th percentile of `statsRuns` runs on a simulator.
     static let eraseAll: Duration = .seconds(1)
-    /// How many timed runs of a stats query, after one untimed warm-up: enough for a 95th percentile (the 19th
-    /// fastest of 20).
+    /// How many timed runs of a stats query, or of any measured test, after one untimed warm-up: enough for a 95th
+    /// percentile (the 19th fastest of 20), and for a median that a stall of a few runs on a shared runner cannot move.
     static let statsRuns = 20
-    /// How many timed runs a measured test takes the median of, after one untimed warm-up.
-    static let runs = 5
 }

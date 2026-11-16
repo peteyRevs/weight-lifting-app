@@ -14,12 +14,12 @@ import Testing
     .enabled(if: TestLane.runsSlowTests, "a .performance test: nightly lane only")
 )
 struct MigrationTimingTests {
-    @Test("Creating and migrating a new database file takes under 300 ms (median of 5)")
+    @Test("Creating and migrating a new database file takes under 300 ms (median of 20)")
     func open_newFile_underBudget() throws {
         let directory = TemporaryDirectory()
         defer { try? directory.remove() } // cleanup only: a leftover temporary file fails nothing
         let clock = ContinuousClock()
-        let all = try (0 ... PerformanceBudget.runs).map { run in
+        let all = try (0 ... PerformanceBudget.statsRuns).map { run in
             let url = directory.file("run-\(run)/ledger.sqlite")
             return try clock.measure { _ = try LedgerDatabase.open(at: url) }
         }
