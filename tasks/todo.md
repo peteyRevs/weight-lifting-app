@@ -96,8 +96,14 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 | F14 | Settings: units, rest, plates, toggles, CSV export, Health row | F07 |
 | F15 | iOS UI tests for critical flows, accessibility audit, Dynamic Type pass | F08–F14 |
 
-- [~] F08 · [~] F09 · [~] F10 · [~] F11 · [ ] F12 · [ ] F13 · [ ] F14 · [ ] F15
-- [ ] M1 exit: a new user can onboard, run a full workout on the phone, see it in history and in the exercise chart; all flows pass the accessibility audit.
+- [x] F08 · [x] F09 · [x] F10 · [x] F11 · [x] F12 · [x] F13 · [x] F14 · [x] F15
+- [x] M1 exit (2026-11-18): a new user can onboard, run a full workout on the phone, see it in history and in the exercise chart; all flows pass the accessibility audit. Proven by the first fully green nightly, https://github.com/peteyRevs/weight-lifting-app/actions/runs/44234605416 (main at `acf44c0`: 9 iOS legs, 3 watch legs). Its Flows chain the critical paths (F15 S1, #103) and every screen passes the audit three ways (F15 S2a/S2b, #107, #108, #113).
+
+### Status — 2026-11-18: M1 complete
+
+Every M1 feature is on `main`. The road to a green nightly took these fixes: rest tests that crossed a long rest in one `TestClock` jump (#111, #117), a factor and median recalibration of the timing tests (#114, #115), a 3× faster History read (#119), a ninth iOS leg for LedgerDomainTests (#120), every store test that moves time on `RestCoverClock` instead of `TestClock`'s background-priority yields (#122), and the long Smoke test split one choice per test (#124). Release PR #104 (0.22.0) waits for Pete.
+
+Open follow-ups: LedgerDomainTests' nightly bundle (~2 GB, from one parameterized argument per seed); other `fetchAll` reads that pay the same per-lookup cost as the History read did; predicate waits in place of `waitForExistence` in the UI tests; the `.quarantined` trait that testing-strategy §5 describes but the repo lacks; and the older items (WorkoutSaveAdversarialTests' idle seam, `Environment.live` out of `AppComposition.swift`, CreateExerciseNameField's blank placeholder, Resume and View at XXXL).
 
 ### Status — 2026-10-12: M1 after release 0.10.0 (#53); two slices in review
 
