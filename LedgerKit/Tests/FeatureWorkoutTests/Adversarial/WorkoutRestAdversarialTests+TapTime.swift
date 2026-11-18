@@ -109,7 +109,7 @@ extension WorkoutRestAdversarialTests {
     // MARK: The undo guard and a clock set back, by the taps' own instants
 
     /// Drains with every call held, three seconds going by before each is let on.
-    static func drainSlowly(_ bench: LaggingRestBench<RestProbeClock>) async {
+    static func drainSlowly(_ bench: LaggingRestBench) async {
         let finished = LockIsolated(false)
         let draining = Task {
             await bench.store.drain()
@@ -121,7 +121,7 @@ extension WorkoutRestAdversarialTests {
             if finished.value || !came {
                 break
             }
-            await bench.clock.base.advance(by: .seconds(3))
+            bench.clock.advance(by: .seconds(3))
             await bench.session.release()
         }
         guard finished.value else {
@@ -140,7 +140,7 @@ extension WorkoutRestAdversarialTests {
         let row = bench.running.exercises[0].sets[0]
         await bench.session.holdEveryApply()
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: row.id)))
-        await bench.clock.base.advance(by: .seconds(after))
+        bench.clock.advance(by: .seconds(after))
         bench.store.send(.edit(.unlog(exerciseIndex: 0, setID: row.id)))
         await Self.drainSlowly(bench)
         let applied = await bench.session.applied

@@ -159,7 +159,7 @@
         struct HostedRoot {
             let running: WorkoutState
             let store: WorkoutStore
-            let clock = RestProbeClock()
+            let clock = RestCoverClock()
             let haptics = FakeHaptics()
             let host: UIViewController
             let window: UIWindow
@@ -188,10 +188,10 @@
             /// again, or the rest is over.
             func seconds(_ count: Int) async {
                 for _ in 0 ..< count {
-                    let sleeps = clock.sleeps.value
-                    await clock.base.advance(by: .seconds(1))
+                    let sleeps = clock.sleeps
+                    clock.advance(by: .seconds(1))
                     _ = await turning("a second of the rest") {
-                        clock.sleeps.value > sleeps || store.restPanel?.isOver == true
+                        clock.isAsleep(after: sleeps) || store.restPanel?.isOver == true
                     }
                     host.view.layoutIfNeeded()
                 }
@@ -212,7 +212,7 @@
             let bare = WorkoutPageViewsAdversarialTests.scrollView(in: hosted.host.view)?.adjustedContentInset.bottom
             store.send(.edit(.log(exerciseIndex: 0, setID: hosted.running.exercises[0].sets[0].id)))
             guard await Self.turning("the root's tasks to log the set and read the date", until: {
-                store.moment != nil && clock.sleeps.value > 0
+                store.moment != nil && clock.isAsleep(after: 0)
             }) else {
                 return
             }

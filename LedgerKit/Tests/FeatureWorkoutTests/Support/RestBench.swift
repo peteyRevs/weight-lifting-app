@@ -5,27 +5,6 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
-/// A test clock that counts the sleeps begun on it, so a test can wait until the store's task is
-/// asleep before it moves time: no wait is missed, and none is on real time.
-struct CountingClock: Clock {
-    let base = TestClock<Duration>()
-    let sleeps = LockIsolated(0)
-
-    var now: TestClock<Duration>.Instant {
-        base.now
-    }
-
-    var minimumResolution: Duration {
-        base.minimumResolution
-    }
-
-    func sleep(until deadline: TestClock<Duration>.Instant, tolerance: Duration?) async throws {
-        // Counted, then registered with the test clock before this task first suspends.
-        sleeps.withValue { $0 += 1 }
-        try await base.sleep(until: deadline, tolerance: tolerance)
-    }
-}
-
 /// The store's task that keeps the rest's time, as `WorkoutRoot`'s `.task(id: store.shownRest)` runs it.
 @MainActor
 final class RestKeeper {
@@ -43,7 +22,8 @@ final class RestKeeper {
 }
 
 /// A cover's store on the fake session, with a date and a clock that move only when the test moves
-/// them, and haptics and announcements it can read.
+/// them, and haptics and announcements it can read. The clock counts the sleeps begun on it, so a test
+/// waits until the store's task is asleep before it moves time: no wait is missed, and none is on real time.
 @MainActor
 struct RestBench {
     let scene: WorkoutScene
@@ -51,7 +31,7 @@ struct RestBench {
     let following: Task<Void, Never>
     let haptics = FakeHaptics()
     let announcements = FakeAnnouncements()
-    let clock = CountingClock()
+    let clock = RestCoverClock()
     let date = LockIsolated(Fixtures.now)
     let running: WorkoutState
 
@@ -91,24 +71,24 @@ struct RestBench {
 
     /// Starts the task that keeps the shown rest's time, and returns once it is asleep or has ended.
     func keepingTime() async -> RestKeeper {
-        let before = clock.sleeps.value
+        let before = clock.sleeps
         let keeper = RestKeeper(store)
         await settled(keeper, after: before)
         return keeper
     }
 
-    /// Waits until `keeper` has begun a sleep since `sleeps`, or ended (`eventually`: at most 10 s of the wall
-    /// clock, whatever the machine's load).
+    /// Waits until `keeper` is asleep in a sleep begun since `sleeps`, or has ended (`eventually`: at most 10 s
+    /// of the wall clock, whatever the machine's load).
     func settled(_ keeper: RestKeeper, after sleeps: Int) async {
-        await eventually("the rest's task to sleep again or end") { clock.sleeps.value != sleeps || keeper.isDone }
+        await eventually("the rest's task to sleep again or end") { clock.isAsleep(after: sleeps) || keeper.isDone }
     }
 
     /// A second goes by, on the wall clock and on the store's clock together: the task wakes at the
     /// rest's next second, reads the date, and is asleep again, or has ended, when this returns.
     func second(_ keeper: RestKeeper) async {
-        let before = clock.sleeps.value
+        let before = clock.sleeps
         date.withValue { $0 += 1 }
-        await clock.base.advance(by: .seconds(1))
+        clock.advance(by: .seconds(1))
         await settled(keeper, after: before)
     }
 
@@ -121,9 +101,9 @@ struct RestBench {
     /// The app was suspended for `seconds` while a wait was pending: the wall clock moved on, and the
     /// wait ends on the return.
     func suspended(_ seconds: TimeInterval, _ keeper: RestKeeper) async {
-        let before = clock.sleeps.value
+        let before = clock.sleeps
         date.withValue { $0 += seconds }
-        await clock.base.advance(by: .seconds(1))
+        clock.advance(by: .seconds(1))
         await settled(keeper, after: before)
     }
 

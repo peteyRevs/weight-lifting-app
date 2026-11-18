@@ -5,28 +5,19 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
-/// A clock a bench's test moves, and the date with it: `RestProbeClock`, or `RestCoverClock` for a test that
-/// moves time over many of the rest's waits (`TestClock` runs four `megaYield`s of background tasks for each).
-nonisolated protocol BenchClock: Clock<Duration> where Instant == TestClock<Duration>.Instant {
-    /// The time since the clock was made.
-    var elapsed: Duration { get }
-}
-
-extension RestProbeClock: BenchClock {}
-extension RestCoverClock: BenchClock {}
-
 /// A store on a `PumpSession` (S5's: held calls, a stream kept behind), with a date and a clock the test
-/// moves together and haptics it reads.
+/// moves together (`RestCoverClock`) and haptics it reads. Where no rest's task is started, nothing sleeps on
+/// the clock, and moving it only moves the date.
 @MainActor
-struct LaggingRestBench<Moved: BenchClock> {
+struct LaggingRestBench {
     let session: PumpSession
     let store: WorkoutStore
     let haptics = FakeHaptics()
-    let clock: Moved
+    let clock: RestCoverClock
     let running: WorkoutState
     var following: Task<Void, Never>
 
-    init(clock: Moved) async throws {
+    init(clock: RestCoverClock = RestCoverClock()) async throws {
         self.clock = clock
         let workout = EventBuilders.seedSession()
         running = workout
@@ -54,15 +45,7 @@ struct LaggingRestBench<Moved: BenchClock> {
     }
 }
 
-extension LaggingRestBench where Moved == RestProbeClock {
-    /// A bench whose clock nothing sleeps on (no rest's task is started): one jump of time only moves the
-    /// date. A test that keeps a rest's time takes `RestCoverClock` and moves it with `run`.
-    init() async throws {
-        try await self.init(clock: RestProbeClock())
-    }
-}
-
-extension LaggingRestBench where Moved == RestCoverClock {
+extension LaggingRestBench {
     /// Starts the task that keeps the shown rest's time, as the root does, and returns once it is asleep on
     /// the clock or has ended.
     func keepingTime() async -> RestKeeper {

@@ -24,11 +24,13 @@ struct WorkoutStoreRestTimeTests {
         await bench.second(keeper)
         #expect(bench.panel?.clock == ClockText.remaining(.seconds(bench.rest - 1)))
         // Between two of the rest's seconds nothing is read: the wait is for the whole second.
-        let sleeps = bench.clock.sleeps.value
+        let sleeps = bench.clock.sleeps
         bench.date.withValue { $0 += 1 }
-        await bench.clock.base.advance(by: .milliseconds(250))
+        bench.clock.advance(by: .milliseconds(250))
+        #expect(bench.clock.asleep == 1, "a quarter of a second ends no wait")
+        await giveWay()
         #expect(bench.store.moment == Fixtures.now.addingTimeInterval(1))
-        await bench.clock.base.advance(by: .milliseconds(750))
+        bench.clock.advance(by: .milliseconds(750))
         await bench.settled(keeper, after: sleeps)
         #expect(bench.store.moment == Fixtures.now.addingTimeInterval(2))
         await bench.seconds(8, keeper)

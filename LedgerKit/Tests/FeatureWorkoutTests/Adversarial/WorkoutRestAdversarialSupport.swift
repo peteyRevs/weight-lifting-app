@@ -14,31 +14,6 @@ nonisolated enum RestSeeds {
     }()
 }
 
-/// A test clock that counts the sleeps begun on it, so a test can tell a task that is asleep again from one
-/// that was woken and has not yet slept. Nothing waits on real time. (`RestCover` runs on `RestCoverClock`.)
-nonisolated struct RestProbeClock: Clock {
-    let base = TestClock<Duration>()
-    let sleeps = LockIsolated(0)
-
-    var now: TestClock<Duration>.Instant {
-        base.now
-    }
-
-    var minimumResolution: Duration {
-        base.minimumResolution
-    }
-
-    /// The time since the clock was made.
-    var elapsed: Duration {
-        TestClock<Duration>.Instant().duration(to: base.now)
-    }
-
-    func sleep(until deadline: TestClock<Duration>.Instant, tolerance: Duration?) async throws {
-        sleeps.withValue { $0 += 1 }
-        try await base.sleep(until: deadline, tolerance: tolerance)
-    }
-}
-
 /// One phone under test (G2, F10 S6): the real host, a cover over it whose three tasks run as `WorkoutRoot`
 /// runs them (`follow()`, `pump()`, and `keepRestTime()` started again whenever `shownRest` changes, the
 /// one before cancelled), haptics that record, and time the test moves.
