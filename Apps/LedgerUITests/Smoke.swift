@@ -87,56 +87,6 @@ final class Smoke: XCTestCase {
         XCTAssertTrue(becomesHittable(today), "the tabs are back")
     }
 
-    /// F10 S4 criterion 18: with the first day's sample workout running, asking for another day's raises
-    /// "You have a workout in progress" with its three choices drawn, and each does what it says: "Cancel"
-    /// shows nothing and changes nothing; "Resume it" shows the workout that was running; "Discard and
-    /// start new" shows the other day's workout, newly started.
-    @MainActor
-    func test_sampleWorkout_anotherDay_cancelResumeAndReplace() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"]
-        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
-        app.launch()
-        let today = app.staticTexts["today.title"]
-        XCTAssertTrue(today.waitForExistence(timeout: 10))
-        let minimize = app.buttons["workout.header.minimize"]
-        let title = app.staticTexts["workout.header.title"]
-        let choices = ["resume", "replace", "cancel"].map { app.buttons["workout.conflict.\($0)"].firstMatch }
-
-        startSampleWorkout(in: app)
-        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
-        minimize.tap()
-        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5))
-
-        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
-        XCTAssertTrue(choices[2].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["You have a workout in progress"].exists)
-        XCTAssertEqual(choices.map(\.label), ["Resume it", "Discard and start new", "Cancel"])
-        XCTAssertEqual(choices.map(\.isHittable), [true, true, true], "all three are drawn")
-        attachScreenshot(of: app, named: "Workout in progress")
-        choices[2].tap()
-        XCTAssertTrue(choices[2].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(becomesHittable(today), "Cancel shows nothing")
-        XCTAssertFalse(minimize.exists)
-
-        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
-        XCTAssertTrue(choices[0].waitForExistence(timeout: 10), "Cancel discarded nothing: it asks again")
-        choices[0].tap()
-        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "Upper A — Push focus", "Resume it shows the workout that was running")
-        let ran = try elapsedSeconds(in: app)
-        XCTAssertGreaterThan(ran, 5, "with the time it has run")
-        minimize.tap()
-        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5))
-
-        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
-        XCTAssertTrue(choices[1].waitForExistence(timeout: 10))
-        choices[1].tap()
-        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "Lower A — Squat focus", "Discard and start new shows the other day's workout")
-        XCTAssertLessThan(try elapsedSeconds(in: app), ran, "newly started")
-    }
-
     /// The seconds the cover's elapsed time reads now: the text the system's timer draws inside the
     /// element VoiceOver knows as "Elapsed time" ("0:07", "1:01:05").
     @MainActor
@@ -239,5 +189,100 @@ extension Smoke {
         attachScreenshot(of: app, named: "The receipt of the saved workout")
         done.tap()
         XCTAssertTrue(done.waitForNonExistence(timeout: 10), "the cover is down")
+    }
+}
+
+/// F10 S4 criterion 18, "You have a workout in progress", one test per choice (#123).
+extension Smoke {
+    /// F10 S4 criterion 18, one test per choice, so that each fits the PR lane's minute on a loaded runner
+    /// (#123). "Cancel" shows nothing and changes nothing: asking again asks again.
+    @MainActor
+    func test_sampleWorkout_anotherDay_cancelChangesNothing() throws {
+        let conflict = try askForAnotherDayWhileOneRuns()
+        let app = conflict.app
+        let choices = conflict.choices
+        choices[2].tap()
+        XCTAssertTrue(choices[2].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(becomesHittable(app.staticTexts["today.title"]), "Cancel shows nothing")
+        XCTAssertFalse(app.buttons["workout.header.minimize"].exists)
+
+        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
+        XCTAssertTrue(choices[0].waitForExistence(timeout: 10), "Cancel discarded nothing: it asks again")
+    }
+
+    /// F10 S4 criterion 18: "Resume it" shows the workout that was running, with the time it has run.
+    @MainActor
+    func test_sampleWorkout_anotherDay_resumeShowsTheRunningWorkout() throws {
+        let conflict = try askForAnotherDayWhileOneRuns()
+        let app = conflict.app
+        conflict.choices[0].tap()
+        XCTAssertTrue(app.buttons["workout.header.minimize"].waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            app.staticTexts["workout.header.title"].label, "Upper A — Push focus",
+            "Resume it shows the workout that was running"
+        )
+        let atLeast = conflict.firstHasRun()
+        let ran = try elapsedSeconds(in: app)
+        XCTAssertGreaterThan(ran, 5, "with the time it has run")
+        XCTAssertGreaterThanOrEqual(ran, atLeast, "it kept counting while it was minimized")
+    }
+
+    /// F10 S4 criterion 18: "You have a workout in progress" is raised with its three choices drawn, and
+    /// "Discard and start new" shows the other day's workout, newly started: its time reads less than the
+    /// first workout's has run by now. (The dialog is read here, not in the Cancel test, because this test
+    /// is the shortest after it: each of the three stays well inside the minute.)
+    @MainActor
+    func test_sampleWorkout_anotherDay_asks_replaceStartsTheOtherDay() throws {
+        let conflict = try askForAnotherDayWhileOneRuns()
+        let app = conflict.app
+        let choices = conflict.choices
+        XCTAssertTrue(app.staticTexts["You have a workout in progress"].exists)
+        XCTAssertEqual(choices.map(\.label), ["Resume it", "Discard and start new", "Cancel"])
+        XCTAssertEqual(choices.map(\.isHittable), [true, true, true], "all three are drawn")
+        attachScreenshot(of: app, named: "Workout in progress")
+        choices[1].tap()
+        XCTAssertTrue(app.buttons["workout.header.minimize"].waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            app.staticTexts["workout.header.title"].label, "Lower A — Squat focus",
+            "Discard and start new shows the other day's workout"
+        )
+        XCTAssertLessThan(try elapsedSeconds(in: app), conflict.firstHasRun(), "newly started")
+    }
+
+    /// "You have a workout in progress", raised: the first day's sample workout is started, its time is
+    /// read, it is minimized, and the other day's is asked for.
+    private struct Conflict {
+        let app: XCUIApplication
+        /// "Resume it", "Discard and start new", "Cancel".
+        let choices: [XCUIElement]
+        let firstRead: Int
+        let firstReadAt: Date
+
+        /// The least the first workout's time can read now: what it read, plus the whole seconds since.
+        func firstHasRun() -> Int {
+            firstRead + Int(Date().timeIntervalSince(firstReadAt))
+        }
+    }
+
+    @MainActor
+    private func askForAnotherDayWhileOneRuns() throws -> Conflict {
+        let app = XCUIApplication()
+        app.launchArguments = ["-LEDGER_UITEST", "1"]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
+        app.launch()
+        XCTAssertTrue(app.staticTexts["today.title"].waitForExistence(timeout: 10))
+        let minimize = app.buttons["workout.header.minimize"]
+        let choices = ["resume", "replace", "cancel"].map { app.buttons["workout.conflict.\($0)"].firstMatch }
+
+        startSampleWorkout(in: app)
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
+        let firstRead = try elapsedSeconds(in: app)
+        let firstReadAt = Date()
+        minimize.tap()
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5))
+
+        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
+        XCTAssertTrue(choices[2].waitForExistence(timeout: 10))
+        return Conflict(app: app, choices: choices, firstRead: firstRead, firstReadAt: firstReadAt)
     }
 }
