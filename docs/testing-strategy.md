@@ -376,7 +376,7 @@ and audit runner). The `PR` plan runs `Smoke` alone; the `Nightly` plan runs the
 only with `waitForExistence` or a predicate, never a sleep.
 
 **The suites, iOS**
-- `Smoke` (PR lane, under 90 s per test on the runner): `test_onboardToFirstSet` (a fresh install, "Skip setup",
+- `Smoke` (PR lane, each test within the 60 s allowance of `PR.xctestplan`): `test_onboardToFirstSet` (a fresh install, "Skip setup",
   Today's real "Start workout", a logged set and its rest panel, then Discard); the sample workout started,
   minimized, resumed and discarded; the "workout in progress" conflict; a set logged, saved and shown on Today.
 - `Flows` (nightly), the M1 exit's critical paths, each one launch: `test_fullWorkoutToHistory` (onboarding, three
