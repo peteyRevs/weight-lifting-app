@@ -68,5 +68,23 @@
             #expect(lines > 0, "the name is longer than one line at \(size)")
             #expect(grows >= lines - 0.5, "the field grows \(grows) pt for \(lines) pt of further lines at \(size)")
         }
+
+        /// As Program's `NameField`: a name of only spaces shows the placeholder over an unseen line of the label, so
+        /// the field keeps an empty name's one line and nothing under it moves at the first space typed.
+        @Test(
+            "A name of only spaces keeps the field as high as an empty name",
+            arguments: [DynamicTypeSize.large, .xxxLarge, .accessibility5]
+        )
+        func blankName_keepsTheEmptyFieldsHeight(_ size: DynamicTypeSize) {
+            let width: CGFloat = 353
+            func height(_ text: String) -> CGFloat {
+                let field = CreateExerciseNameField(model: .init(label: "Name", text: text, problem: nil)) { _ in }
+                let sized = field.frame(width: width).environment(\.dynamicTypeSize, size)
+                return UIHostingController(rootView: sized).sizeThatFits(in: CGSize(width: width, height: 5000)).height
+            }
+            let (empty, blank) = (height(""), height("   "))
+            #expect(empty > 44, "the field was not measured at \(size): \(empty) pt")
+            #expect(abs(blank - empty) < 0.5, "at \(size) a blank name is \(blank) pt high, an empty one \(empty) pt")
+        }
     }
 #endif
