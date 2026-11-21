@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.22.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.21.1...v0.22.0) (2026-11-21)
+
+
+### Features
+
+* **appkit:** UI tests start from seeded history, Smoke starts from Today, and the nightly Flows chain the critical paths (F15 S1) ([#103](https://github.com/peteyRevs/weight-lifting-app/issues/103)) ([a10a2c2](https://github.com/peteyRevs/weight-lifting-app/commit/a10a2c2ad2f373f58f79c5438806988464e27523))
+
+
+### Fixes
+
+* **appkit:** UI tests draw the appearance they ask for, and the Program tab's audit issues are measured exclusions ([#105](https://github.com/peteyRevs/weight-lifting-app/issues/105)) ([e7cbbcc](https://github.com/peteyRevs/weight-lifting-app/commit/e7cbbccd0e6eb4eac3ed65f59457bff631ac36b3))
+* **tests:** the long rest tests move RestCoverClock, and the first ImageRenderer render is a probe no test reads ([#111](https://github.com/peteyRevs/weight-lifting-app/issues/111)) ([e0996dc](https://github.com/peteyRevs/weight-lifting-app/commit/e0996dc3a7999d175761fe01e68bff42a0aeaf68))
+
+
+### Performance
+
+* **persistence:** historyEntries decodes each workout row from a cursor, not a fetchAll copy ([#118](https://github.com/peteyRevs/weight-lifting-app/issues/118)) ([#119](https://github.com/peteyRevs/weight-lifting-app/issues/119)) ([dd247c0](https://github.com/peteyRevs/weight-lifting-app/commit/dd247c0ba51779d17daa4f7a4fdb81a3cce32703))
+* **persistence:** workout, exercise and exercise-history reads decode rows from cursors, as [#119](https://github.com/peteyRevs/weight-lifting-app/issues/119) did ([#126](https://github.com/peteyRevs/weight-lifting-app/issues/126)) ([5958613](https://github.com/peteyRevs/weight-lifting-app/commit/59586134aa1c96655e3b0c419b0af1ca33524292))
+
 ## [0.21.1](https://github.com/peteyRevs/weight-lifting-app/compare/v0.21.0...v0.21.1) (2026-11-13)
 
 
