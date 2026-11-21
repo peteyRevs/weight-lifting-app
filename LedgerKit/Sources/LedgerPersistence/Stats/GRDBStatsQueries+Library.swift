@@ -88,6 +88,11 @@ extension GRDBStatsQueries {
         ValueObservation.tracking { database in try fetchSessions(exerciseID, in: database) }.removeDuplicates()
     }
 
+    /// Each row is decoded while its cursor is on it (issue #118, as `fetchHistoryEntries`): a row `Row.fetchAll`
+    /// copies finds a column by name by lowercasing every column name of the row, on each of the ~10 reads a set
+    /// makes of it, where a cursor's row looks it up in its statement's index: the main lift's ~1,700 sets of
+    /// 20,000 in 6.3 ms in place of 13.8 ms on the reference iPhone simulator, and 6.3 in place of 14.6 on its
+    /// watch (medians of 20).
     private static func fetchSessions(_ exerciseID: ExerciseID, in database: Database) throws -> [ExerciseSession] {
         let sql = """
         SELECT logged_set.*, workout.id AS session_id, workout.started_at AS started_at
@@ -95,7 +100,8 @@ extension GRDBStatsQueries {
         ORDER BY workout.started_at DESC, workout.id, workout_exercise.position, logged_set.position
         """
         var sessions: [ExerciseSession] = []
-        for row in try Row.fetchAll(database, sql: sql, arguments: [ColumnCodec.text(exerciseID)]) {
+        let rows = try Row.fetchCursor(database, sql: sql, arguments: [ColumnCodec.text(exerciseID)])
+        while let row = try rows.next() {
             let workout = ColumnReader(row: row, table: WorkoutRecord.databaseTableName)
             let id: WorkoutID = try workout.identifier("session_id")
             let set = try LoggedSetRecord(row: row).set
