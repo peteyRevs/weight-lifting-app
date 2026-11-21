@@ -68,11 +68,18 @@ struct CreateExercisePage: View {
 /// the accessibility sizes an ordinary name is longer ("Landmine Squ…"). So while the field has no focus its own
 /// text is concealed, and the name is drawn as text that wraps onto as many lines as it needs, with the field over
 /// its first line. With the focus the field draws its text itself, on its one line, and the box is one line high.
-/// The field is the one thing VoiceOver reads; the drawn text is hidden from it.
+/// An empty name shows the field's placeholder; a name of only spaces shows it too, drawn here under the field, with
+/// the focus and without it (`CreateExerciseModel.Name.showsPlaceholderOverBlank`). The field is the one thing
+/// VoiceOver reads; the drawn text and the drawn placeholder are hidden from it.
 struct CreateExerciseNameField: View {
     let model: CreateExerciseModel.Name
     let send: (CreateExerciseAction) -> Void
     @FocusState private var isEditing: Bool
+
+    /// The placeholder's colour, the field's prompt and the one drawn over a blank name alike (as `NameField`'s).
+    private static var placeholderColor: Color {
+        LedgerColor.inkFaint
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.s) {
@@ -96,6 +103,13 @@ struct CreateExerciseNameField: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: 0, alignment: .leading)
                 .hidden()
+            if model.showsPlaceholderOverBlank {
+                Text(model.label)
+                    .ledgerFont(.body)
+                    // The colour of the field's own prompt, so a blank name reads as an empty one.
+                    .foregroundStyle(Self.placeholderColor)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
             Text(model.text)
                 .ledgerFont(.body)
                 .foregroundStyle(isEditing ? LedgerColor.inkConcealed : LedgerColor.ink)
@@ -106,7 +120,7 @@ struct CreateExerciseNameField: View {
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .accessibilityHidden(true)
         .overlay(alignment: .topLeading) {
-            TextField(text: binding, prompt: Text(model.label).foregroundStyle(LedgerColor.inkFaint)) {
+            TextField(text: binding, prompt: Text(model.label).foregroundStyle(Self.placeholderColor)) {
                 Text(model.label)
             }
             .ledgerFieldFont(.body)

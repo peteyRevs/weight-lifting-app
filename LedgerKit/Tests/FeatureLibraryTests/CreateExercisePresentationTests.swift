@@ -90,6 +90,25 @@ struct CreateExercisePresentationTests {
         #expect(saving.foot.action == nil)
     }
 
+    /// As Program's `NameField` (Pete's question 5, A): a name of only spaces shows the placeholder, as an empty one
+    /// does. The field draws its own over an empty name, so the model asks for the drawn one only over spaces.
+    @Test("The placeholder is drawn over a name of only spaces, kept as typed; never over an empty or a real name")
+    func blankName_showsThePlaceholder() {
+        let shows = { (typed: String) in
+            var draft = CustomExerciseDraft()
+            draft.name = typed
+            let name = Self.model(draft).name
+            #expect(name.text == typed, "the name is kept as typed")
+            return name.showsPlaceholderOverBlank
+        }
+        for typed in [" ", "   ", "\t ", "\u{00A0}\u{2003}"] {
+            #expect(shows(typed), "\(typed.unicodeScalars.map(\.value))")
+        }
+        for typed in ["", "Bench", " a ", "  Landmine press"] {
+            #expect(!shows(typed), "\(typed)")
+        }
+    }
+
     @Test("10. The history of the lifter's own exercise has Edit; a catalog exercise's has none")
     func historyEdit_customOnly() throws {
         var input = try HistoryFixtures.input([])

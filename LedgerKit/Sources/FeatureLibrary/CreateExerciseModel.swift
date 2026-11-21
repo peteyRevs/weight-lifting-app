@@ -59,6 +59,13 @@ nonisolated struct CreateExerciseModel: Equatable, Sendable {
         let label: String
         let text: String
         let problem: String?
+
+        /// The text is only spaces, so the placeholder is drawn over it, as over an empty one (Program's `NameField`,
+        /// Pete's question 5, A). The field draws its own placeholder only over an empty text. The text is the
+        /// store's, kept as typed with the focus and without it, so this holds either way.
+        var showsPlaceholderOverBlank: Bool {
+            !text.isEmpty && text.allSatisfy(\.isWhitespace)
+        }
     }
 
     enum Field: Hashable, Sendable {
