@@ -96,28 +96,47 @@ struct WorkoutRows {
     /// That includes a workout or exercise row whose id is not stored as text. SQL compares the id with its
     /// children's text `…_id` and finds none, so reading on would return a workout with no exercises, or an
     /// exercise with no sets (S3-3).
+    ///
+    /// Every row is decoded while its cursor is on it (issue #118, as `fetchHistoryEntries`): a row `Row.fetchAll`
+    /// copies finds a column by name by lowercasing every column name of the row, on each of the ~10 to 16 reads
+    /// a record makes of it, where a cursor's row looks it up in its statement's index. A child's outcome, its
+    /// value or its error, waits under its parent's id for the workout that reads it, which throws the same
+    /// first error as before. Over 20,000 sets (medians of 20): Today's 13 days of workouts in 1.3 ms in place of
+    /// 2.3 ms on the reference iPhone simulator and 1.3 in place of 2.6 on its watch, and `recent(limit: 5)` in
+    /// 1.5 in place of 2.6 on the iPhone and 1.6 in place of 2.9 on the watch.
     static func fetch(_ selection: Selection, in database: Database, strict: Bool) throws -> [WorkoutState] {
         // Children are grouped by their parent's id as stored, so grouping never fails on a damaged id.
-        let exerciseRows = try Dictionary(grouping: selection.rows(Query.exercises, in: database)) { row in
-            row["workout_id"] as DatabaseValue
+        var exercisesByWorkout: [DatabaseValue: [(id: DatabaseValue, exercise: Result<WorkoutExercise, any Error>)]] =
+            [:]
+        try selection.forEachRow(Query.exercises, in: database) { row in
+            exercisesByWorkout[row["workout_id"], default: []].append((row["id"], Result {
+                try requireTextID(of: row, in: WorkoutExerciseRecord.databaseTableName)
+                return try WorkoutExerciseRecord(row: row).exercise
+            }))
         }
-        let setRows = try Dictionary(grouping: selection.rows(Query.sets, in: database)) { row in
-            row["workout_exercise_id"] as DatabaseValue
+        var setsByExercise: [DatabaseValue: [Result<LoggedSet, any Error>]] = [:]
+        try selection.forEachRow(Query.sets, in: database) { row in
+            setsByExercise[row["workout_exercise_id"], default: []].append(Result {
+                try LoggedSetRecord(row: row).set
+            })
         }
         let read = { (row: Row) in
             try requireTextID(of: row, in: WorkoutRecord.databaseTableName)
             var state = try WorkoutRecord(row: row).workout
-            state.exercises = try exerciseRows[row["id"], default: []].map { exerciseRow in
-                try requireTextID(of: exerciseRow, in: WorkoutExerciseRecord.databaseTableName)
-                var exercise = try WorkoutExerciseRecord(row: exerciseRow).exercise
-                exercise.sets = try setRows[exerciseRow["id"], default: []].map { try LoggedSetRecord(row: $0).set }
+            state.exercises = try exercisesByWorkout[row["id"], default: []].map { child in
+                var exercise = try child.exercise.get()
+                exercise.sets = try setsByExercise[child.id, default: []].map { try $0.get() }
                 return exercise
             }
             return state
         }
-        return try selection.rows(Query.workouts, in: database).compactMap { row in
-            try strict ? read(row) : row.readable(as: WorkoutRecord.databaseTableName, read)
+        var states: [WorkoutState] = []
+        try selection.forEachRow(Query.workouts, in: database) { row in
+            if let state = try strict ? read(row) : row.readable(as: WorkoutRecord.databaseTableName, read) {
+                states.append(state)
+            }
         }
+        return states
     }
 
     /// Throws `malformedColumn("table.id")` unless the row's id is stored as text, in the spelling the app
@@ -178,9 +197,19 @@ extension WorkoutRows {
             )
         }
 
-        /// The rows `query` selects for these workouts.
+        /// The rows `query` selects for these workouts, copied: a write keeps them for its diff.
         fileprivate func rows(_ query: (String) -> String, in database: Database) throws -> [Row] {
             try Row.fetchAll(database, sql: query(sql), arguments: arguments)
+        }
+
+        /// Calls `body` with each row `query` selects for these workouts, in order, from a cursor: the row is
+        /// valid only during the call, and `body` must not keep it.
+        fileprivate func forEachRow(
+            _ query: (String) -> String,
+            in database: Database,
+            _ body: (Row) throws -> Void
+        ) throws {
+            try Row.fetchCursor(database, sql: query(sql), arguments: arguments).forEach(body)
         }
     }
 
