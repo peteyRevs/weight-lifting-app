@@ -156,7 +156,66 @@ private struct BriefStatsQueries: StatsQueries {
     }
 }
 
-private struct BriefShapes: HealthStore, LiveWorkoutTransport, CompanionTransport {}
+private struct BriefShapes: LiveWorkoutTransport, CompanionTransport {}
+
+/// F16's `HealthStore` and `RemoteSessionChannel`, from the brief's signatures.
+private struct BriefHealthStore: HealthStore, RemoteSessionChannel {
+    var events: AsyncStream<HealthSessionEvent> {
+        AsyncStream { $0.finish() }
+    }
+
+    var remoteChannel: any RemoteSessionChannel {
+        self
+    }
+
+    var connection: AsyncStream<Bool> {
+        AsyncStream { $0.finish() }
+    }
+
+    var incoming: AsyncStream<[Data]> {
+        AsyncStream { $0.finish() }
+    }
+
+    func authorization() async -> HealthAuthorization {
+        .notDetermined
+    }
+
+    func requestAuthorization() async throws -> HealthAuthorization {
+        .authorized
+    }
+
+    func startSession(workoutID _: WorkoutID, at _: Date) async throws {}
+
+    func heartRate() async -> AsyncStream<HeartRateSample> {
+        AsyncStream { $0.finish() }
+    }
+
+    func endSession(metadata _: HealthWorkoutMetadata, at _: Date) async throws -> HealthWorkoutRecord {
+        throw HealthError.noActiveSession
+    }
+
+    func discardSession() async throws {}
+
+    func recoverActiveSession() async throws -> Bool {
+        false
+    }
+
+    func requestWatchStart() async throws {}
+
+    func saveWorkout(
+        metadata _: HealthWorkoutMetadata,
+        start _: Date,
+        end _: Date
+    ) async throws -> HealthWorkoutRecord {
+        throw HealthError.notAuthorized
+    }
+
+    func workoutRecord(healthKitUUID _: UUID) async throws -> HealthWorkoutRecord? {
+        nil
+    }
+
+    func send(_: Data) async throws {}
+}
 
 @Suite("Protocols (adversarial)", .tags(.domain))
 struct ProtocolsAdversarialTests {}
@@ -169,7 +228,7 @@ extension ProtocolsAdversarialTests {
         let settings: any SettingsRepository = BriefSettingsRepository()
         let programs: any ProgramRepository = BriefProgramRepository()
         let workouts: any WorkoutRepository = BriefWorkoutRepository()
-        let shapes: [any Sendable] = [BriefShapes() as any HealthStore, BriefShapes() as any CompanionTransport]
+        let shapes: [any Sendable] = [BriefHealthStore() as any HealthStore, BriefShapes() as any CompanionTransport]
         #expect(try await exercises.all() == [Fixtures.bench])
         #expect(try await stats.bestSet(exerciseID: Fixtures.bench.id)?.weight == pounds("200"))
         #expect(try await settings.load() == .default)

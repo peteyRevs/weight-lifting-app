@@ -1,7 +1,7 @@
 import Foundation
 
-// The device clients a store reaches through `@Dependency` (architecture §13; F07). Shape only, like
-// `HealthStore`: the brief that first needs one adds its methods, and its live implementation.
+// The device clients a store reaches through `@Dependency` (architecture §13; F07). A client with no method yet
+// is a shape: the brief that first needs one adds its methods, and its live implementation.
 // `Sendable`, so a nonisolated dependency key can hold one and a `@MainActor` store can call it.
 
 /// Haptic feedback: the engine's `.haptic` effects, played by the workout stores (F10, F18).

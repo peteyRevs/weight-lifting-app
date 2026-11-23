@@ -11,6 +11,7 @@
 	<key>WKBackgroundModes</key>
 	<array>
 		<string>workout-processing</string>
+		<string>audio</string>
 	</array>
 	<key>NSHealthShareUsageDescription</key>
 	<string>$(PRODUCT_DISPLAY_NAME) reads your heart rate during a workout so each set is logged with what your body was doing.</string>

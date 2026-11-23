@@ -1,6 +1,7 @@
 #if DEBUG
     import Dependencies
     import LedgerDesign
+    import LedgerDomain
     import LedgerHealth
     import LedgerPersistence
 
@@ -23,7 +24,7 @@
                 DiagnosticsSection("App", lines: [
                     DiagnosticsLine("Database", database?.path ?? failure ?? "Not open", key: "path"),
                     DiagnosticsLine("Device", database?.deviceID.rawValue.uuidString ?? "Unknown", key: "deviceID"),
-                    DiagnosticsLine("Health", health.rawValue, key: "health"),
+                    DiagnosticsLine("Health", health.diagnosticsLabel, key: "health"),
                     DiagnosticsLine(
                         "Launch to first frame",
                         DiagnosticsLine.milliseconds(launchToFirstFrame),

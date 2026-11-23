@@ -1,15 +1,22 @@
 #if canImport(HealthKit)
     import HealthKit
 #endif
+import LedgerDomain
 
-/// What HealthKit reports about Ledger saving workouts, for Debug's Diagnostics screen (F07 criterion 7). Reading it
-/// never asks the lifter: authorization is requested at the first "Start workout" (architecture §9). HealthKit
-/// reports no read status, by design, so this is the sharing status.
-public enum HealthAuthorization: String, Sendable {
-    case unavailable = "Unavailable"
-    case notDetermined = "Not determined"
-    case denied = "Denied"
-    case authorized = "Authorized"
+// `HealthAuthorization` (LedgerDomain) as HealthKit reports it. Reading it never asks the lifter: authorization is
+// requested at the first "Start workout" (architecture §9). HealthKit reports no read status, by design, so this
+// is the sharing status.
+
+public extension HealthAuthorization {
+    /// How Debug's Diagnostics screen shows it (F07 criterion 7). Not localised: Diagnostics is Debug-only.
+    var diagnosticsLabel: String {
+        switch self {
+        case .unavailable: "Unavailable"
+        case .notDetermined: "Not determined"
+        case .denied: "Denied"
+        case .authorized: "Authorized"
+        }
+    }
 }
 
 #if canImport(HealthKit)

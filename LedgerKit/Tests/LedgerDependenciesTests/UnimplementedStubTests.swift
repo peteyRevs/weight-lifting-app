@@ -167,3 +167,29 @@ struct UnimplementedStubTests {
         #expect(LedgerLogger.subsystem == "com.petearevalo.Ledger")
     }
 }
+
+extension UnimplementedStubTests {
+    @Test("The health store's stub throws from every method that can, reads as unavailable, and ends every stream")
+    func healthStore() async {
+        let stub = HealthStoreKey.liveValue
+        let metadata = HealthWorkoutMetadata(
+            workoutID: Self.workout, programName: nil, dayName: nil, totalVolume: .zero, doneSets: 0
+        )
+        await Self.expectUnimplemented("healthStore", [
+            { _ = try await stub.requestAuthorization() },
+            { try await stub.startSession(workoutID: Self.workout, at: Fixtures.now) },
+            { _ = try await stub.endSession(metadata: metadata, at: Fixtures.now) },
+            { try await stub.discardSession() },
+            { _ = try await stub.recoverActiveSession() },
+            { try await stub.requestWatchStart() },
+            { _ = try await stub.saveWorkout(metadata: metadata, start: Fixtures.now, end: Fixtures.now) },
+            { _ = try await stub.workoutRecord(healthKitUUID: Fixtures.uuid(1)) },
+            { try await stub.remoteChannel.send(Data()) }
+        ])
+        #expect(await stub.authorization() == .unavailable)
+        #expect(await Self.isEmpty(stub.events))
+        #expect(await Self.isEmpty(stub.heartRate()))
+        #expect(await Self.isEmpty(stub.remoteChannel.connection))
+        #expect(await Self.isEmpty(stub.remoteChannel.incoming))
+    }
+}

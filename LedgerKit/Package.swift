@@ -59,8 +59,9 @@ let testedTargets: [(name: String, settings: [SwiftSetting])] =
 
 /// Test targets that link LedgerFakes directly, not only through LedgerTestSupport: Xcode measures the coverage
 /// of a test target's direct dependencies only, and LedgerFakes is gated (ADR-008). These are the suites that run
-/// the fakes: the contracts (Persistence), the fixtures and keys (Dependencies), the link bus (Sync).
-let fakesCoverageTargets: Set<String> = ["LedgerDependencies", "LedgerPersistence", "LedgerSync"]
+/// the fakes: the contracts (Persistence), the fixtures and keys (Dependencies), the link bus (Sync), the health
+/// store's contract (Health, F16).
+let fakesCoverageTargets: Set<String> = ["LedgerDependencies", "LedgerHealth", "LedgerPersistence", "LedgerSync"]
 
 /// Test targets whose suites commit `__Snapshots__` references; SwiftPM must not treat those
 /// PNGs as sources. Add a target here with its first snapshot suite.
