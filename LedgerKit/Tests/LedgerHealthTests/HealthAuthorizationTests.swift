@@ -1,5 +1,6 @@
 #if canImport(HealthKit)
     import HealthKit
+    import LedgerDomain
     @testable import LedgerHealth
     import Testing
 
@@ -28,6 +29,12 @@
         @Test("Where HealthKit is available, its status for workouts is reported")
         func available_reportsTheStatus() {
             #expect(HealthAuthorization.workouts(isAvailable: true) { .sharingDenied } == .denied)
+        }
+
+        @Test("Diagnostics shows each status in words")
+        func diagnosticsLabels() {
+            let all: [HealthAuthorization] = [.unavailable, .notDetermined, .denied, .authorized]
+            #expect(all.map(\.diagnosticsLabel) == ["Unavailable", "Not determined", "Denied", "Authorized"])
         }
     }
 #endif

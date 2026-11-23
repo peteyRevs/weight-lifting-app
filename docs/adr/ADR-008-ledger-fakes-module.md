@@ -46,8 +46,9 @@ A second problem surfaced while building the fakes. The contracts check the erro
    - `LedgerTestSupport` is no longer linked by any library target: only test targets and
      `LedgerSnapshotTesting` use it.
    - The test targets that run the fakes (`LedgerPersistenceTests`, `LedgerDependenciesTests`,
-     `LedgerSyncTests`) also depend on `LedgerFakes` directly: Xcode measures coverage only of a test target's
-     direct dependencies, and the fakes are gated (the first full gate measured none of their lines).
+     `LedgerSyncTests`, and since F16 S1 `LedgerHealthTests`, for `HealthStoreContractTests`) also depend on
+     `LedgerFakes` directly: Xcode measures coverage only of a test target's direct dependencies, and the fakes
+     are gated (the first full gate measured none of their lines).
 3. **`RepositoryError` moves to `LedgerDomain`**, beside the protocols that promise its cases, unchanged. The
    GRDB stores keep throwing it under its old name: `LedgerPersistence` declares
    `public typealias LedgerPersistenceError = RepositoryError`, so no call site, contract or suite changed. No case

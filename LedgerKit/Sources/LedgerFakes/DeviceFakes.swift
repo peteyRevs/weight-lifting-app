@@ -2,15 +2,9 @@
     import Foundation
     import LedgerDomain
 
-    // Fakes of the device protocols, for previews and tests. A protocol with no method yet (HealthKit, the
-    // transports and the Live Activity are shaped by F16, F17, F19 and F21) has a fake that records nothing:
-    // the brief that adds a method grows its fake with scriptable answers and recorded calls.
-
-    /// `HealthStore` for previews and tests; F16 adds scriptable authorisation, heart-rate samples and
-    /// recorded calls.
-    public struct FakeHealthStore: HealthStore {
-        public init() {}
-    }
+    // Fakes of the device protocols, for previews and tests (`FakeHealthStore` has its own file). A protocol with
+    // no method yet (the transports and the Live Activity are shaped by F17, F19 and F21) has a fake that records
+    // nothing: the brief that adds a method grows its fake with scriptable answers and recorded calls.
 
     /// `LiveWorkoutTransport` for previews and tests; F17 builds it over `FakeLinkBus`.
     public struct FakeLiveWorkoutTransport: LiveWorkoutTransport {
