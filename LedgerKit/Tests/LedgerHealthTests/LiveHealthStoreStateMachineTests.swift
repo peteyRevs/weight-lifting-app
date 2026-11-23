@@ -4,16 +4,19 @@ import LedgerFakes
 @testable import LedgerHealth
 import Testing
 
-/// `LiveHealthStore`'s state machine over a scripted session (F16 S2a; criteria 3 and 4 as far as a script plays
-/// them): no HealthKit call, and time moves only on `ManualClock`.
+/// `LiveHealthStore`'s state machine over a scripted session (F16 S2; criteria 3, 4, 5, 6, 9 and 10 as far as a
+/// script plays them): no HealthKit call, and time moves only on `ManualClock`. The end, the takeover and recovery
+/// are in `+End`.
 @Suite("Live health store state machine", .timeLimit(.minutes(1)))
 struct LiveHealthStoreStateMachineTests {
     static let workout = WorkoutID(Fixtures.uuid(1))
     static let start = Fixtures.now
+    static let end = Fixtures.now.addingTimeInterval(3600)
+    static let metadata = HealthStoreContractTests.metadata
 
     /// A store whose mirroring timeout and retries wait on `clock`, never on the wall clock.
     static func store(_ provider: ScriptedProvider, clock: ManualClock = ManualClock()) -> LiveHealthStore {
-        LiveHealthStore(provider: provider, clock: clock)
+        LiveHealthStore(provider: provider, brandName: "Ledger", clock: clock, now: { Fixtures.now })
     }
 
     static func events(_ count: Int, of store: LiveHealthStore) async -> [HealthSessionEvent] {
@@ -113,7 +116,7 @@ extension LiveHealthStoreStateMachineTests {
     }
 }
 
-// Criterion 4, authorization and what later slices implement.
+// Criterion 4, authorization and the phone's calls.
 
 extension LiveHealthStoreStateMachineTests {
     @Test("Heart rate arrives in order, on every stream")
@@ -129,22 +132,14 @@ extension LiveHealthStoreStateMachineTests {
         #expect(await HealthStoreContractTests.next(3, of: second) == samples)
     }
 
-    @Test("Authorization is the provider's; the end, recovery, the channel and the phone's calls are not yet")
-    func authorization_andLaterSlices() async throws {
+    @Test("Authorization is the provider's; the phone's calls are unavailable on this side")
+    func authorization_andPhoneCalls() async throws {
         let store = Self.store(ScriptedProvider(status: .denied))
         #expect(await store.authorization() == .denied)
         #expect(try await store.requestAuthorization() == .denied)
-        let metadata = HealthStoreContractTests.metadata
-        await #expect(throws: HealthError.unavailable) { try await store.endSession(
-            metadata: metadata,
-            at: Self.start
-        ) }
-        await #expect(throws: HealthError.unavailable) { try await store.discardSession() }
-        await #expect(throws: HealthError.unavailable) { try await store.recoverActiveSession() }
-        await #expect(throws: HealthError.unavailable) { try await store.remoteChannel.send(Data([1])) }
         await #expect(throws: HealthError.unavailable) { try await store.requestWatchStart() }
         await #expect(throws: HealthError.unavailable) {
-            try await store.saveWorkout(metadata: metadata, start: Self.start, end: Self.start)
+            try await store.saveWorkout(metadata: Self.metadata, start: Self.start, end: Self.end)
         }
         await #expect(throws: HealthError.unavailable) {
             try await store.workoutRecord(healthKitUUID: Fixtures.uuid(2))
