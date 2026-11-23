@@ -51,3 +51,67 @@ files under `Apps/` land in synchronized folders (ADR-003), so no project edit i
 - `events` is one stream for the store's life (one consumer). If F17 and F18 both need it, F17 adds a broadcast.
 - Both entitlements carry `com.apple.developer.healthkit.access` as an empty array; R1 §3.3 says not to ask for
   clinical access. Harmless, but a human may remove it in Xcode (ADR-003).
+
+## Slice S2a (G1, 2026-11-22)
+
+S2 as planned came to ~1,360 lines with its tests (HealthKit adapter ~260, state machine ~390, seam ~75, tests
+~550), past the 1,000 cap. The brief's fallback split (start, heart rate and mirroring first) still came to ~1,020
+with the adapter's start half, so S2 splits at the HealthKit boundary instead:
+
+- **S2a (this slice):** the seam (`WorkoutSessionDriver`, `WorkoutSessionProvider`, `WorkoutSessionCallback`) and
+  `LiveHealthStore`'s state machine for the start (prepare → `.prepared` → mirroring under a 10 s timeout →
+  startActivity + beginCollection → `.running`), mirroring retries after 2, 4 and 8 s, the heart-rate stream and
+  the channel's `connection`. `LiveHealthStoreStateMachineTests` over `ScriptedSession` and `ManualClock`. Nothing
+  in it imports HealthKit, so it builds and is tested on iOS (the PR lane's coverage) and watchOS alike.
+- **S2b:** the watch's HealthKit provider and session behind the seam (`#if os(watchOS)`: configuration →
+  session → `associatedWorkoutBuilder()` → `HKLiveWorkoutDataSource` → delegates), `HealthTypeSet`, the `HKError`
+  → `HealthError` map, authorization against HealthKit (shared, for S3), `public init(healthStore:)`; the end
+  (stop → `.stopped` → endCollection → addMetadata → finishWorkout → end, the record from the builder's
+  statistics), the metadata keys and the `CFBundleDisplayName` brand, discard, the takeover, recovery, and the
+  channel's data. Its tests: `endSession_orders_stop_endCollection_addMetadata_finish_end`, `metadataKeys_exact`,
+  `anotherWorkoutSessionStarted_mapsToEvent_noSave`, `recovery_reattachesDelegates`. Drafted during S2a, compiled
+  against the watchOS 27 SDK and green on both simulators (~640 lines); it lands as its own PR after this one.
+
+### Decisions
+
+1. **Callbacks reach the actor through a stream.** A driver exposes `callbacks: AsyncStream<WorkoutSessionCallback>`;
+   the store runs one listener task per session, held in the session and cancelled when it is detached (and in
+   `deinit`), which awaits `handle(_:session:)` for each callback in order. A session number makes a late callback
+   or retry of a replaced session do nothing. A wait for a state (`.prepared`; `.stopped` in S2b) is one
+   `CheckedContinuation` that the matching callback resumes, a failure throws into, and a detach ends.
+2. **No `@unchecked Sendable` (S2b, compiled).** HealthKit marks `HKWorkoutSession`, `HKLiveWorkoutBuilder`,
+   `HKLiveWorkoutDataSource` and `HKHealthStore` `NS_SWIFT_SENDABLE`, so the adapter is a final class of `let`s. The
+   delegate is `final class WorkoutSessionDelegate: NSObject, HKWorkoutSessionDelegate,
+   HKLiveWorkoutBuilderDelegate, Sendable` whose one stored property is the stream's `let` continuation (Sendable):
+   HealthKit may call it on any queue, it reads only what each call hands it, and the store reads the stream in
+   its own isolation.
+3. **The mirroring timeout is a race.** A task group runs `startMirroring()` against `clock.sleep(for: 10 s)`; the
+   first answer wins and the other is cancelled. A group waits for its children, so the seam requires
+   `startMirroring()` to return when cancelled even if HealthKit never answers (R1 §2.5 gotcha 5); S2b's adapter
+   resumes its continuation from HealthKit's answer or from the cancellation, whichever comes first, through a
+   `Mutex` slot (standards §4's exception for state a framework callback writes).
+4. **Retries.** On `.mirrorDisconnected` while the session runs (and no retry is under way), a retry task held in
+   the session waits 2 s, mirrors under the same timeout, then 4 s, then 8 s, and stops at the first success
+   (`.mirrorConnected`, `connection` true). After the third failure it gives up until the next disconnect; the
+   failures are logged, not emitted (a missing mirror is a normal state, brief › Non-functional).
+5. **The clock is injected as `any Clock<Duration>`** (default `ContinuousClock`), not `@Dependency`:
+   LedgerHealth does not depend on LedgerDependencies (S1). The tests' `ManualClock` follows `RestCoverClock`
+   (#122): a sleep is registered, and announced on `sleeps`, in the step that suspends its task, and `advance(by:)`
+   wakes what is due without yielding. No `TestClock`, no sleeps.
+6. **The start needs `.authorized`**, as the fake's does.
+
+### Deviations from the brief
+
+1. **S2 splits at the HealthKit boundary** (above), not start-versus-end.
+2. **A mirroring error at the start is non-fatal too**, and is emitted as `.failed(error)`; the brief names only the
+   timeout.
+3. **What S2a does not implement throws `HealthError.unavailable`:** `endSession`, `discardSession`,
+   `recoverActiveSession` and `send` until S2b; `requestWatchStart`, `saveWorkout` and `workoutRecord` until S3,
+   and for good on the watch (it never asks itself to start, saves only by ending its session, and has no caller
+   for records). `incoming` stays open and silent until S2b. No composition binds `LiveHealthStore` yet (S3).
+4. **`HealthStoreContractTests` stays on the fake.** Its clauses drive the fake's `simulate…` hooks, and a package
+   test host has no HealthKit entitlement, even on a device, so a `.enabled(if:)` live leg could never run. The
+   live store's halves of criteria 3 and 4 are the state-machine tests; the real-HealthKit halves are the device
+   checklist (S3).
+5. **Files:** the seam is `LedgerHealth/WorkoutSessionDriver.swift`; S2b's adapter is
+   `LedgerHealth/Watch/HealthKitWorkoutSession.swift` (the brief's `Watch/WatchWorkoutSession.swift`).
