@@ -182,3 +182,39 @@ S3 and S4 split again (receive versus transmit; handshake versus property tests)
 5. **An ended workout nobody was shown is not published.** The client's contract publishes an end only to readers
    who saw the workout live; History reads it from the repository.
 6. **No haptic for an end by the peer**: `effects(from:to:)` never buzzes at an end (F04 item 2).
+
+## Slice S4a (G1, 2026-11-25)
+
+S4 splits: **S4a** (this slice) is the host on a transport; **S4b** is the two-host harness and the property
+tests (criteria 4, 5, 7 on the fake; the resume half of 10 is here).
+
+- **`connect(_:clock:)`** (`LedgerSync/LocalWorkoutSessionActor+Transport.swift`), once for the host's life:
+  - **Sending:** each own envelope goes to an outbox as `.transmit` runs, right after its `.persist`; one sender
+    task sends the outbox in order, each send raced against `sendTimeout` (3 s) on the injected clock. A failure or a
+    timeout is logged and not retried: the next handshake replays it. No call waits on a send (criterion 6, host
+    half).
+  - **Receiving:** a listener hands every frame to `receive(_ frame:)`, its errors logged.
+  - **Link-up:** on every `true` of `link`, in turn and after recovery, a handshake for every log the store holds
+    (live, ended and unsaved, or waiting for its `started`). A launch's resume is covered by the first link
+    state (criterion 10). `connect` returns once that first state is taken, so no call races the first
+    handshake.
+- **`receive(_ frame:)`:** `.envelopes` as S3; when that throws, a `.replayRequest` for the frame's workouts
+  (at most one per workout per `handshakeInterval`, 10 s) and the error is rethrown. This carries S3's decision 4
+  forward: what a failed receipt did not store comes back from the peer. `.handshake`: the envelopes its vector
+  lacks (own and relayed), then this host's handshake unless one went in the last 10 s. `.replayRequest`: the
+  envelopes only.
+- **The vector** is the highest contiguous `seq` per device (`contiguousSeq(of:)`), so a hole is replayed.
+- **`FakeLiveWorkoutTransport.handed`**: each frame as it reaches the network, so a test waits for the host's
+  sender without polling. `ManualClock` is copied into LedgerSyncTests' support from LedgerHealthTests'.
+
+### Decisions (for review)
+
+1. **`LiveConnectionState` is not the host's.** The host sees one transport and its `link: Bool`; which channel
+   carries frames and whether mirroring is degraded is known only to `CompositeTransport`, so the derivation stays
+   in S6, as planned. The host's contribution is the handshake on every link-up.
+2. **The rate limit uses the host's injected date** (`now`), not the clock: one `Date` per workout, and the tests
+   already set it.
+3. **The host does its own 3 s timeout** as well as S6's mirroring watchdog: the sender is serial, so a transport
+   that never returns would otherwise stop every later frame.
+4. **Replies are not rate-limited**, only handshakes and replay requests, so two hosts can never ping-pong
+   handshakes faster than one per 10 s per workout.

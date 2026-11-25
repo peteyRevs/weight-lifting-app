@@ -21,6 +21,7 @@ struct FakeLiveWorkoutTransportTests {
         #expect(await Self.next(2, of: network.watch.incoming) == [Self.frame(1), Self.frame(2)])
         #expect(await Self.next(1, of: network.phone.incoming) == [Self.frame(3)])
         #expect(network.phone.sent == [Self.frame(1), Self.frame(2)] && network.watch.sent == [Self.frame(3)])
+        #expect(await Self.next(2, of: network.phone.handed) == [Self.frame(1), Self.frame(2)])
         network.flush() // nothing is handed over twice
         #expect(network.watch.received.count == 2 && network.phone.received.count == 1)
     }

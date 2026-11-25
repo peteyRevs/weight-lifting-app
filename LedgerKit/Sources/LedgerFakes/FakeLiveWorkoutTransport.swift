@@ -107,9 +107,12 @@
         public let link: AsyncStream<Bool>
         /// Each frame whose send began to wait because `hang` was on, as it began. One consumer.
         public let hung: AsyncStream<WireFrame>
+        /// Each frame as this transport hands it to the network (what `sent` records), as it does. One consumer.
+        public let handed: AsyncStream<WireFrame>
         private let incomingSink: AsyncStream<WireFrame>.Continuation
         private let linkSink: AsyncStream<Bool>.Continuation
         private let hungSink: AsyncStream<WireFrame>.Continuation
+        private let handedSink: AsyncStream<WireFrame>.Continuation
         private let route: Route?
         private let state: Mutex<State>
 
@@ -123,6 +126,7 @@
             (incoming, incomingSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
             (link, linkSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
             (hung, hungSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
+            (handed, handedSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
             state = Mutex(State(isReachable: route != nil))
             linkSink.yield(route != nil)
         }
@@ -172,6 +176,7 @@
                 return route
             }
             destination.bus.send(frame, from: destination.from, to: destination.recipient)
+            handedSink.yield(frame)
         }
 
         /// Reports a change of reachability on `link`.
