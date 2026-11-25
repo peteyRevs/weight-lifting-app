@@ -214,3 +214,64 @@ the device checklist. S3b is drafted and green on the iOS simulator; it lands af
 5. **Coverage.** The adapter code is kept to HealthKit's own calls: the watch-only initializer moved into
    `Watch/` (xccov counts an inactive `#if` as uncovered lines on the other platform), and the error mapping is one
    tested `healthKitCall`. LedgerHealth measures 84.1 % on the iOS bundle without any new exclusion.
+
+## Slice S3b (G1, 2026-11-24)
+
+Ported from the S3 draft onto main's merged S3a (#132).
+
+- **`requestWatchStart()`** races `startWatchApp(toHandle:)` (`PhoneHealthKit.startWatchApp`) against
+  `watchStartTimeout` (10 s) on the store's clock, with the same `answer(within:)` race the watch's mirroring now
+  uses: success returns; `notAuthorized` and `unavailable` pass through; any other failure, or no answer in 10 s,
+  throws `HealthError.watchAppUnavailable` (criterion 8). The completion-handler call returns at once when
+  cancelled (`cancellableCompletion`, the `ResumeOnce` that was the watch adapter's, now shared and tested).
+- **The phone-only save** (`PhoneHealthKit.saveWorkout`, `HKWorkoutBuilder` with `.local()` device): beginCollection
+  → endCollection → addMetadata → finishWorkout, with the watch's metadata keys and `CFBundleDisplayName` brand
+  (`healthKitEntries`, values as `healthKitValues`: text, grams as `HKQuantity`). The store returns the record
+  with no heart rate and no energy (criterion 12). `HealthTypeSet.strengthTraining()` is the one configuration
+  both devices use.
+- **`workoutRecord(healthKitUUID:)`** reads the workout with an `HKSampleQueryDescriptor` by UUID and its own
+  statistics (HR average and maximum, energy sum); nil when Health has none.
+- **The watch-participant refusal.** `LiveHealthStore` takes `watchTookPart: @Sendable (WorkoutID) async -> Bool`
+  (default: never), which F17 supplies from `hasWatchParticipant`; a `saveWorkout` for such a workout throws the
+  new **`HealthError.watchSavesThisWorkout`**, after authorization and before any HealthKit call. The fake refuses
+  the workouts it is given as `watchWorkouts`. No screen maps `HealthError` to copy yet (F14's Health row reads
+  only `authorization()`), so there is no copy mapping to extend; whichever screen first shows a save failure maps
+  this case too (standards §8, criterion 14).
+
+### Deviation
+
+- **The phone's `requestWatchStart` treats every `startWatchApp` failure as `watchAppUnavailable`**, except
+  authorization: HealthKit has no code for "watch app not installed", so the brief's criterion is met by the
+  mapping plus the timeout.
+
+## Device checklist (iPhone 17 + Apple Watch Series 9, iOS/watchOS 26.x; feeds F20 scenario 15)
+
+For Pete, on the paired devices, built from `main`, with HealthKit ticked on both App IDs (todo.md, "Open for
+Pete"). Watch the Console app on the Mac, filtered to subsystem `com.petearevalo.Ledger`, category `health`: the
+quoted lines below are what the store logs (never a heart-rate or energy value). For each step note pass/fail, the
+time where one is asked, and anything odd; paste the results below the table with the date and OS builds. F20
+scenario 15 reuses steps 2, 4, 5, 9 and 10, and its result goes here too.
+
+**Run it once the screens that call the store are in.** F16 binds `healthStore` in both apps but no screen calls
+it yet: the phone's "Start workout" asks for authorization and the watch start (F17/F19), the watch's workout
+screen starts, ends and discards the session and shows heart rate (F18). Steps 3, 4, 10 and 11 need only a running
+session; the others need those screens. So the F16 box in todo.md stays unticked until F18 lands and this runs.
+
+| # | Step | Pass when | Criterion |
+|---|---|---|---|
+| 1 | Fresh install on both. On the phone, start a workout (first "Start workout"). | One HealthKit sheet, listing exactly Workouts, Heart Rate, Active Energy; the watch shows no second sheet. | 2 |
+| 2 | Start a workout on the watch; wear it, stand still 1 min. | The watch's HR row (F18) shows a value within 5 s of wrist contact; `prepare()` → "Workout session running" under 3 s. | 3, 4 |
+| 3 | With the phone app force-quit, start a workout on the watch. | The phone app launches in the background and keeps the mirrored session (Console: "Kept a mirrored workout session (1 so far)"); within 10 s. | 7 |
+| 4 | Mid-workout, walk the phone out of Bluetooth range for 30 s, then back. | The phone logs a disconnect, then "Kept … (2 so far)" on reconnect; the watch logs mirroring restored after its 2/4/8 s retries. | 7 |
+| 5 | Finish the workout on the watch. Open Health on the phone. | One Traditional Strength Training workout, source Ledger, with HR and Active Energy; its metadata shows `com.petearevalo.Ledger.totalVolumeGrams` as a mass in grams. | 5 |
+| 6 | Start, then discard a workout on the watch. | No workout in Health for that start time. | 6 |
+| 7 | With the watch app installed, tap the phone's start (`requestWatchStart`). | The watch app opens with the session running; Console on the watch: "The phone asked for a workout". | 8 |
+| 8 | Delete the watch app; tap the phone's start again. | `watchAppUnavailable` within 10 s; no hang. | 8 |
+| 9 | Mid-set, start Apple's Workout app on the watch. | "Another app's workout session ended ours; nothing is written" within 2 s; no crash; nothing in Health for Ledger's session. | 9 |
+| 10 | Mid-workout, kill the watch app from the Dock; relaunch it. | "Workout recovery found a session: true"; HR resumes on the same workout, which ends as one entry in Health. | 10 |
+| 11 | Mid-mirror, force-quit the phone app; wait for the system to relaunch it (or open it). | `shouldHandleActiveWorkoutRecovery` path logs "Mirrored workout recovery found a session: true"; the mirror carries on without action. | 11 |
+| 12 | With the watch unpaired (or off), log and finish a workout on the phone alone. | One workout in Health, source Ledger, with no heart rate. | 12 |
+
+### Results
+
+_Not yet run._

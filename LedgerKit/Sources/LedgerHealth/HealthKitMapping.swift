@@ -10,6 +10,14 @@
         static let activeEnergy = HKQuantityType(.activeEnergyBurned)
         static let share: Set<HKSampleType> = [.workoutType(), activeEnergy]
         static let read: Set<HKObjectType> = [.workoutType(), heartRate, activeEnergy]
+
+        /// Every Ledger workout's configuration: indoor traditional strength training (architecture §9).
+        static func strengthTraining() -> HKWorkoutConfiguration {
+            let configuration = HKWorkoutConfiguration()
+            configuration.activityType = .traditionalStrengthTraining
+            configuration.locationType = .indoor
+            return configuration
+        }
     }
 
     /// The metadata keys a finished workout carries (F16): HealthKit's brand name, which the Health and Fitness
@@ -46,6 +54,21 @@
             entries[HealthMetadataKey.program] = programName.map(HealthMetadataValue.text)
             entries[HealthMetadataKey.day] = dayName.map(HealthMetadataValue.text)
             return entries
+        }
+    }
+
+    extension [String: HealthMetadataValue] {
+        /// The entries as `addMetadata` takes them: text as `NSString`, grams as an `HKQuantity` (S2b decision 1).
+        var healthKitValues: [String: Any] {
+            mapValues { value -> Any in
+                switch value {
+                case let .text(text): text
+                case let .grams(grams): HKQuantity(
+                        unit: .gram(),
+                        doubleValue: NSDecimalNumber(decimal: grams).doubleValue
+                    )
+                }
+            }
         }
     }
 

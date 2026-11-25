@@ -4,8 +4,8 @@ import os
 
 /// `HealthStore` over HealthKit (F16; architecture §9). The state machine is the same on every platform and
 /// drives a `WorkoutSessionProvider`: in tests, a script; on the watch, `HealthKitSessionProvider` (S2b). On the
-/// phone (S3a) it reads a `MirrorReceiver` instead: the watch's mirrored sessions. The phone's own calls throw
-/// `HealthError.unavailable` until S3b.
+/// phone (S3) it also reads a `MirrorReceiver` (the watch's mirrored sessions) and makes the phone's own calls
+/// through `PhoneHealthServices`; on the watch, those calls throw `HealthError.unavailable`.
 ///
 /// Each delegate callback reaches the actor through the session's `callbacks` stream, which one listener task
 /// per session reads in order; the task is the session's, and is cancelled when the session ends. It is the
@@ -15,6 +15,8 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
     static let mirroringTimeout = Duration.seconds(10)
     /// The waits before each retry of a mirror that dropped while the session runs.
     static let mirroringBackoff: [Duration] = [.seconds(2), .seconds(4), .seconds(8)]
+    /// How long the phone waits for the watch app to open before it reports it unavailable (criterion 8).
+    static let watchStartTimeout = Duration.seconds(10)
 
     public nonisolated let events: AsyncStream<HealthSessionEvent>
     public nonisolated let connection: AsyncStream<Bool>
@@ -24,7 +26,10 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
     }
 
     let provider: any WorkoutSessionProvider
-    private let clock: any Clock<Duration>
+    let clock: any Clock<Duration>
+    let phone: (any PhoneHealthServices)?
+    /// Whether a watch took part in a workout (F17's `hasWatchParticipant`): the watch saves that one.
+    let watchTookPart: @Sendable (WorkoutID) async -> Bool
     let mirror: (any MirrorReceiver)?
     /// Forwards the mirror's events to `events`, `connection` and `incoming`, for the store's life.
     private let mirrorListener: Task<Void, Never>?
@@ -62,8 +67,8 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
         case connected, timedOut, failed(HealthError)
     }
 
-    /// `brandName` is what Health shows as the workout's source; `clock` times mirroring and its retries, `now`
-    /// dates a discard. On the phone, `onMirrorStart` runs after each `.mirrorConnected` (F21 starts
+    /// `brandName` is what Health shows as the workout's source; `clock` times mirroring, its retries and a watch
+    /// start, `now` dates a discard. On the phone, `onMirrorStart` runs after each `.mirrorConnected` (F21 starts
     /// the Live Activity there, within the 10 s HealthKit gives a background launch); the workout's id is nil
     /// until F17 learns it from the watch.
     init(
@@ -72,6 +77,8 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
         clock: any Clock<Duration> = ContinuousClock(),
         now: @escaping @Sendable () -> Date = Date.init,
         mirror: (any MirrorReceiver)? = nil,
+        phone: (any PhoneHealthServices)? = nil,
+        watchTookPart: @escaping @Sendable (WorkoutID) async -> Bool = { _ in false },
         onMirrorStart: @escaping @Sendable (WorkoutID?) async -> Void = { _ in }
     ) {
         self.provider = provider
@@ -79,6 +86,8 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
         self.clock = clock
         self.now = now
         self.mirror = mirror
+        self.phone = phone
+        self.watchTookPart = watchTookPart
         (events, sink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (connection, connectionSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (incoming, incomingSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -258,26 +267,10 @@ extension LiveHealthStore {
     /// One try at `startMirroringToCompanionDevice()`, which may hang: past `mirroringTimeout` it is cancelled,
     /// and the driver promises to return when it is.
     func mirror(_ driver: any WorkoutSessionDriver) async -> Mirroring {
-        let clock = clock
-        return await withTaskGroup(of: Mirroring.self) { group in
-            group.addTask {
-                do {
-                    try await driver.startMirroring()
-                    return .connected
-                } catch let error as HealthError {
-                    return .failed(error)
-                } catch {
-                    return .timedOut // cancelled: the timeout went first, and this answer is not read
-                }
-            }
-            group.addTask {
-                // Cancelled when mirroring answers first; this answer is then not read.
-                try? await clock.sleep(for: Self.mirroringTimeout)
-                return .timedOut
-            }
-            let first = await group.next() ?? .timedOut
-            group.cancelAll()
-            return first
+        switch await answer(within: Self.mirroringTimeout, { try await driver.startMirroring() }) {
+        case .success: .connected
+        case let .failure(error): .failed(error)
+        case nil: .timedOut
         }
     }
 

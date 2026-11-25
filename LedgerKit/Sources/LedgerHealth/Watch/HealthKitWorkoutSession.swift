@@ -2,7 +2,6 @@
     import Foundation
     import HealthKit
     import LedgerDomain
-    import Synchronization
 
     public extension LiveHealthStore {
         /// The watch's store, over `healthStore`, branded with the app's name from `bundle`.
@@ -28,11 +27,11 @@
 
         /// An indoor traditional-strength-training session (architecture §9), set up and not yet prepared.
         func makeSession() throws -> any WorkoutSessionDriver {
-            let configuration = HKWorkoutConfiguration()
-            configuration.activityType = .traditionalStrengthTraining
-            configuration.locationType = .indoor
             do {
-                let session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
+                let session = try HKWorkoutSession(
+                    healthStore: healthStore,
+                    configuration: HealthTypeSet.strengthTraining()
+                )
                 return HealthKitWorkoutSession(attaching: session, healthStore: healthStore)
             } catch {
                 throw HealthError(error)
@@ -40,12 +39,8 @@
         }
 
         func recoverSession() async throws -> (any WorkoutSessionDriver)? {
-            do {
-                let session = try await healthStore.recoverActiveWorkoutSession()
-                return session.map { HealthKitWorkoutSession(attaching: $0, healthStore: healthStore) }
-            } catch {
-                throw HealthError(error)
-            }
+            let session = try await healthKitCall { try await healthStore.recoverActiveWorkoutSession() }
+            return session.map { HealthKitWorkoutSession(attaching: $0, healthStore: healthStore) }
         }
     }
 
@@ -81,18 +76,7 @@
         }
 
         func startMirroring() async throws {
-            let once = ResumeOnce()
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    once.arm(continuation)
-                    session.startMirroringToCompanionDevice { success, error in
-                        let failure = error.map { HealthError($0) } ?? .underlying(code: 0)
-                        once.resume(with: success ? .success(()) : .failure(failure))
-                    }
-                }
-            } onCancel: {
-                once.resume(with: .failure(CancellationError()))
-            }
+            try await cancellableCompletion { session.startMirroringToCompanionDevice(completion: $0) }
         }
 
         func startActivity(at date: Date) {
@@ -112,16 +96,7 @@
         }
 
         func addMetadata(_ metadata: [String: HealthMetadataValue]) async throws {
-            let entries = metadata.mapValues { value -> Any in
-                switch value {
-                case let .text(text): text
-                case let .grams(grams): HKQuantity(
-                        unit: .gram(),
-                        doubleValue: NSDecimalNumber(decimal: grams).doubleValue
-                    )
-                }
-            }
-            try await healthKitCall { try await builder.addMetadata(entries) }
+            try await healthKitCall { try await builder.addMetadata(metadata.healthKitValues) }
         }
 
         /// Writes the workout; the record's statistics are the builder's (HR average and maximum, energy sum).
@@ -202,49 +177,6 @@
         }
 
         func workoutBuilderDidCollectEvent(_: HKLiveWorkoutBuilder) {}
-    }
-
-    /// Resumes a continuation once: with HealthKit's answer or with the task's cancellation, whichever comes first.
-    /// HealthKit answers on its own queue, synchronously, so the slot sits behind a `Mutex`
-    /// (engineering-standards §4's exception for state a framework callback writes).
-    private final class ResumeOnce: Sendable {
-        private struct Slot {
-            var continuation: CheckedContinuation<Void, any Error>?
-            var early: Result<Void, any Error>?
-            var isDone = false
-        }
-
-        private let slot = Mutex(Slot())
-
-        /// Waits with `continuation`, or resumes it at once with an answer that came before it.
-        func arm(_ continuation: CheckedContinuation<Void, any Error>) {
-            let early = slot.withLock { slot -> Result<Void, any Error>? in
-                guard let early = slot.early else {
-                    slot.continuation = continuation
-                    return nil
-                }
-                slot.isDone = true
-                return early
-            }
-            if let early {
-                continuation.resume(with: early)
-            }
-        }
-
-        func resume(with result: Result<Void, any Error>) {
-            let continuation = slot.withLock { slot -> CheckedContinuation<Void, any Error>? in
-                guard !slot.isDone else {
-                    return nil
-                }
-                guard let continuation = slot.continuation.take() else {
-                    slot.early = slot.early ?? result
-                    return nil
-                }
-                slot.isDone = true
-                return continuation
-            }
-            continuation?.resume(with: result)
-        }
     }
 
     extension WorkoutSessionState {

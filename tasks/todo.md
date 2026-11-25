@@ -184,6 +184,7 @@ keeping with no PR yet.
 | F20 | Device sync test protocol & M2 acceptance | F16–F19 |
 
 - [ ] F16 · [ ] F17 · [ ] F18 · [ ] F19 · [ ] F20
+  - F16's code is on `main` (S1–S3b: #128, #130, #131, #132 and this slice). Its box stays unticked until Pete runs the device checklist in `features/F16-healthkit/implementation-notes.md` (§ Device checklist, with F20 scenario 15) on iPhone 17 + Apple Watch Series 9 and pastes the results there; most steps need the screens F17–F19 bring.
 - [ ] M2 exit: start on either device, log on both, disconnect mid-workout, reconnect, finish on either → one workout in history with HR, saved to Health.
 
 ## M3 — Depth & delight (target: 2.5 weeks)

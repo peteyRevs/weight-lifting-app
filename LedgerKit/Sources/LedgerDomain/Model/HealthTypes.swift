@@ -92,6 +92,9 @@ public enum HealthError: Error, Equatable, Sendable {
     case anotherWorkoutSessionStarted
     case watchAppUnavailable
     case mirroringTimedOut
+    /// The phone was asked to save a workout a watch took part in: the watch's session writes that one, so the
+    /// phone never saves it twice (architecture §9).
+    case watchSavesThisWorkout
     /// A HealthKit error none of the cases names, by its code alone.
     case underlying(code: Int)
 }
