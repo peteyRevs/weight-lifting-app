@@ -276,3 +276,55 @@ held under them, so no product code changed.
    contiguous one fails criterion 4 on every fixed seed.
 7. **Out of scope here:** the double start (S5; the phone always starts), ends during a partition (criterion 11's
    ordering), the hung send (criterion 6, S6) and the device halves of 7.
+
+## Slice S5a (G1, 2026-11-25)
+
+S5 splits: **S5a** (this slice) is the broadcast of the health store's events and the watch's 5 s rule;
+**S5b** is the double-start rule for the losing workout, **pending Pete: A/B/C/D, recommended C** (below).
+Nothing in S5a drops a log: two live workouts are both kept, on both devices, as S3 keeps them.
+
+- **`HealthEventBroadcast`** (`LedgerHealth/HealthEventBroadcast.swift`), an actor over `HealthStore.events`:
+  `subscribe()` returns a new stream of what the store reports from then on (one subscribing before `run()` takes
+  the first event gets everything, as the store's stream holds it); `run()` fans every event out until the store's
+  stream ends or its task is cancelled, then ends every subscriber's stream, and a later subscriber's. A subscriber
+  that stopped reading is dropped at the next event, as the host drops ended update streams. `run()` runs once.
+- **`LocalWorkoutSessionActor+PhoneStart`** (LedgerSync):
+  - `adoptsPhoneStart(clock:)`: true at once when a workout is live, or as soon as one becomes live (the phone's
+    `started` arriving makes it live, S3); false after `phoneStartWait` (5 s) on the injected clock, or when
+    cancelled;
+  - `followPhoneStartRequests(_:clock:startOwn:)`: for each `.startRequestedByPhone`, in turn, `startOwn` unless
+    the phone's workout was adopted; other events ignored; never starts after it was cancelled.
+- **Tests:** `HealthEventBroadcastTests` (LedgerHealthTests); `HostPhoneStartTests` (LedgerSyncTests), on
+  `LiveSyncPair` for criterion 8: the phone's `started` within the wait is adopted and the hosts converge on one
+  workout; with none (partitioned) the watch starts its own after 5 s, and after the heal both logs are whole on
+  both devices, each device keeping its own workout live.
+
+### Decisions (for review)
+
+1. **The broadcast is a separate actor the composition makes and runs**, not a change to `HealthStore.events`: the
+   protocol, `LiveHealthStore`, `FakeHealthStore`, the stub and the brief conformance stay as they are, and the
+   fan-out is in one place. An actor, not a `Mutex` (engineering-standards §4: product state lives in actors), and
+   `run()` instead of a task it starts itself (§4: no fire-and-forget tasks), so its life is the caller's
+   structured task. It lives in LedgerHealth, beside the store whose stream it shares; the host takes a plain
+   `AsyncStream`, so LedgerSync does not depend on LedgerHealth.
+2. **"Starts its own" is a closure.** The host does not know the watch's cached day (F19) or the session start
+   (F16); the watch's composition or workout screen (F18) passes what starts them. Wiring the broadcast and the
+   rule into `WatchComposition` waits for S7, which connects the host to its transports, and F18.
+3. **Any live workout counts as adopted**, also one the lifter started on the watch before the request came: the
+   watch never starts a second workout over one already live.
+4. **The 5 s wait starts when the request is taken**, not at the phone's stamp: the watch's and phone's clocks
+   are not compared here (S3 bounds drift only ahead).
+
+### Pending Pete: the losing workout (S5b), A/B/C/D, recommended C
+
+The spec drops the loser's log on both devices. The only way to drop a log is `WorkoutEventStore.compact`, which
+deletes it for good, and the loser can hold sets the lifter logged: the 60 s window compares the two `started`
+stamps, not arrival, so a late phone `started` (slow link or partition) can arrive after minutes of sets on the
+watch's own workout, which then loses. Options:
+- **A.** Drop the loser only when it holds no set logged, retargeted or added; otherwise keep both (then C).
+- **B.** Merge the loser's set edits into the winner as new envelopes, matched by (exercise, row): invasive, and
+  fragile when the two days differ.
+- **C (recommended).** Never delete: the winner goes on live on both devices; a loser with logged sets is saved as
+  its own workout through the normal save, so it shows in History and Pete deletes it himself; an empty loser is
+  dropped as in A.
+- **D.** As the spec says: drop the loser's log, accepting the loss.
