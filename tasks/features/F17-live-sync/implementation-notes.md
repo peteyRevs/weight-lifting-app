@@ -138,3 +138,47 @@ S3 and S4 split again (receive versus transmit; handshake versus property tests)
    and `reorder = true`; the fake is `FakeLiveWorkoutTransport` (F07's name) made in pairs by `FakeLiveNetwork`.
 2. **`TransportError.timeout`** is the watchdog's (S6); the fake never throws it or `tooLarge`, which only a real
    transport's encoding can.
+
+## Slice S3 (G1, 2026-11-25)
+
+- **`LocalWorkoutSessionActor.receive(_ envelopes:)`** (`LedgerSync/LocalWorkoutSessionActor+Receive.swift`),
+  queued like every call:
+  1. **Receipt checks** drop, with the key logged: an envelope with a date that is not finite (the new
+     `EventEnvelope.hasFiniteDates`), and one stamped more than `driftBound` (1 h) ahead of this device's clock.
+  2. **Append per workout before anything else.** On `EngineError.conflictingEnvelope` the batch is appended again
+     one envelope at a time and only the conflicting ones are dropped. Any other store error throws and the next
+     call recovers first, as an own `.persist` failure does.
+  3. **Rebuild** with `WorkoutEngine.replay` of the stored log, and run `effects(from:to:)` against what readers
+     were shown (the live state), or against the log without the new envelopes for a workout not shown:
+     - the live workout: published with the rebuild's haptics, then the rest notification. An end the peer made
+       completes as an own end does (`ending`, then `settle()`), unless the log holds unreadable rows: then it
+       stays live, as `apply` keeps a finish it refuses;
+     - no live workout and a live rebuild: the peer's workout becomes the live one, its own `seq` from the store
+       (F04 item 9: joining mid-session buzzes once);
+     - an ended workout no reader was shown: completed (saved or dropped) without an update;
+     - a second live workout: kept in the store for S5's double-start rule;
+     - a log that replays to nothing (its `started` has not arrived): kept; it folds in when the `started` comes.
+  4. The clock observes every stored received stamp. This device's own envelopes relayed back move its `seq` on.
+- **`hasWatchParticipant(_:)`**: another device's envelope in the workout's log, or one received for it by this
+  host (a finished workout's log goes with its save). A store that cannot be read answers `true`.
+- **`EventEnvelope.hasFiniteDates`** (LedgerDomain): `isWellFormed` is now `hasFiniteDates && hasValidValues`, one
+  list of an event's dates (`dates`) and one of its value checks. It means exactly what it meant before; the whole
+  engine suite passes unchanged.
+
+### Decisions (made without asking; for review)
+
+1. **The drift bound is 1 h ahead, with no bound behind.** A paired phone and watch keep network time, so their
+   skew is seconds; an hour lets through any honest clock and keeps out a corrupt stamp, including the 2⁴⁴ s ones
+   (F04 item 9). A device whose clock runs more than an hour behind its peer's drops the peer's envelopes (logged)
+   until the clocks agree. A clock behind does no harm on the sender's side, since its envelopes only sort earlier.
+2. **`hasWatchParticipant` answers `true` when the store cannot be read**: the phone then refuses its own Health
+   save (`watchSavesThisWorkout`), so the worst case is a workout missing from Health, never one written twice.
+   What it remembers after a log is compacted lasts only for this process: S7 wires the save so it asks before the
+   end completes, or passes the answer along with the end.
+3. **`receive` takes envelopes, not a `WireFrame`.** Handshakes and replay requests are S4's, which dispatches
+   frames from the transport.
+4. **A waiting end is completed before anything is received** (`settle()` first, as `apply` does). If its save
+   keeps failing, `receive` throws and stores nothing; the peer's handshake replays those envelopes later.
+5. **An ended workout nobody was shown is not published.** The client's contract publishes an end only to readers
+   who saw the workout live; History reads it from the repository.
+6. **No haptic for an end by the peer**: `effects(from:to:)` never buzzes at an end (F04 item 2).
