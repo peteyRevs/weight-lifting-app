@@ -197,13 +197,17 @@ extension HealthStoreContractTests {
         #expect(await absent.watchStartRequests == 1)
     }
 
-    @Test("A phone-only save writes one workout without heart rate; it needs authorization")
+    @Test("A phone-only save writes one workout without heart rate; it needs authorization, and no watch")
     func saveWorkout_phoneOnly_hasNoHeartRate() async throws {
         let store = FakeHealthStore(authorization: .authorized)
         let record = try await store.saveWorkout(metadata: Self.metadata, start: Self.start, end: Self.end)
         #expect(record.avgHeartRate == nil && record.maxHeartRate == nil && record.activeEnergyKcal == nil)
         #expect(await store.saved == [record])
         #expect(try await store.workoutRecord(healthKitUUID: record.healthKitUUID) == record)
+        let watched = FakeHealthStore(authorization: .authorized, watchWorkouts: [Self.workout])
+        await #expect(throws: HealthError.watchSavesThisWorkout) {
+            try await watched.saveWorkout(metadata: Self.metadata, start: Self.start, end: Self.end)
+        }
         let denied = FakeHealthStore(authorization: .denied)
         await #expect(throws: HealthError.notAuthorized) {
             try await denied.saveWorkout(metadata: Self.metadata, start: Self.start, end: Self.end)

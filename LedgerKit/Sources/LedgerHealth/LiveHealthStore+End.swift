@@ -3,7 +3,7 @@ import LedgerDomain
 import os
 
 // The end of a session (F16 S2b): saved, discarded or taken up again after the app ended; and the channel's sends,
-// over the watch's session or the phone's newest mirrored one (S3a).
+// over the watch's session or the phone's newest mirrored one (S3a); and the phone's own calls (S3b).
 
 public extension LiveHealthStore {
     /// Stops the activity, and on `.stopped` ends the collection, adds the metadata, finishes the workout (the
@@ -23,14 +23,7 @@ public extension LiveHealthStore {
         detach()
         logger.notice("Workout saved to Health")
         sink.yield(.ended(end))
-        return HealthWorkoutRecord(
-            healthKitUUID: workout.uuid,
-            start: workout.start,
-            end: workout.end,
-            avgHeartRate: workout.avgHeartRate,
-            maxHeartRate: workout.maxHeartRate,
-            activeEnergyKcal: workout.activeEnergyKcal
-        )
+        return HealthWorkoutRecord(workout)
     }
 
     /// Ends the session and discards the builder's workout: nothing is written.
@@ -113,19 +106,101 @@ extension LiveHealthStore {
     }
 }
 
-// The phone's calls, which F16 S3b implements on iOS. On the watch they stay unavailable: it never asks itself to
-// start, saves only by ending its session, and has no caller for records.
+extension LiveHealthStore {
+    /// `operation`'s answer, or nil past `timeout` on the store's clock, when it is cancelled: it must return
+    /// then (`WorkoutSessionDriver.startMirroring()`, `PhoneHealthServices.startWatchApp()`).
+    func answer(
+        within timeout: Duration,
+        _ operation: @escaping @Sendable () async throws -> Void
+    ) async -> Result<Void, HealthError>? {
+        let clock = clock
+        return await withTaskGroup(of: Result<Void, HealthError>?.self) { group in
+            group.addTask {
+                do {
+                    try await operation()
+                    return .success(())
+                } catch let error as HealthError {
+                    return .failure(error)
+                } catch {
+                    return nil // cancelled: the timeout went first, and this answer is not read
+                }
+            }
+            group.addTask {
+                // Cancelled when the operation answers first; this answer is then not read.
+                try? await clock.sleep(for: timeout)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+}
+
+// The phone's calls (F16 S3). On the watch they throw `unavailable`: it never asks itself to start, saves only by
+// ending its session, and has no caller for records.
 
 public extension LiveHealthStore {
-    func requestWatchStart() throws {
-        throw HealthError.unavailable
+    /// Opens the watch app with a session running; `watchAppUnavailable` when it fails or has not answered in
+    /// `watchStartTimeout` (criterion 8). Authorization failures are reported as themselves.
+    func requestWatchStart() async throws {
+        guard let phone else {
+            throw HealthError.unavailable
+        }
+        switch await answer(within: Self.watchStartTimeout, { try await phone.startWatchApp() }) {
+        case .success:
+            logger.notice("Asked the watch to start a workout")
+        case let .failure(error) where error == .notAuthorized || error == .unavailable:
+            throw error
+        case .failure, nil:
+            logger.notice("The watch app did not start a workout")
+            throw HealthError.watchAppUnavailable
+        }
     }
 
-    func saveWorkout(metadata _: HealthWorkoutMetadata, start _: Date, end _: Date) throws -> HealthWorkoutRecord {
-        throw HealthError.unavailable
+    /// Saves a workout the phone logged alone, without heart rate or energy. Refused with `watchSavesThisWorkout`
+    /// when a watch took part: its session writes that workout (architecture §9).
+    func saveWorkout(metadata: HealthWorkoutMetadata, start: Date, end: Date) async throws -> HealthWorkoutRecord {
+        guard let phone else {
+            throw HealthError.unavailable
+        }
+        try await requireAuthorized()
+        guard await !watchTookPart(metadata.workoutID) else {
+            throw HealthError.watchSavesThisWorkout
+        }
+        let workout = try await phone.saveWorkout(
+            metadata.healthKitEntries(brandName: brandName),
+            start: start,
+            end: end
+        )
+        logger.notice("Phone-only workout saved to Health")
+        return HealthWorkoutRecord(
+            healthKitUUID: workout.uuid,
+            start: workout.start,
+            end: workout.end,
+            avgHeartRate: nil,
+            maxHeartRate: nil,
+            activeEnergyKcal: nil
+        )
     }
 
-    func workoutRecord(healthKitUUID _: UUID) throws -> HealthWorkoutRecord? {
-        throw HealthError.unavailable
+    func workoutRecord(healthKitUUID: UUID) async throws -> HealthWorkoutRecord? {
+        guard let phone else {
+            throw HealthError.unavailable
+        }
+        return try await phone.workout(uuid: healthKitUUID).map(HealthWorkoutRecord.init)
+    }
+}
+
+private extension HealthWorkoutRecord {
+    init(_ workout: FinishedWorkout) {
+        self.init(
+            healthKitUUID: workout.uuid,
+            start: workout.start,
+            end: workout.end,
+            avgHeartRate: workout.avgHeartRate,
+            maxHeartRate: workout.maxHeartRate,
+            activeEnergyKcal: workout.activeEnergyKcal
+        )
     }
 }

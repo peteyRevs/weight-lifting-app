@@ -4,6 +4,7 @@
     import LedgerDomain
     import LedgerFakes
     @testable import LedgerHealth
+    import Synchronization
     import Testing
 
     // Criteria 5, 6 and 9 (F16 S2b): the end's order and metadata, a discard, another app's workout.
@@ -162,6 +163,48 @@
                     throw NSError(domain: HKErrorDomain, code: HKError.Code.errorHealthDataUnavailable.rawValue)
                 }
             }
+        }
+    }
+#endif
+
+#if canImport(HealthKit)
+    // The pieces of HealthKit both apps' calls share (F16 S3).
+
+    extension LiveHealthStoreStateMachineTests {
+        @Test("Every workout is indoor traditional strength training; metadata goes as text and gram quantities")
+        func strengthTraining_andMetadataValues() throws {
+            let configuration = HealthTypeSet.strengthTraining()
+            #expect(configuration.activityType == .traditionalStrengthTraining)
+            #expect(configuration.locationType == .indoor)
+            let values = ["name": HealthMetadataValue.text("Day A"), "volume": .grams(4_200_000)].healthKitValues
+            #expect(values["name"] as? String == "Day A")
+            let volume = try #require(values["volume"] as? HKQuantity)
+            #expect(volume.doubleValue(for: .gram()) == 4_200_000)
+        }
+
+        @Test("A completion-handler call returns its answer, mapped, or returns at once when cancelled")
+        func cancellableCompletion_answersOrCancels() async throws {
+            try await cancellableCompletion { $0(true, nil) }
+            await #expect(throws: HealthError.anotherWorkoutSessionStarted) {
+                try await cancellableCompletion { done in
+                    done(
+                        false,
+                        NSError(domain: HKErrorDomain, code: HKError.Code.errorAnotherWorkoutSessionStarted.rawValue)
+                    )
+                }
+            }
+            await #expect(throws: HealthError.underlying(code: 0)) { try await cancellableCompletion { $0(false, nil) }
+            }
+            let pending = Mutex<(@Sendable (Bool, (any Error)?) -> Void)?>(nil)
+            let call = Task { try await cancellableCompletion { done in pending.withLock { $0 = done } } }
+            call.cancel()
+            await #expect(throws: CancellationError.self) { try await call.value }
+            pending.withLock { $0 }?(true, nil) // a late answer changes nothing
+            let early = Task {
+                withUnsafeCurrentTask { $0?.cancel() }
+                try await cancellableCompletion { _ in }
+            }
+            await #expect(throws: CancellationError.self) { try await early.value }
         }
     }
 #endif

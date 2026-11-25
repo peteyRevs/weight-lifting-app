@@ -47,6 +47,7 @@
         private let mirroring: Mirroring
         private let watchAppInstalled: Bool
         private let activeEnergyKcal: Int?
+        private let watchWorkouts: Set<WorkoutID>
         private var recoverable: Session?
         private let sink: AsyncStream<HealthSessionEvent>.Continuation
         private let connectionSink: AsyncStream<Bool>.Continuation
@@ -56,14 +57,16 @@
         private var bindings = 0
 
         /// `grant` is the lifter's answer to the sheet, shown only while `.notDetermined`; `recoverable` is the
-        /// session `recoverActiveSession()` finds, once; `activeEnergyKcal` is what an ended watch session reports.
+        /// session `recoverActiveSession()` finds, once; `activeEnergyKcal` is what an ended watch session reports;
+        /// `watchWorkouts` are the workouts a watch took part in, which `saveWorkout` refuses.
         public init(
             authorization: HealthAuthorization = .notDetermined,
             grant: HealthAuthorization = .authorized,
             mirroring: Mirroring = .connects,
             watchAppInstalled: Bool = true,
             activeEnergyKcal: Int? = nil,
-            recoverable: Session? = nil
+            recoverable: Session? = nil,
+            watchWorkouts: Set<WorkoutID> = []
         ) {
             status = authorization
             self.grant = grant
@@ -71,6 +74,7 @@
             self.watchAppInstalled = watchAppInstalled
             self.activeEnergyKcal = activeEnergyKcal
             self.recoverable = recoverable
+            self.watchWorkouts = watchWorkouts
             (events, sink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
             (connection, connectionSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
             (incoming, incomingSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -154,6 +158,9 @@
 
         public func saveWorkout(metadata: HealthWorkoutMetadata, start: Date, end: Date) throws -> HealthWorkoutRecord {
             try requireAuthorized()
+            guard !watchWorkouts.contains(metadata.workoutID) else {
+                throw HealthError.watchSavesThisWorkout
+            }
             return save(metadata, start, end, heartRate: (nil, nil), energy: nil)
         }
 

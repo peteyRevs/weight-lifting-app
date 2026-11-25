@@ -76,7 +76,7 @@ protocol WorkoutSessionProvider: Sendable {
     func recoverSession() async throws -> (any WorkoutSessionDriver)?
 }
 
-// The phone's half of the seam (F16 S3a): its mirrored sessions.
+// The phone's half of the seam (F16 S3): its mirrored sessions, and the HealthKit calls only the phone makes.
 
 /// What happens to the phone's mirrored sessions, in order.
 enum MirrorEvent: Equatable, Sendable {
@@ -96,4 +96,14 @@ protocol MirrorReceiver: Sendable {
     func send(_ data: Data) async throws
     /// Takes up the mirrored session the system kept after the app ended (iOS 26) as the newest; false when none.
     func recover() async throws -> Bool
+}
+
+/// The HealthKit calls only the phone makes.
+protocol PhoneHealthServices: Sendable {
+    /// `startWatchApp(toHandle:)`. Returns, or throws `CancellationError`, as soon as its task is cancelled.
+    func startWatchApp() async throws
+    /// Writes a workout the phone logged alone, with `HKWorkoutBuilder`: no heart rate, no energy.
+    func saveWorkout(_ metadata: [String: HealthMetadataValue], start: Date, end: Date) async throws -> FinishedWorkout
+    /// The saved workout with `uuid`, with its statistics; nil when Health has none.
+    func workout(uuid: UUID) async throws -> FinishedWorkout?
 }
