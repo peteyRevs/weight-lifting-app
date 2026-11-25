@@ -166,11 +166,11 @@ Ported from the draft written during S2a onto main's merged S2a (#130).
 3. **A takeover discards the builder's workout** (`discardWorkout()`) as well as emitting the event, so that
    nothing collected so far is written by accident.
 
-### Open question: the coverage gate (needs a decision before merge)
+### Decided: the coverage gate (Pete, 2026-11-24)
 
 `Watch/HealthKitWorkoutSession.swift` has 241 executable lines that only a real `HKWorkoutSession` can run, and
 a package test host cannot drive one (no HealthKit entitlement; standards §9 forbids HealthKit in unit tests).
-With it, LedgerHealth measures 363 / 647 = 56.1 % on the iOS bundle (the iOS report lists the watch-only file as
-0 / 241 too) against its 80 % threshold; without it, 363 / 406 = 89.4 %. G1 did not change
-`scripts/coverage-thresholds.json`: excluding `LedgerHealth/Watch/*` (as app shells and previews are), or another
-way to measure the adapter, is a human's call.
+With it, LedgerHealth measured 363 / 647 = 56.1 % on the iOS bundle against its 80 % threshold; without it,
+363 / 406 = 89.4 %. Pete approved excluding `LedgerHealth/Watch/*` from the gate (`scripts/coverage-thresholds.json`,
+testing-strategy §4); the adapter is verified on his iPhone 17 + Apple Watch Series 9 by F20 scenario 15, part of
+the M2 exit. The folder holds only the thin HealthKit adapter; logic stays in `LiveHealthStore`.
