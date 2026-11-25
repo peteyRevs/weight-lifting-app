@@ -125,25 +125,36 @@
             try ProgramDrawing.pixels(of: DayEditorParts(model: model), .dark)
         }
 
-        /// Criterion 1 from the outside: every text on screen is a string of the model, and every string of
-        /// the model is where the notes put it. Each string in turn is given another word; the drawing
-        /// changes exactly when the notes say the string is drawn, and the tree exactly when they say it is
-        /// spoken. A text a view left out, drew from the wrong field, or spoke from the drawn one fails here.
-        @Test("Each string of the open double day is drawn where the notes draw it and spoken where they speak it")
-        func everyString_isDrawnAndSpokenWhereTheNotesSay() throws {
-            let model = try ProgramPreview.dayOpenDouble.dayEditorModel()
-            let (drawn, read) = try (Self.drawing(of: model), DayEditorParts(model: model).stops())
-            let paths = DayViewsText.paths(of: model)
+        /// The path of every string of the open double day, in the model's order.
+        static func openDoublePaths() throws -> [String] {
+            try DayViewsText.paths(of: ProgramPreview.dayOpenDouble.dayEditorModel())
+        }
+
+        @Test("The open double day has the strings the notes list, each a case of the test below")
+        func openDouble_hasEveryString() throws {
+            let paths = try Self.openDoublePaths()
             // Sanctioned edit (S14, criterion 21): the six steppers' `label`s are gone, 91 strings before.
             #expect(paths.count == 85, "\(paths.count) strings")
-            for path in paths {
-                let changed = DayViewsText.changing(path, to: "Qq", in: model)
-                let isDrawn = try Self.drawing(of: changed) != drawn
-                let isSpoken = DayEditorParts(model: changed).stops() != read
-                let expected = DayViewsText.place(of: path)
-                #expect(isDrawn == expected.isDrawn, "\(path) drawn: \(isDrawn)")
-                #expect(isSpoken == expected.isSpoken, "\(path) spoken: \(isSpoken)")
-            }
+        }
+
+        /// Criterion 1 from the outside: every text on screen is a string of the model, and every string of
+        /// the model is where the notes put it. Each string in turn is given another word, one test case
+        /// each (#134: the 85 strings in one test ran past the PR plan's 60 s allowance on the runner); the
+        /// drawing changes exactly when the notes say the string is drawn, and the tree exactly when they
+        /// say it is spoken. A text a view left out, drew from the wrong field, or spoke from the drawn one
+        /// fails here.
+        @Test(
+            "Each string of the open double day is drawn where the notes draw it and spoken where they speak it",
+            arguments: try await DayEditorViewsTreeAdversarialTests.openDoublePaths()
+        )
+        func everyString_isDrawnAndSpokenWhereTheNotesSay(_ path: String) throws {
+            let model = try ProgramPreview.dayOpenDouble.dayEditorModel()
+            let changed = DayViewsText.changing(path, to: "Qq", in: model)
+            let isDrawn = try Self.drawing(of: changed) != Self.drawing(of: model)
+            let isSpoken = DayEditorParts(model: changed).stops() != DayEditorParts(model: model).stops()
+            let expected = DayViewsText.place(of: path)
+            #expect(isDrawn == expected.isDrawn, "\(path) drawn: \(isDrawn)")
+            #expect(isSpoken == expected.isSpoken, "\(path) spoken: \(isSpoken)")
         }
 
         @Test("With every string of the model empty, no stop says a word of its own")
