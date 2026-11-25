@@ -57,6 +57,10 @@ struct UnimplementedHealthStore: HealthStore, RemoteSessionChannel {
         throw stub.failure()
     }
 
+    func noteStartRequestedByPhone() {
+        stub.log(#function)
+    }
+
     func requestWatchStart() async throws {
         throw stub.failure()
     }

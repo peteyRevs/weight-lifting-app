@@ -2,6 +2,7 @@ import Dependencies
 import Foundation
 import LedgerDependencies
 import LedgerDomain
+import LedgerHealth
 import LedgerPersistence
 #if canImport(WatchConnectivity)
     import LedgerSync
@@ -24,6 +25,7 @@ public final class WatchComposition {
     init(_ environment: Environment) {
         self.environment = environment
         let preparesDependencies = environment.preparesDependencies
+        let healthStore = environment.healthStore
         database = DatabaseLaunch(
             at: environment.databaseURL,
             kind: .watch,
@@ -33,7 +35,10 @@ public final class WatchComposition {
             record: environment.record,
             onOpen: { stores in
                 if preparesDependencies {
-                    prepareDependencies { Self.bind(stores, into: &$0) }
+                    prepareDependencies {
+                        Self.bind(stores, into: &$0)
+                        Self.bind(healthStore, into: &$0)
+                    }
                 }
             }
         )
@@ -106,11 +111,18 @@ public final class WatchComposition {
         environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
     }
 
-    /// Binds the six stores and this device's id; binds nothing until the database is open. The logger and the
-    /// device keys keep their live values (the device ones are stubs until F16–F23).
+    /// Binds the six stores, this device's id and the health store (F16 S3a); binds nothing until the database is
+    /// open. The logger and the other device keys keep their live values (stubs until F17–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
+            Self.bind(environment.healthStore, into: &values)
+        }
+    }
+
+    static func bind(_ healthStore: (any HealthStore)?, into values: inout DependencyValues) {
+        if let healthStore {
+            values.healthStore = healthStore
         }
     }
 
@@ -139,11 +151,18 @@ extension WatchComposition {
         var preparesDependencies: Bool
         /// When this process started (`ProcessStart`), where launch-to-first-frame begins.
         var processStart: Date?
+        /// The watch's HealthKit session (`LiveHealthStore`); nil binds none, as in a test.
+        var healthStore: (any HealthStore)?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
             #if canImport(WatchConnectivity)
                 let activator = CompanionSessionActivator()
+            #endif
+            #if os(watchOS)
+                let liveHealthStore: (any HealthStore)? = LiveHealthStore()
+            #else
+                let liveHealthStore: (any HealthStore)? = nil
             #endif
             return Environment(
                 databaseURL: arguments.contains("-LEDGER_UITEST")
@@ -159,7 +178,8 @@ extension WatchComposition {
                     #endif
                 },
                 preparesDependencies: true,
-                processStart: ProcessStart.date()
+                processStart: ProcessStart.date(),
+                healthStore: liveHealthStore
             )
         }
     }

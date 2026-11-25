@@ -200,6 +200,8 @@ private struct BriefHealthStore: HealthStore, RemoteSessionChannel {
         false
     }
 
+    func noteStartRequestedByPhone() {}
+
     func requestWatchStart() async throws {}
 
     func saveWorkout(

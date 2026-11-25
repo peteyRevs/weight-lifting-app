@@ -1,3 +1,5 @@
+import Foundation
+import LedgerDomain
 @testable import LedgerHealth
 import Synchronization
 import Testing
@@ -72,5 +74,120 @@ struct MirroringStartRegistrarTests {
         #expect(weakRegistrar == nil)
         let handler = try #require(slot.handler)
         handler(Session()) // reaches no registrar, and does not crash
+    }
+}
+
+/// Each kept session's delegate and channel (F16 S3; criterion 7), over stand-ins for HealthKit's.
+extension MirroringStartRegistrarTests {
+    static func registrar(
+        _ delegates: MirroredDelegates,
+        recover: @escaping @Sendable () -> Session? = { nil }
+    ) -> MirroringStartRegistrar<Session> {
+        MirroringStartRegistrar(
+            install: { _ in },
+            observe: delegates.observe,
+            send: { delegates.send($0, $1) },
+            recover: recover
+        )
+    }
+
+    static func next(_ count: Int, of registrar: MirroringStartRegistrar<Session>) async -> [MirrorEvent] {
+        await HealthStoreContractTests.next(count, of: registrar.mirrorEvents)
+    }
+
+    @Test("Every session the handler is handed is kept and observed, each reported connected")
+    func startHandler_retainsEverySession() async {
+        let delegates = MirroredDelegates()
+        let registrar = Self.registrar(delegates)
+        let sessions = [Session(), Session(), Session()]
+        sessions.forEach(registrar.keep)
+        #expect(Self.identities(registrar.mirroredSessions) == Self.identities(sessions))
+        #expect(delegates.observed == 3)
+        #expect(await Self.next(3, of: registrar) == [.connected, .connected, .connected])
+    }
+
+    @Test("A send goes to the newest session, and to the next one as soon as it is kept")
+    func startHandler_rebindsChannelToNewest() async throws {
+        let delegates = MirroredDelegates()
+        let registrar = Self.registrar(delegates)
+        await #expect(throws: HealthError.noActiveSession) { try await registrar.send(Data([1])) }
+        let first = Session()
+        let second = Session()
+        registrar.keep(first)
+        try await registrar.send(Data([1]))
+        registrar.keep(second)
+        try await registrar.send(Data([2]))
+        #expect(delegates.sent == Self.identities([first, second]))
+    }
+
+    @Test("A disconnect drops only that session; sends go to the newest left; batches arrive in order")
+    func disconnect_dropsOnlyThatSession() async throws {
+        let delegates = MirroredDelegates()
+        let registrar = Self.registrar(delegates)
+        let sessions = [Session(), Session(), Session()]
+        sessions.forEach(registrar.keep)
+        delegates.report(.received([Data([7])]), from: sessions[0])
+        delegates.report(.disconnected, from: sessions[1])
+        #expect(Self.identities(registrar.mirroredSessions) == Self.identities([sessions[0], sessions[2]]))
+        delegates.report(.disconnected, from: sessions[2])
+        try await registrar.send(Data([1]))
+        #expect(delegates.sent == Self.identities([sessions[0]]))
+        #expect(await Self.next(6, of: registrar).suffix(3) == [.received([Data([7])]), .disconnected, .disconnected])
+    }
+
+    @Test("Recovery keeps the session the system kept, as the newest; without one it keeps nothing")
+    func recover_keepsTheSession() async throws {
+        let delegates = MirroredDelegates()
+        let kept = Session()
+        let registrar = Self.registrar(delegates, recover: { kept })
+        #expect(try await registrar.recover())
+        #expect(Self.identities(registrar.mirroredSessions) == Self.identities([kept]))
+        #expect(await Self.next(1, of: registrar) == [.connected])
+        #expect(try await !Self.registrar(MirroredDelegates()).recover())
+    }
+
+    @Test("A registrar given only its handler slot keeps sessions, sends nowhere and recovers nothing")
+    func defaults_observeNothing() async throws {
+        let registrar = MirroringStartRegistrar<Session>(install: { _ in })
+        registrar.keep(Session())
+        try await registrar.send(Data([1]))
+        #expect(try await !registrar.recover())
+        #expect(registrar.mirroredSessions.count == 1)
+    }
+}
+
+private typealias TestSession = MirroringStartRegistrarTests.Session
+private typealias Report = @Sendable (MirroringStartRegistrar<TestSession>.Callback) -> Void
+
+/// Stands in for each session's delegate and for `sendToRemoteWorkoutSession`: what each was handed.
+final class MirroredDelegates: Sendable {
+    private let state = Mutex((reports: [ObjectIdentifier: Report](), sent: [ObjectIdentifier]()))
+
+    func observe(
+        _ session: MirroringStartRegistrarTests.Session,
+        _ report: @escaping @Sendable (MirroringStartRegistrar<MirroringStartRegistrarTests.Session>.Callback) -> Void
+    ) -> any Sendable {
+        state.withLock { $0.reports[ObjectIdentifier(session)] = report }
+        return ()
+    }
+
+    func send(_ session: MirroringStartRegistrarTests.Session, _: Data) {
+        state.withLock { $0.sent.append(ObjectIdentifier(session)) }
+    }
+
+    /// The session's delegate reports `callback`, as HealthKit would call it.
+    func report(
+        _ callback: MirroringStartRegistrar<MirroringStartRegistrarTests.Session>.Callback,
+        from session: MirroringStartRegistrarTests.Session
+    ) {
+        state.withLock { $0.reports[ObjectIdentifier(session)] }?(callback)
+    }
+
+    var observed: Int {
+        state.withLock { $0.reports.count }
+    }
+
+    var sent: [ObjectIdentifier] {
+        state.withLock { $0.sent }
     }
 }

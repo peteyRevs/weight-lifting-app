@@ -187,6 +187,7 @@ extension UnimplementedStubTests {
             { try await stub.remoteChannel.send(Data()) }
         ])
         #expect(await stub.authorization() == .unavailable)
+        stub.noteStartRequestedByPhone() // logs, and reports nothing: its stream is empty
         #expect(await Self.isEmpty(stub.events))
         #expect(await Self.isEmpty(stub.heartRate()))
         #expect(await Self.isEmpty(stub.remoteChannel.connection))

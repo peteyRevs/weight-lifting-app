@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import LedgerDependencies
+import LedgerDomain
 import LedgerPersistence
 @testable import LedgerWatchAppKit
 
@@ -37,7 +38,11 @@ final class Harness {
 
     /// A composition over `databaseURL`, not yet booted. Its new device ids are `deviceUUID`; its process started at
     /// `processStart`.
-    func composition(now: Date = Harness.now, processStart: Date? = nil) -> WatchComposition {
+    func composition(
+        now: Date = Harness.now,
+        processStart: Date? = nil,
+        healthStore: (any HealthStore)? = nil
+    ) -> WatchComposition {
         WatchComposition(
             WatchComposition.Environment(
                 databaseURL: databaseURL,
@@ -47,7 +52,8 @@ final class Harness {
                 record: { [weak self] in self?.log.append(.event($0)) },
                 activateCompanionSession: { [weak self] in self?.log.append(.companionActivated) },
                 preparesDependencies: false,
-                processStart: processStart
+                processStart: processStart,
+                healthStore: healthStore
             )
         )
     }

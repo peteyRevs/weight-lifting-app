@@ -174,3 +174,43 @@ With it, LedgerHealth measured 363 / 647 = 56.1 % on the iOS bundle against its 
 363 / 406 = 89.4 %. Pete approved excluding `LedgerHealth/Watch/*` from the gate (`scripts/coverage-thresholds.json`,
 testing-strategy §4); the adapter is verified on his iPhone 17 + Apple Watch Series 9 by F20 scenario 15, part of
 the M2 exit. The folder holds only the thin HealthKit adapter; logic stays in `LiveHealthStore`.
+
+## Slice S3a (G1, 2026-11-24)
+
+S3 as planned came to ~1,450 changed lines with its tests, so it splits like S2: **S3a** (this slice) is the
+phone's mirror receiver and both apps' wiring; **S3b** is the phone's own HealthKit calls (`requestWatchStart`
+under a 10 s timeout, the phone-only `HKWorkoutBuilder` save refused when a watch took part, `workoutRecord`) and
+the device checklist. S3b is drafted and green on the iOS simulator; it lands after this.
+
+- **The mirror receiver is `MirroringStartRegistrar`, extended** (not a new type): each session the handler is
+  handed gets its own delegate (`MirroredSessionDelegate`, Sendable as the watch's is: final, one `let` closure),
+  is kept until its `didDisconnectFromRemoteDeviceWithError` drops it alone, and sends go to the newest kept one.
+  Recovery (`recoverActiveWorkoutSession`, iOS 26) keeps the session it finds as the newest. What the sessions
+  report is one `mirrorEvents` stream (`.connected`, `.disconnected`, `.received`), buffered until the store reads
+  it. The HealthKit closures (handler slot, delegate, `sendToRemoteWorkoutSession`, recovery) are the iOS
+  convenience initializer's; tests pass their own.
+- **The phone's `LiveHealthStore(healthStore:mirroring:bundle:onMirrorStart:)`** reads the registrar through the
+  `MirrorReceiver` seam: each start is `.mirrorConnected` and `connection` true, then the `onMirrorStart` hook
+  (F21 starts the Live Activity there); each drop `.mirrorDisconnected` and false; batches go to `incoming`;
+  `send` goes over the newest session; `recoverActiveSession()` recovers the mirrored session (`.recovered`).
+- **Wiring.** `AppComposition.Environment.live` builds the registrar and the store together
+  (`AppComposition+Health.swift`); the handler is still assigned first in `boot()`, synchronously, before the
+  database opens. Both compositions bind `healthStore` with the stores. `PhoneAppDelegate` (adopted with
+  `@UIApplicationDelegateAdaptor` in `Apps/Ledger/LedgerApp.swift`) hands `shouldHandleActiveWorkoutRecovery` to
+  `recoverActiveSession()`; `WatchAppDelegate` reports `handle(_:)` as `.startRequestedByPhone` and hands
+  `handleActiveWorkoutRecovery()` to the store. No project or plist change was needed.
+
+### Decisions
+
+1. **`HealthStore.noteStartRequestedByPhone()`**, synchronous and nonisolated, so the watch's delegate reports the
+   phone's request without a task or a cast to `LiveHealthStore`. The fake, the stub, the brief conformance and
+   the contract carry it.
+2. **The mirror's listener is a task the store's initializer starts over the sinks alone** (`forward`), so it never
+   captures the store; it is kept and cancelled in `deinit`.
+3. **The delegates' recoveries are unstructured tasks**, kept in `recovery`: `handleActiveWorkoutRecovery()` and
+   `application(_:configurationForConnecting:options:)` cannot wait. They are app delegates, not stores.
+4. **`onMirrorStart` gets nil for the workout's id**: a mirrored session carries none; F17 learns it from the
+   watch's first envelope.
+5. **Coverage.** The adapter code is kept to HealthKit's own calls: the watch-only initializer moved into
+   `Watch/` (xccov counts an inactive `#if` as uncovered lines on the other platform), and the error mapping is one
+   tested `healthKitCall`. LedgerHealth measures 84.1 % on the iOS bundle without any new exclusion.

@@ -141,6 +141,10 @@
             return true
         }
 
+        public nonisolated func noteStartRequestedByPhone() {
+            sink.yield(.startRequestedByPhone)
+        }
+
         public func requestWatchStart() throws {
             watchStartRequests += 1
             guard watchAppInstalled else {
