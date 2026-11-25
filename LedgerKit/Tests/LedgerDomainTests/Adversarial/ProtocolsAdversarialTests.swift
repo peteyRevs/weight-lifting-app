@@ -156,7 +156,22 @@ private struct BriefStatsQueries: StatsQueries {
     }
 }
 
-private struct BriefShapes: LiveWorkoutTransport, CompanionTransport {}
+private struct BriefShapes: CompanionTransport {}
+
+/// F17's `LiveWorkoutTransport`, from the brief's signatures.
+private struct BriefLiveWorkoutTransport: LiveWorkoutTransport {
+    var incoming: AsyncStream<WireFrame> {
+        AsyncStream { $0.finish() }
+    }
+
+    var link: AsyncStream<Bool> {
+        AsyncStream { $0.finish() }
+    }
+
+    func send(_: WireFrame) async throws {
+        throw TransportError.unreachable
+    }
+}
 
 /// F16's `HealthStore` and `RemoteSessionChannel`, from the brief's signatures.
 private struct BriefHealthStore: HealthStore, RemoteSessionChannel {
@@ -230,12 +245,16 @@ extension ProtocolsAdversarialTests {
         let settings: any SettingsRepository = BriefSettingsRepository()
         let programs: any ProgramRepository = BriefProgramRepository()
         let workouts: any WorkoutRepository = BriefWorkoutRepository()
-        let shapes: [any Sendable] = [BriefHealthStore() as any HealthStore, BriefShapes() as any CompanionTransport]
+        let shapes: [any Sendable] = [
+            BriefHealthStore() as any HealthStore,
+            BriefLiveWorkoutTransport() as any LiveWorkoutTransport,
+            BriefShapes() as any CompanionTransport
+        ]
         #expect(try await exercises.all() == [Fixtures.bench])
         #expect(try await stats.bestSet(exerciseID: Fixtures.bench.id)?.weight == pounds("200"))
         #expect(try await settings.load() == .default)
         #expect(try await programs.active() == nil)
         #expect(try await workouts.recent(limit: 5).isEmpty)
-        #expect(shapes.count == 2)
+        #expect(shapes.count == 3)
     }
 }

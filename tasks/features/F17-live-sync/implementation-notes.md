@@ -99,3 +99,42 @@ S3 and S4 split again (receive versus transmit; handshake versus property tests)
    decoder text can reach a log with health values in it.
 4. **A frame read from a slice decodes** (`decode` indexes from `startIndex`), since a transport may hand one out
    of a larger buffer.
+
+## Slice S2 (G1, 2026-11-25)
+
+- **`LiveWorkoutTransport`** (`LedgerDomain/Protocols/Transports.swift`) is filled from the brief: `incoming:
+  AsyncStream<WireFrame>`, `link: AsyncStream<Bool>` (the state when made, then each change; one consumer each, as
+  `RemoteSessionChannel`'s streams), `send(_:) async throws`. Beside it: `TransportError` (`unreachable`, `timeout`,
+  `tooLarge`), `Channel` (`mirroring`, `watchConnectivity`) and `LiveConnectionState` (`solo`, `connected`,
+  `reconnecting`, `degraded`), all `Hashable` and `Sendable`.
+- **`FakeLiveNetwork` + `FakeLiveWorkoutTransport`** (`LedgerFakes/FakeLiveWorkoutTransport.swift`): a phone and a
+  watch over one `FakeLinkBus<WireFrame>`. The bus's `Link` gives delay (and so reordering), loss and duplication;
+  `partition()` / `heal()` cut and join the pair (both links report it, a send throws `unreachable`, frames on
+  their way are lost); `advance(by:)` / `flush()` move the network's time and hand what is due to each `incoming`.
+  Each transport records `sent` and `received`; `hang` makes a send wait, announced on `hung`, until it is
+  cancelled (`CancellationError`, nothing sent) or `hang` is turned off. A transport made alone (`init()`, the
+  key's preview value) has its link down and refuses every send.
+- **`UnimplementedLiveWorkoutTransport`** logs and throws from `send` and ends both streams;
+  `ProtocolsAdversarialTests`' brief conformance is now a `BriefLiveWorkoutTransport` written from the brief.
+- **Tests:** `FakeLiveWorkoutTransportTests` (LedgerSyncTests), the fake halves of criteria 4–7: loss 0.3,
+  duplication 0.2 and reordering are the same for a seed over 100 seeds and each occurs; a partition and its heal;
+  a hung send, cancelled and released; ten minutes solo then one flush. `UnimplementedStubTests.liveWorkoutTransport`.
+
+### Decisions
+
+1. **The fake carries frames, not bytes.** `WireCodec` is tested on its own (S1), and the real transports encode
+   (S6, S7); a fake that encoded would only re-test the codec.
+2. **A hang is an `AsyncStream<Never>` the send iterates**: cancelling the task ends the iteration, and turning
+   `hang` off finishes every waiting stream (outside the lock, so nothing runs under it). No sleep, no clock. The
+   `hung` stream lets a test wait for the send to be waiting without polling (the `ManualClock` pattern's
+   announcement).
+3. **The fakes' state is behind a `Mutex`**, as `FakeLinkBus`'s is: the network calls into its transports
+   synchronously from `advance` and `flush`, which an actor could not do. No `@unchecked Sendable`.
+4. **The fake transport moved out of `DeviceFakes.swift`** into its own file, as `FakeHealthStore` has.
+
+### Deviations from the brief
+
+1. **`partition()` / `heal()` and the bus's delay range** stand for the brief's `FakeTransport.partitioned = true`
+   and `reorder = true`; the fake is `FakeLiveWorkoutTransport` (F07's name) made in pairs by `FakeLiveNetwork`.
+2. **`TransportError.timeout`** is the watchdog's (S6); the fake never throws it or `tooLarge`, which only a real
+   transport's encoding can.
