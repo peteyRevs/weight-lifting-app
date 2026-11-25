@@ -72,30 +72,50 @@ public extension EventEnvelope {
     /// `wallClock` or from any other date, such as a "Still lifting?" finish days after the last set
     /// (F23 criterion 6). The engine's arithmetic saturates on such dates rather than trap.
     var isWellFormed: Bool {
-        wallClock.isFinite && event.isWellFormed
+        hasFiniteDates && event.hasValidValues
+    }
+
+    /// Whether every date it carries is finite: its `wallClock` and each date `isWellFormed` names. A host drops a
+    /// received envelope that fails this before storing it (F17 "Inputs from F05"): NaN is unequal to itself, so a
+    /// store would call a resent copy a conflict.
+    var hasFiniteDates: Bool {
+        wallClock.isFinite && event.dates.allSatisfy(\.isFinite)
     }
 }
 
 private extension WorkoutEvent {
-    /// Every date it carries is finite, every rest length lies in `0 ... WorkoutEngine.longestRest`, and a
-    /// swap's replacement has a step above zero, a load not below it, and only weights a store can keep.
-    var isWellFormed: Bool {
+    /// Every date it carries, a `started` snapshot's and a swap's last performance included.
+    var dates: [Date] {
         switch self {
         case let .started(snapshot):
-            let dates = [snapshot.startedAt, snapshot.endedAt, snapshot.rest?.endsAt].compactMap(\.self)
+            [snapshot.startedAt, snapshot.endedAt, snapshot.rest?.endsAt].compactMap(\.self)
                 + snapshot.exercises.flatMap(\.sets).compactMap(\.doneAt)
                 + snapshot.exercises.compactMap(\.lastPerformance?.date)
-            return dates.allSatisfy(\.isFinite) && snapshot.rest.map(\.total.isRestLength) ?? true
-        case let .setLogged(_, _, _, _, date), let .finished(date), let .discarded(date):
-            return date.isFinite
+        case let .setLogged(_, _, _, _, date), let .finished(date), let .discarded(date),
+             let .restStarted(date, _), let .restExtended(_, _, date):
+            [date]
         case let .setAdded(_, set):
-            return set.doneAt?.isFinite ?? true
-        case let .restStarted(date, length), let .restExtended(length, _, date):
-            return date.isFinite && length.isRestLength
+            set.doneAt.map { [$0] } ?? []
         case let .exerciseSwapped(_, _, _, _, replacement):
-            return replacement?.isWellFormed ?? true
+            replacement?.lastPerformance.map { [$0.date] } ?? []
         case .exerciseSelected, .setUnlogged, .setTargetChanged, .allSetsRepeated, .restSkipped:
-            return true
+            []
+        }
+    }
+
+    /// Every rest length lies in `0 ... WorkoutEngine.longestRest`, and a swap's replacement has a step above
+    /// zero, a load not below it, and only weights a store can keep. Its dates are `dates`'.
+    var hasValidValues: Bool {
+        switch self {
+        case let .started(snapshot):
+            snapshot.rest.map(\.total.isRestLength) ?? true
+        case let .restStarted(_, length), let .restExtended(length, _, _):
+            length.isRestLength
+        case let .exerciseSwapped(_, _, _, _, replacement):
+            replacement?.isWellFormed ?? true
+        case .setLogged, .finished, .discarded, .setAdded, .exerciseSelected, .setUnlogged, .setTargetChanged,
+             .allSetsRepeated, .restSkipped:
+            true
         }
     }
 }

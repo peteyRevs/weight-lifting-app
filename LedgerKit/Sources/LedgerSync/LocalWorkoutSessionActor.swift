@@ -4,8 +4,8 @@ import os
 
 /// The live workout's host on one device: the real `WorkoutSessionClient` (F10 S2; ADR-004, "The host loop").
 /// It stamps each call's event with this device's next `seq` and its hybrid logical clock, reduces it with
-/// `WorkoutEngine`, stores it, and only then lets anyone see the result. F17 adds the peer's envelopes and
-/// the transport.
+/// `WorkoutEngine`, stores it, and only then lets anyone see the result. The peer's envelopes arrive through
+/// `receive(_:)` (F17 S3, `+Receive`); F17 S4 adds the transport.
 ///
 /// **The rest notification** (F10 S6). The host runs the engine's `.scheduleRestNotification` and
 /// `.cancelRestNotification` itself, through the `NotificationsClient` it was given, once the envelope that
@@ -39,7 +39,7 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
     let device: DeviceID
     let notifications: (any NotificationsClient)?
     let logger = Logger(subsystem: "com.petearevalo.Ledger", category: "sync")
-    private let now: @Sendable () -> Date
+    let now: @Sendable () -> Date
 
     /// The workout as every reader is told it: what `current()` answers and a new stream starts with.
     var live: WorkoutState?
@@ -53,6 +53,8 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
     var isRecovered = false
     /// Whether the last recovery pass left an ended log it could not store or drop.
     var hasUnstoredEnds = false
+    /// The workouts this host received another device's envelope for (`hasWatchParticipant(_:)`).
+    var participants: Set<WorkoutID> = []
     private var subscribers: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
     /// Waits for the operation queued last.
     private var queued: @Sendable () async -> Void = {}
