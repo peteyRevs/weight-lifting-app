@@ -49,6 +49,7 @@ Preconditions: iPhone (iOS 26.x, note exact build) + paired Apple Watch (watchOS
 | 12 | Standalone + pull-back | Phone powered off. Start from wrist, log 5 sets, finish. Power phone on. | One workout in phone History within 60 s of pairing (F19 #5), HR filled within 24 h (F19 #9), Today "Logged". |
 | 13 | Both finish while partitioned | Bluetooth off; finish on watch; log a set and finish on phone; Bluetooth on. | One workout (F19 #6); union of sets; earlier `finishedAt`; one Health workout. |
 | 14 | Always-On | During rest, wrist down 15 s. | HR hidden, countdown still ticking (F18 #12). |
+| 15 | Watch HealthKit adapter (stands in for its unit coverage, see testing-strategy §4) | Start on the watch; wear it 1 min; kill the watch app from the Dock mid-set and relaunch; start Apple's Workout app; on another run, finish and check Health. | HR on the wrist within 5 s (F16 #4); `prepare()`→running < 3 s; relaunch recovers the same session with HR resuming (F16 #10); takeover emits the event, no crash (F16 #9); Health shows the workout with `com.petearevalo.Ledger.totalVolumeGrams` accepted as grams (F16 #5). Paste results into `F16-healthkit/implementation-notes.md`. |
 
 Record for each: pass/fail, timings observed, OS builds, and whether `mirroringDegraded` flipped (R1 §2.5 #2 tracking).
 

@@ -532,7 +532,12 @@ and attach screenshots for failures. A run with any failure blocks the tag.
 - Exclusions: `LedgerTestSupport`, `*Tests`, `*UITests`, app shells (`Ledger`,
   `LedgerWatch`, `LedgerWidgets`, `LedgerWatchWidgets`), umbrella targets,
   files matching `*+Previews.swift` (all `#Preview` bodies live there),
-  `Generated/`.
+  `Generated/`, and `LedgerHealth/Watch/` (the watch's HealthKit adapter, F16
+  S2b: it only runs against a real `HKWorkoutSession` with the HealthKit
+  entitlement, which no package test host has; Pete approved 2026-11-24). That
+  adapter is verified on the physical iPhone 17 + Apple Watch Series 9 instead,
+  by F20 scenario 15, which is part of the M2 exit. Keep the folder to the thin
+  HealthKit adapter: logic belongs in `LiveHealthStore`, behind the seam.
 - Gate failure: the script prints a Markdown table (also to
   `$GITHUB_STEP_SUMMARY`), exits 1, the `test-ios` job fails, `pr-gate` fails,
   the PR cannot merge. "Coverage did not decrease" (PR template) is checked by

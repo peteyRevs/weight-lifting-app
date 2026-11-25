@@ -115,3 +115,62 @@ with the adapter's start half, so S2 splits at the HealthKit boundary instead:
    checklist (S3).
 5. **Files:** the seam is `LedgerHealth/WorkoutSessionDriver.swift`; S2b's adapter is
    `LedgerHealth/Watch/HealthKitWorkoutSession.swift` (the brief's `Watch/WatchWorkoutSession.swift`).
+
+## Slice S2b (G1, 2026-11-22)
+
+Ported from the draft written during S2a onto main's merged S2a (#130).
+
+- **The watch's HealthKit provider** (`Watch/HealthKitWorkoutSession.swift`, `#if os(watchOS)`):
+  `HKWorkoutConfiguration` (`.traditionalStrengthTraining`, `.indoor`) → `HKWorkoutSession(healthStore:configuration:)`
+  → `associatedWorkoutBuilder()` → `HKLiveWorkoutDataSource` → delegates, one initializer for a new session and a
+  recovered one (`recoverActiveWorkoutSession()`). The delegate turns heart-rate batches into `HeartRateSample`s
+  (`mostRecentQuantity()`), state changes, failures, disconnects and the phone's data into callbacks.
+  `startMirroring()` resumes once, from HealthKit's answer or the task's cancellation (S2a decision 3).
+  `LiveHealthStore(healthStore:bundle:)` is the watch's public initializer; no composition binds it until S3.
+- **Shared, for S3** (`HealthKitMapping.swift`): `HealthTypeSet` (share workout + active energy, read those and
+  heart rate), `HealthKitAuthorizer`, the `HKError` → `HealthError` map (takeover, authorization, unavailable, else
+  the code), the metadata keys and the brand name.
+- **The store** (`LiveHealthStore+End.swift`): `endSession` stops the activity, waits for `.stopped`, then
+  endCollection → addMetadata → finishWorkout → end, and returns the record from the builder's statistics (HR
+  average and maximum, energy sum, rounded); `discardSession` ends and discards (`.ended(now)`); recovery attaches
+  the kept session as running (`.recovered`, mirror retries allowed); `send` goes over the session, the phone's
+  batches arrive on `incoming`. `errorAnotherWorkoutSessionStarted` → discard the builder's workout, detach, and
+  `.anotherWorkoutSessionStarted`; a call waiting on the session throws it.
+- **Brand name:** `CFBundleDisplayName`, else `CFBundleName`, a blank one absent (as `AppAbout`); no brand key
+  when neither exists.
+
+### Decisions
+
+1. **`totalVolumeGrams` is an `HKQuantity` in grams**, not an `NSDecimalNumber`. HealthKit documents metadata
+   values as `NSString`, `NSDate`, `NSNumber` or `HKQuantity`; an `NSDecimalNumber` is an `NSNumber` subclass, but
+   how HealthKit stores a subclass is not documented, while a quantity is, and it carries its unit, so a reader
+   can never take the number for kilograms or pounds. The seam keeps the value exact (`.grams(Decimal)`, compared
+   exactly in `metadataKeys_exact`); only the watch's adapter makes it a `Double` for `HKQuantity`. A `Double`
+   holds a session's grams (at most ~10⁸, with lb conversions to 10⁻⁵ g) far inside its 15 significant digits,
+   and Health only displays it; Ledger's exact volume stays in its own log (ADR-007).
+2. **The metadata entries live with the keys** (`HealthWorkoutMetadata.healthKitEntries(brandName:)` beside
+   `HealthMetadataKey`), so the brand key is HealthKit's own `HKMetadataKeyWorkoutBrandName`, not a copy of its
+   text.
+3. **The end, discard, recovery and the phone's calls moved to `LiveHealthStore+End.swift`** to keep the actor
+   under SwiftLint's file and body lengths; the state the extension reads (`session`, `sink`, `logger`, …) is now
+   module-internal rather than private, and the session-life helpers internal.
+4. **S2a's `authorization_andLaterSlices` became `authorization_andPhoneCalls`**: the calls S2b implements no longer
+   throw `unavailable`; each has its own test now.
+
+### Deviations from the brief
+
+1. **`HKWorkoutConfiguration` is built by setting its properties**, not with the brief's
+   `HKWorkoutConfiguration(activityType:locationType:)`, which its header does not declare.
+2. **A finished workout's start and end are HealthKit's** (`HKWorkout.startDate`/`endDate`), so a recovered
+   session, whose start the store never saw, reports them too.
+3. **A takeover discards the builder's workout** (`discardWorkout()`) as well as emitting the event, so that
+   nothing collected so far is written by accident.
+
+### Decided: the coverage gate (Pete, 2026-11-24)
+
+`Watch/HealthKitWorkoutSession.swift` has 241 executable lines that only a real `HKWorkoutSession` can run, and
+a package test host cannot drive one (no HealthKit entitlement; standards §9 forbids HealthKit in unit tests).
+With it, LedgerHealth measured 363 / 647 = 56.1 % on the iOS bundle against its 80 % threshold; without it,
+363 / 406 = 89.4 %. Pete approved excluding `LedgerHealth/Watch/*` from the gate (`scripts/coverage-thresholds.json`,
+testing-strategy §4); the adapter is verified on his iPhone 17 + Apple Watch Series 9 by F20 scenario 15, part of
+the M2 exit. The folder holds only the thin HealthKit adapter; logic stays in `LiveHealthStore`.

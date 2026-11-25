@@ -3,9 +3,9 @@ import LedgerDomain
 @testable import LedgerHealth
 import Synchronization
 
-/// A scripted `HKWorkoutSession` + `HKLiveWorkoutBuilder` (F16 S2a): it records every call, and every callback the
-/// test plays, in one ordered log, and answers as the script says. With `autoplay`, `prepare()` plays `.prepared`
-/// as HealthKit would; without, the test plays it.
+/// A scripted `HKWorkoutSession` + `HKLiveWorkoutBuilder` (F16 S2): it records every call, and every callback the
+/// test plays, in one ordered log, and answers as the script says. With `autoplay`, `prepare()` and
+/// `stopActivity(at:)` play `.prepared` and `.stopped` as HealthKit would; without, the test plays them.
 final class ScriptedSession: WorkoutSessionDriver {
     /// How one `startMirroring()` ends.
     enum Mirroring: Sendable {
@@ -25,6 +25,7 @@ final class ScriptedSession: WorkoutSessionDriver {
     private struct State {
         var log: [String] = []
         var mirroring: [Mirroring]
+        var metadata: [String: HealthMetadataValue]?
     }
 
     /// `mirroring` answers the `startMirroring()` calls in turn; past its end, each connects.
@@ -35,9 +36,24 @@ final class ScriptedSession: WorkoutSessionDriver {
         (calls, callsSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
     }
 
+    /// What `finishWorkout()` answers.
+    static let workout = FinishedWorkout(
+        uuid: UUID(uuidString: "00000000-0000-0000-0000-000000007001") ?? UUID(),
+        start: Date(timeIntervalSince1970: 1_000_000),
+        end: Date(timeIntervalSince1970: 1_003_600),
+        avgHeartRate: 118,
+        maxHeartRate: 162,
+        activeEnergyKcal: 240
+    )
+
     /// Every call and played callback (`→prepared`), in order.
     var log: [String] {
         state.withLock { $0.log }
+    }
+
+    /// What `addMetadata(_:)` was given.
+    var metadata: [String: HealthMetadataValue]? {
+        state.withLock { $0.metadata }
     }
 
     /// Plays a delegate callback, logged as `→` and its name.
@@ -84,12 +100,37 @@ final class ScriptedSession: WorkoutSessionDriver {
         record("beginCollection")
     }
 
+    func stopActivity(at date: Date) {
+        record("stopActivity")
+        if autoplay {
+            play(.state(.stopped, date))
+        }
+    }
+
+    func endCollection(at _: Date) {
+        record("endCollection")
+    }
+
+    func addMetadata(_ metadata: [String: HealthMetadataValue]) {
+        record("addMetadata")
+        state.withLock { $0.metadata = metadata }
+    }
+
+    func finishWorkout() -> FinishedWorkout {
+        record("finishWorkout")
+        return Self.workout
+    }
+
     func end() {
         record("end")
     }
 
     func discardWorkout() {
         record("discardWorkout")
+    }
+
+    func send(_ data: Data) {
+        record("send \(data.count)")
     }
 
     private func record(_ entry: String) {
@@ -103,14 +144,16 @@ final class ScriptedSession: WorkoutSessionDriver {
         case let .failed(error): "failed \(error)"
         case .heartRate: "heartRate"
         case .mirrorDisconnected: "mirrorDisconnected"
+        case .received: "received"
         }
     }
 }
 
-/// Hands out the test's session.
+/// Hands out the test's session, and the one recovery finds.
 struct ScriptedProvider: WorkoutSessionProvider {
     var status = HealthAuthorization.authorized
     var session = ScriptedSession()
+    var recoverable: ScriptedSession?
 
     func authorization() -> HealthAuthorization {
         status
@@ -122,6 +165,10 @@ struct ScriptedProvider: WorkoutSessionProvider {
 
     func makeSession() -> any WorkoutSessionDriver {
         session
+    }
+
+    func recoverSession() -> (any WorkoutSessionDriver)? {
+        recoverable
     }
 }
 

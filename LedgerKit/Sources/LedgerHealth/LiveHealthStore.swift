@@ -1,16 +1,17 @@
 import Foundation
+#if os(watchOS)
+    import HealthKit
+#endif
 import LedgerDomain
 import os
 
 /// `HealthStore` over HealthKit (F16; architecture §9). The state machine is the same on every platform and
-/// drives a `WorkoutSessionProvider`: in tests, a script; on the watch, from F16 S2b, HealthKit's session. S2a
-/// starts a session, mirrors it and streams its heart rate; until S2b (the HealthKit provider, the end, a
-/// discard, recovery) and S3 (the phone's calls) land, the other calls throw `HealthError.unavailable`, and no
-/// composition binds it.
+/// drives a `WorkoutSessionProvider`: in tests, a script; on the watch, `HealthKitSessionProvider` (F16 S2b). The
+/// phone's calls throw `HealthError.unavailable` until S3, which also binds the store in the compositions.
 ///
 /// Each delegate callback reaches the actor through the session's `callbacks` stream, which one listener task
 /// per session reads in order; the task is the session's, and is cancelled when the session ends. It is the
-/// store's own `remoteChannel`, whose `connection` follows the mirror.
+/// store's own `remoteChannel`, over the watch's primary session.
 public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
     /// How long mirroring to the phone may take before the session runs without it (R1 §2.5 gotcha 5).
     static let mirroringTimeout = Duration.seconds(10)
@@ -24,26 +25,27 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
         self
     }
 
-    private let provider: any WorkoutSessionProvider
+    let provider: any WorkoutSessionProvider
     private let clock: any Clock<Duration>
-    private let sink: AsyncStream<HealthSessionEvent>.Continuation
+    let now: @Sendable () -> Date
+    let brandName: String?
+    let sink: AsyncStream<HealthSessionEvent>.Continuation
     private let connectionSink: AsyncStream<Bool>.Continuation
-    /// Held so that `incoming` stays open; S2b yields the phone's batches into it.
-    private let incomingSink: AsyncStream<[Data]>.Continuation
-    private let logger = Logger(subsystem: "com.petearevalo.Ledger", category: "health")
-    private var session: Session?
+    let incomingSink: AsyncStream<[Data]>.Continuation
+    let logger = Logger(subsystem: "com.petearevalo.Ledger", category: "health")
+    var session: Session?
     private var sessionsAttached = 0
     private var waiter: Waiter?
     private var heartRateSubscribers: [AsyncStream<HeartRateSample>.Continuation] = []
 
     /// The session HealthKit holds for the store.
-    private struct Session {
+    struct Session {
         /// Which attached session this is, so a callback or task of an earlier one changes nothing.
         let number: Int
         let driver: any WorkoutSessionDriver
         let listener: Task<Void, Never>
         var state: WorkoutSessionState
-        /// Started and not yet ending: a dropped mirror is retried only then.
+        /// Started (or recovered) and not yet ending: a dropped mirror is retried only then.
         var isRunning: Bool
         var retry: Task<Void, Never>?
     }
@@ -59,14 +61,32 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
         case connected, timedOut, failed(HealthError)
     }
 
-    /// `clock` times mirroring and its retries.
-    init(provider: any WorkoutSessionProvider, clock: any Clock<Duration> = ContinuousClock()) {
+    /// `brandName` is what Health shows as the workout's source; `clock` times mirroring and its retries, `now`
+    /// dates a discard.
+    init(
+        provider: any WorkoutSessionProvider,
+        brandName: String? = nil,
+        clock: any Clock<Duration> = ContinuousClock(),
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
         self.provider = provider
+        self.brandName = brandName
         self.clock = clock
+        self.now = now
         (events, sink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (connection, connectionSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (incoming, incomingSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
     }
+
+    #if os(watchOS)
+        /// The watch's store, over `healthStore`, branded with the app's name from `bundle`.
+        public init(healthStore: HKHealthStore = HKHealthStore(), bundle: Bundle = .main) {
+            self.init(
+                provider: HealthKitSessionProvider(healthStore: healthStore),
+                brandName: HealthMetadataKey.brandName(bundle.object(forInfoDictionaryKey:))
+            )
+        }
+    #endif
 
     deinit {
         session?.listener.cancel()
@@ -122,41 +142,9 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
     }
 }
 
-// What F16 S2b (the end, a discard, recovery, the channel's data) and S3 (the phone's calls) implement.
-
-public extension LiveHealthStore {
-    func endSession(metadata _: HealthWorkoutMetadata, at _: Date) throws -> HealthWorkoutRecord {
-        throw HealthError.unavailable
-    }
-
-    func discardSession() throws {
-        throw HealthError.unavailable
-    }
-
-    func recoverActiveSession() throws -> Bool {
-        throw HealthError.unavailable
-    }
-
-    func send(_: Data) throws {
-        throw HealthError.unavailable
-    }
-
-    func requestWatchStart() throws {
-        throw HealthError.unavailable
-    }
-
-    func saveWorkout(metadata _: HealthWorkoutMetadata, start _: Date, end _: Date) throws -> HealthWorkoutRecord {
-        throw HealthError.unavailable
-    }
-
-    func workoutRecord(healthKitUUID _: UUID) throws -> HealthWorkoutRecord? {
-        throw HealthError.unavailable
-    }
-}
-
 // The session's life: its listener, its callbacks, mirroring and its retries.
 
-private extension LiveHealthStore {
+extension LiveHealthStore {
     func requireAuthorized() async throws {
         switch await provider.authorization() {
         case .authorized: return
@@ -165,7 +153,12 @@ private extension LiveHealthStore {
         }
     }
 
-    func attach(_ driver: any WorkoutSessionDriver) -> Int {
+    @discardableResult
+    func attach(
+        _ driver: any WorkoutSessionDriver,
+        state: WorkoutSessionState = .notStarted,
+        isRunning: Bool = false
+    ) -> Int {
         sessionsAttached += 1
         let number = sessionsAttached
         let callbacks = driver.callbacks
@@ -174,7 +167,7 @@ private extension LiveHealthStore {
                 await self?.handle(callback, session: number)
             }
         }
-        session = Session(number: number, driver: driver, listener: listener, state: .notStarted, isRunning: false)
+        session = Session(number: number, driver: driver, listener: listener, state: state, isRunning: isRunning)
         return number
     }
 
@@ -207,6 +200,12 @@ private extension LiveHealthStore {
             if waiter?.state == state {
                 waiter.take()?.continuation.resume()
             }
+        case .failed(.anotherWorkoutSessionStarted):
+            logger.notice("Another app's workout session ended ours; nothing is written")
+            session?.driver.discardWorkout()
+            waiter.take()?.continuation.resume(throwing: HealthError.anotherWorkoutSessionStarted)
+            detach()
+            sink.yield(.anotherWorkoutSessionStarted)
         case let .failed(error):
             logger.error("Workout session failed: \(String(describing: error), privacy: .public)")
             waiter.take()?.continuation.resume(throwing: error)
@@ -226,6 +225,8 @@ private extension LiveHealthStore {
             if session?.isRunning == true, session?.retry == nil {
                 session?.retry = Task { [weak self] in await self?.retryMirroring(session: number) }
             }
+        case let .received(batch):
+            incomingSink.yield(batch)
         }
     }
 

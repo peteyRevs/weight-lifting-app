@@ -15,5 +15,5 @@
   "required": ["FeatureHistory", "FeatureLibrary", "FeatureOnboarding", "FeatureProgram", "FeatureSettings", "FeatureToday", "FeatureWorkout", "LedgerDomain", "LedgerDependencies", "LedgerDesign", "LedgerFakes", "LedgerHealth", "LedgerPersistence", "LedgerSync"],
   "watchOnly": [],
   "excludedModules": ["LedgerTestSupport", "LedgerSnapshotTesting", "LedgerAppKit", "LedgerWatchAppKit"],
-  "excludedFiles": ["*+Previews.swift", "*/Generated/*"]
+  "excludedFiles": ["*+Previews.swift", "*/Generated/*", "LedgerHealth/Watch/*"]
 }
