@@ -218,3 +218,61 @@ tests (criteria 4, 5, 7 on the fake; the resume half of 10 is here).
    that never returns would otherwise stop every later frame.
 4. **Replies are not rate-limited**, only handshakes and replay requests, so two hosts can never ping-pong
    handshakes faster than one per 10 s per workout.
+
+## Slice S4b (G1, 2026-11-25)
+
+The two-host harness and the property tests: the fake halves of criteria 4, 5 and 7. Tests only; S3 and S4a
+held under them, so no product code changed.
+
+- **`LiveSyncPair`** (`LedgerSyncTests/Support/LiveSyncPair.swift`): a phone host and a watch host, each over its
+  own in-memory stores, joined by one `FakeLiveNetwork`, with one shared `SettableClock` as both hosts' date. One
+  task drives it, and every step ends with both hosts at rest:
+  - `step(by:)` moves the network and hands what arrived to the phone, waits for it to rest, then to the watch;
+    `settle()` flushes and hands over until a round carries nothing (capped at 20 rounds), returning the rounds;
+  - `partition()` / `heal()` cut and join the network and report the link to each host in turn;
+  - `converged()`: both logs equal, and both hosts' `current()` equal to `WorkoutEngine.replay` of every envelope
+    either device made (each device's own, from its store).
+- **`HarnessTransport`** wraps each `FakeLiveWorkoutTransport`: sends go through it (so `sent` records them),
+  but the host takes `incoming` and `link` from two **`GatedStream`s** the harness feeds. A gated stream knows
+  when its one consumer has taken everything and asked for more; the host's listeners take the next element only
+  when done with the last, so that is a barrier on the receiving side.
+- **The sender's barrier is a marker:** `Side.rest()` hands the host `.handshake` for a workout nobody has. The
+  host answers it in its turn, after everything queued before it, with its own handshake for that workout, and
+  the transport swallows it and reports that the sender reached it. No sleep, no polling, no raised time limit.
+- **`EditWriter`** (`Support/EditWriter.swift`): seeded random edits of the live workout on `SplitMix64`: log,
+  unlog, retarget and add rows, move the cursor, start, extend and skip rests, 1–20 s apart.
+- **`LiveSyncPropertyTests`** (`+Runs` holds the runs and what they read from the frames):
+  - criterion 4: the phone starts, the watch takes it up on a clean link; then 200 edits from both sides on a link
+    with 0–2 s delay, loss 0.3 and duplication 0.2, the network moving 0–2.5 s after 40 % of them and a partition
+    toggled after 3 %; then a clean link, one reconnect, `settle()`, and `converged()`;
+  - a control over the first four fixed seeds (under 2 s in a simulator, so not `.slow`): frames were lost, duplicated and reordered against the hosts, a partition
+    happened, and at least one run was apart before the reconnect (the property has teeth);
+  - criterion 5: in a partition both sides log 1–6 sets and one starts and extends a rest; after the heal, exactly
+    one handshake each way, each side sends exactly the keys the other lacked and none twice, the logs have no key
+    twice, and the hosts converge;
+  - criterion 7: the watch logs 12 sets over 10 minutes while partitioned; after the heal `settle()` takes exactly
+    two rounds (the handshakes, then one `.envelopes` frame of 12), and the phone has 12 rows done.
+
+### Decisions (for review)
+
+1. **"Then the transport is flushed" (criterion 4) is a reconnect.** A frame lost while the link is up is not
+   resent (S4a: the next handshake replays it), and handshakes come with a link-up, so the run ends with a clean
+   link that goes down and up once, then a flush to rest. A flush alone could never converge at loss 0.3.
+2. **Seeds: 12 fixed seeds in PR runs and `swift test`; in the nightly, `LEDGER_PROPERTY_SEED_COUNT` capped at
+   200.** The PR cut is the host contract's (testing-strategy §6). The cap departs from §6's "the nightly runs
+   every seed of the lane" (2,000), for Pete to rule on: a run takes ~0.09 s on the Mac but ~0.6 s in a
+   simulator, so 2,000 serial seeds would add about 20 minutes to each of `Nightly` and `Nightly-Watch`. 2,000
+   seeds were run once on the Mac (`swift test`, nightly lane): all passed. The spec's "100 seeds in CI" is met
+   by the nightly; the PR lane spends ~10 s on the suite in a simulator.
+3. **The suite is `.serialized`.** Run in parallel, 2,000 cases crowded the suite's control test to 52 s of
+   wall time against its one-minute limit; serially every test takes its own time.
+4. **The harness drives receipt through the host's own listener and link task**, not by calling `receive`
+   itself, so the transport path S4a wrote is the one under test; only the hop from network to `incoming` is the
+   harness's.
+5. **The marker depends on the host answering a handshake with its own** (S4a's reply). A host that stopped
+   doing so would fail these tests by their time limit rather than by an expectation; `HostTransportTests` checks
+   that reply directly and would fail first.
+6. **Teeth were checked by mutation** (not committed): a vector of the highest stored `seq` instead of the
+   contiguous one fails criterion 4 on every fixed seed.
+7. **Out of scope here:** the double start (S5; the phone always starts), ends during a partition (criterion 11's
+   ordering), the hung send (criterion 6, S6) and the device halves of 7.
