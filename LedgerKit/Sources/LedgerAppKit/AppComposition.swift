@@ -1,14 +1,8 @@
 import Dependencies
 import FeatureWorkout
 import Foundation
-#if os(iOS)
-    import HealthKit
-#endif
 import LedgerDependencies
 import LedgerDomain
-#if os(iOS)
-    import LedgerHealth
-#endif
 import LedgerPersistence
 import LedgerSync
 import SwiftUI
@@ -194,13 +188,16 @@ public final class AppComposition {
         environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
     }
 
-    /// Binds the six stores, this device's id, the live workout's host, and the haptics its cover plays and
-    /// the announcements it makes (F10 S6, S7); binds nothing until the database is open. The app binds once,
-    /// process-wide, through `prepareDependencies`; the logger and the other device keys keep their live
-    /// values (the device ones are stubs until F16–F23).
+    /// Binds the six stores, this device's id, the live workout's host, the haptics its cover plays and the
+    /// announcements it makes (F10 S6, S7), and the health store (F16 S3a); binds nothing until the database is
+    /// open. The app binds once, process-wide, through `prepareDependencies`; the logger and the other device keys
+    /// keep their live values (stubs until F17–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
+            if let healthStore = environment.healthStore {
+                values.healthStore = healthStore
+            }
         }
         if let session {
             values.workoutSession = session
@@ -257,12 +254,12 @@ extension AppComposition {
         var regionalSettings: LedgerDomain.Settings?
         /// The appearance a UI test asked for (`UITestAppearance`); nil follows the device.
         var colorScheme: ColorScheme?
+        /// The phone's HealthKit store, over the mirroring handler's sessions (F16 S3a); nil binds none.
+        var healthStore: (any HealthStore)?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
-            #if os(iOS)
-                let registrar = MirroringStartRegistrar<HKWorkoutSession>()
-            #endif
+            let health = liveHealth()
             #if canImport(WatchConnectivity)
                 let activator = CompanionSessionActivator()
             #endif
@@ -276,11 +273,7 @@ extension AppComposition {
                 newID: { UUID() },
                 logger: launchLogger,
                 record: { event in launchLogger.log.debug("Launch: \(String(describing: event), privacy: .public)") },
-                assignMirroringHandler: {
-                    #if os(iOS)
-                        registrar.register()
-                    #endif
-                },
+                assignMirroringHandler: health.assignHandler,
                 activateCompanionSession: {
                     #if canImport(WatchConnectivity)
                         activator.activate()
@@ -293,7 +286,8 @@ extension AppComposition {
                 seedsUITestProgram: UITestProgram.liveSeeds(arguments: arguments),
                 uiTestHistoryWeeks: UITestHistory.liveWeeks(arguments: arguments),
                 regionalSettings: UITestRegion.liveSettings(isUITest: isUITest),
-                colorScheme: UITestAppearance.liveColorScheme(arguments: arguments)
+                colorScheme: UITestAppearance.liveColorScheme(arguments: arguments),
+                healthStore: health.store
             )
         }
     }

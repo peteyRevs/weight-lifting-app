@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 @testable import LedgerAppKit
 import LedgerDependencies
+import LedgerDomain
 import LedgerPersistence
 
 /// A composition on a fresh temporary directory (testing-strategy §3 rule 3), with stand-ins for the mirroring
@@ -47,7 +48,8 @@ final class Harness {
         processStart: Date? = nil,
         failedFinishes: Int? = nil,
         seedsUITestProgram: Bool = false,
-        uiTestHistoryWeeks: Int? = nil
+        uiTestHistoryWeeks: Int? = nil,
+        healthStore: (any HealthStore)? = nil
     ) -> AppComposition {
         AppComposition(
             AppComposition.Environment(
@@ -65,7 +67,8 @@ final class Harness {
                 processStart: processStart,
                 failedFinishes: failedFinishes,
                 seedsUITestProgram: seedsUITestProgram,
-                uiTestHistoryWeeks: uiTestHistoryWeeks
+                uiTestHistoryWeeks: uiTestHistoryWeeks,
+                healthStore: healthStore
             )
         )
     }

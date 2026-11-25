@@ -5,28 +5,33 @@
     import WatchKit
 
     /// The watch app's delegate (architecture §4): the workout launches HealthKit hands the app, a start from the
-    /// phone (`handle(_:)`) and the recovery of a session the system ended (`handleActiveWorkoutRecovery()`). Both
-    /// belong to `healthStore`; its protocol has no methods until F16, so for now they only log. The database
-    /// opens in `App.init` (`WatchComposition.launch()`), before either arrives.
+    /// phone (`handle(_:)`) and the recovery of a session the system ended (`handleActiveWorkoutRecovery()`), both
+    /// handed to `healthStore` (F16 S3a). The database opens in `App.init` (`WatchComposition.launch()`), which binds
+    /// the store, before either arrives.
     public final class WatchAppDelegate: NSObject, WKApplicationDelegate {
         @Dependency(\.healthStore) private var healthStore
         private let logger = LedgerLogger(category: "health")
+        /// The recovery `handleActiveWorkoutRecovery()` started: the system's call cannot wait for it.
+        private(set) var recovery: Task<Void, Never>?
 
+        /// Reported as `.startRequestedByPhone`; the watch's workout screen starts the session (F18).
         public func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
             let activity = workoutConfiguration.activityType.rawValue
-            let store = storeName
-            logger.log
-                .notice("Workout start (activity \(activity, privacy: .public)) left to \(store, privacy: .public)")
+            logger.log.notice("The phone asked for a workout (activity \(activity, privacy: .public))")
+            healthStore.noteStartRequestedByPhone()
         }
 
         public func handleActiveWorkoutRecovery() {
-            let store = storeName
-            logger.log.notice("Workout recovery left to \(store, privacy: .public)")
-        }
-
-        /// The bound health store's type: an `Unimplemented` stub until F16.
-        private var storeName: String {
-            String(describing: type(of: healthStore))
+            let store = healthStore
+            let recoveryLogger = logger.log
+            recovery = Task {
+                do {
+                    let recovered = try await store.recoverActiveSession()
+                    recoveryLogger.notice("Workout recovery found a session: \(recovered, privacy: .public)")
+                } catch {
+                    recoveryLogger.error("Workout recovery failed: \(String(describing: error), privacy: .public)")
+                }
+            }
         }
     }
 #endif

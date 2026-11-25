@@ -49,6 +49,15 @@
         }
     }
 
+    /// Runs a HealthKit call, any failure as a `HealthError`.
+    func healthKitCall<T>(_ call: () async throws -> T) async throws -> T {
+        do {
+            return try await call()
+        } catch {
+            throw HealthError(error)
+        }
+    }
+
     extension HealthError {
         /// `error` as a `HealthError`: HealthKit's codes that the cases name, any other by its code alone, and never
         /// its text (criterion 14).
@@ -85,10 +94,8 @@
             guard HKHealthStore.isHealthDataAvailable() else {
                 throw HealthError.unavailable
             }
-            do {
+            try await healthKitCall {
                 try await healthStore.requestAuthorization(toShare: HealthTypeSet.share, read: HealthTypeSet.read)
-            } catch {
-                throw HealthError(error)
             }
             return authorization()
         }

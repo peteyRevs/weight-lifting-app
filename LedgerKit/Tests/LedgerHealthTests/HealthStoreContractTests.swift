@@ -182,6 +182,13 @@ extension HealthStoreContractTests {
         #expect(try await !FakeHealthStore(authorization: .authorized).recoverActiveSession())
     }
 
+    @Test("The phone's request to start, as the watch app is handed it, is reported")
+    func startRequestedByPhone() async {
+        let store = FakeHealthStore(authorization: .authorized)
+        store.noteStartRequestedByPhone()
+        #expect(await Self.next(1, of: store.events) == [.startRequestedByPhone])
+    }
+
     @Test("Asking the watch to start throws watchAppUnavailable when the watch app is missing")
     func requestWatchStart() async throws {
         try await FakeHealthStore(authorization: .authorized).requestWatchStart()

@@ -1,17 +1,15 @@
 import Foundation
-#if os(watchOS)
-    import HealthKit
-#endif
 import LedgerDomain
 import os
 
 /// `HealthStore` over HealthKit (F16; architecture §9). The state machine is the same on every platform and
-/// drives a `WorkoutSessionProvider`: in tests, a script; on the watch, `HealthKitSessionProvider` (F16 S2b). The
-/// phone's calls throw `HealthError.unavailable` until S3, which also binds the store in the compositions.
+/// drives a `WorkoutSessionProvider`: in tests, a script; on the watch, `HealthKitSessionProvider` (S2b). On the
+/// phone (S3a) it reads a `MirrorReceiver` instead: the watch's mirrored sessions. The phone's own calls throw
+/// `HealthError.unavailable` until S3b.
 ///
 /// Each delegate callback reaches the actor through the session's `callbacks` stream, which one listener task
 /// per session reads in order; the task is the session's, and is cancelled when the session ends. It is the
-/// store's own `remoteChannel`, over the watch's primary session.
+/// store's own `remoteChannel`: over the watch's primary session, or the phone's newest mirrored one.
 public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
     /// How long mirroring to the phone may take before the session runs without it (R1 §2.5 gotcha 5).
     static let mirroringTimeout = Duration.seconds(10)
@@ -27,6 +25,9 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
 
     let provider: any WorkoutSessionProvider
     private let clock: any Clock<Duration>
+    let mirror: (any MirrorReceiver)?
+    /// Forwards the mirror's events to `events`, `connection` and `incoming`, for the store's life.
+    private let mirrorListener: Task<Void, Never>?
     let now: @Sendable () -> Date
     let brandName: String?
     let sink: AsyncStream<HealthSessionEvent>.Continuation
@@ -62,33 +63,31 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
     }
 
     /// `brandName` is what Health shows as the workout's source; `clock` times mirroring and its retries, `now`
-    /// dates a discard.
+    /// dates a discard. On the phone, `onMirrorStart` runs after each `.mirrorConnected` (F21 starts
+    /// the Live Activity there, within the 10 s HealthKit gives a background launch); the workout's id is nil
+    /// until F17 learns it from the watch.
     init(
         provider: any WorkoutSessionProvider,
         brandName: String? = nil,
         clock: any Clock<Duration> = ContinuousClock(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        mirror: (any MirrorReceiver)? = nil,
+        onMirrorStart: @escaping @Sendable (WorkoutID?) async -> Void = { _ in }
     ) {
         self.provider = provider
         self.brandName = brandName
         self.clock = clock
         self.now = now
+        self.mirror = mirror
         (events, sink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (connection, connectionSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (incoming, incomingSink) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
+        let sinks = Sinks(events: sink, connection: connectionSink, incoming: incomingSink)
+        mirrorListener = mirror.map { Self.forward($0.mirrorEvents, to: sinks, onMirrorStart: onMirrorStart) }
     }
 
-    #if os(watchOS)
-        /// The watch's store, over `healthStore`, branded with the app's name from `bundle`.
-        public init(healthStore: HKHealthStore = HKHealthStore(), bundle: Bundle = .main) {
-            self.init(
-                provider: HealthKitSessionProvider(healthStore: healthStore),
-                brandName: HealthMetadataKey.brandName(bundle.object(forInfoDictionaryKey:))
-            )
-        }
-    #endif
-
     deinit {
+        mirrorListener?.cancel()
         session?.listener.cancel()
         session?.retry?.cancel()
     }
@@ -133,6 +132,11 @@ public actor LiveHealthStore: HealthStore, RemoteSessionChannel {
         session?.isRunning = true
         logger.notice("Workout session running")
         sink.yield(.running(since: start))
+    }
+
+    public nonisolated func noteStartRequestedByPhone() {
+        logger.notice("The phone asked the watch to start a workout")
+        sink.yield(.startRequestedByPhone)
     }
 
     public func heartRate() -> AsyncStream<HeartRateSample> {

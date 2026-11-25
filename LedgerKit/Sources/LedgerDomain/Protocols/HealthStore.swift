@@ -27,6 +27,9 @@ public protocol HealthStore: Sendable {
     func discardSession() async throws
     /// Takes up a session the system ended with the app. `true` when there was one.
     func recoverActiveSession() async throws -> Bool
+    /// The phone asked the watch to start (`WKApplicationDelegate.handle(_:)`): reported as
+    /// `.startRequestedByPhone`, for the watch's workout screen to start the session.
+    func noteStartRequestedByPhone()
 
     // MARK: Phone
 

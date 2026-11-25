@@ -75,3 +75,25 @@ protocol WorkoutSessionProvider: Sendable {
     /// attached again; nil when there is none.
     func recoverSession() async throws -> (any WorkoutSessionDriver)?
 }
+
+// The phone's half of the seam (F16 S3a): its mirrored sessions.
+
+/// What happens to the phone's mirrored sessions, in order.
+enum MirrorEvent: Equatable, Sendable {
+    /// `workoutSessionMirroringStartHandler` handed over a session (or recovery took one up): it is the newest.
+    case connected
+    /// A session's `didDisconnectFromRemoteDeviceWithError`: that session is dropped.
+    case disconnected
+    /// A session's `didReceiveDataFromRemoteWorkoutSession`.
+    case received([Data])
+}
+
+/// The phone's end of mirroring: `MirroringStartRegistrar`, or a test's script.
+protocol MirrorReceiver: Sendable {
+    /// Every mirrored session's events, for the life of the receiver. One consumer: the store.
+    var mirrorEvents: AsyncStream<MirrorEvent> { get }
+    /// Sends over the newest mirrored session; `noActiveSession` when none is kept.
+    func send(_ data: Data) async throws
+    /// Takes up the mirrored session the system kept after the app ended (iOS 26) as the newest; false when none.
+    func recover() async throws -> Bool
+}

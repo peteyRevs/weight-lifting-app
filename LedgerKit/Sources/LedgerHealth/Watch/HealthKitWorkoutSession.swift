@@ -4,6 +4,16 @@
     import LedgerDomain
     import Synchronization
 
+    public extension LiveHealthStore {
+        /// The watch's store, over `healthStore`, branded with the app's name from `bundle`.
+        init(healthStore: HKHealthStore = HKHealthStore(), bundle: Bundle = .main) {
+            self.init(
+                provider: HealthKitSessionProvider(healthStore: healthStore),
+                brandName: HealthMetadataKey.brandName(bundle.object(forInfoDictionaryKey:))
+            )
+        }
+    }
+
     /// The watch's sessions, from HealthKit (F16 S2b).
     struct HealthKitSessionProvider: WorkoutSessionProvider {
         let healthStore: HKHealthStore
@@ -90,7 +100,7 @@
         }
 
         func beginCollection(at date: Date) async throws {
-            try await mapped { try await builder.beginCollection(at: date) }
+            try await healthKitCall { try await builder.beginCollection(at: date) }
         }
 
         func stopActivity(at date: Date) {
@@ -98,7 +108,7 @@
         }
 
         func endCollection(at date: Date) async throws {
-            try await mapped { try await builder.endCollection(at: date) }
+            try await healthKitCall { try await builder.endCollection(at: date) }
         }
 
         func addMetadata(_ metadata: [String: HealthMetadataValue]) async throws {
@@ -111,12 +121,12 @@
                     )
                 }
             }
-            try await mapped { try await builder.addMetadata(entries) }
+            try await healthKitCall { try await builder.addMetadata(entries) }
         }
 
         /// Writes the workout; the record's statistics are the builder's (HR average and maximum, energy sum).
         func finishWorkout() async throws -> FinishedWorkout {
-            guard let workout = try await mapped({ try await builder.finishWorkout() }) else {
+            guard let workout = try await healthKitCall({ try await builder.finishWorkout() }) else {
                 throw HealthError.noActiveSession
             }
             let heartRate = builder.statistics(for: HealthTypeSet.heartRate)
@@ -141,15 +151,7 @@
         }
 
         func send(_ data: Data) async throws {
-            try await mapped { try await session.sendToRemoteWorkoutSession(data: data) }
-        }
-
-        private func mapped<T>(_ operation: () async throws -> T) async throws -> T {
-            do {
-                return try await operation()
-            } catch {
-                throw HealthError(error)
-            }
+            try await healthKitCall { try await session.sendToRemoteWorkoutSession(data: data) }
         }
     }
 

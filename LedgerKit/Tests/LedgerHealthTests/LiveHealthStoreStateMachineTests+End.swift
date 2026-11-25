@@ -153,5 +153,15 @@
                 HKObjectType.workoutType(), HKQuantityType(.heartRate), HKQuantityType(.activeEnergyBurned)
             ])
         }
+
+        @Test("A HealthKit call returns its value, and fails as a HealthError")
+        func healthKitCall_mapsFailures() async throws {
+            #expect(try await healthKitCall { 7 } == 7)
+            await #expect(throws: HealthError.unavailable) {
+                try await healthKitCall {
+                    throw NSError(domain: HKErrorDomain, code: HKError.Code.errorHealthDataUnavailable.rawValue)
+                }
+            }
+        }
     }
 #endif
