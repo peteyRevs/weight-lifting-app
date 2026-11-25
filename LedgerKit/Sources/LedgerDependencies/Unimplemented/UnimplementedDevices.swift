@@ -82,7 +82,22 @@ struct UnimplementedHealthStore: HealthStore, RemoteSessionChannel {
     }
 }
 
-struct UnimplementedLiveWorkoutTransport: LiveWorkoutTransport {}
+/// Throws from `send`; both streams end at once.
+struct UnimplementedLiveWorkoutTransport: LiveWorkoutTransport {
+    let stub = Unimplemented(key: "liveWorkoutTransport")
+
+    var incoming: AsyncStream<WireFrame> {
+        stub.emptyStream()
+    }
+
+    var link: AsyncStream<Bool> {
+        stub.emptyStream()
+    }
+
+    func send(_: WireFrame) async throws {
+        throw stub.failure()
+    }
+}
 
 struct UnimplementedCompanionTransport: CompanionTransport {}
 

@@ -194,3 +194,14 @@ extension UnimplementedStubTests {
         #expect(await Self.isEmpty(stub.remoteChannel.incoming))
     }
 }
+
+extension UnimplementedStubTests {
+    @Test("The live transport's stub throws from send and ends both streams")
+    func liveWorkoutTransport() async {
+        let stub = LiveWorkoutTransportKey.liveValue
+        let frame = WireFrame.handshake(workoutID: Self.workout, contiguousSeq: [:])
+        await Self.expectUnimplemented("liveWorkoutTransport", [{ try await stub.send(frame) }])
+        #expect(await Self.isEmpty(stub.incoming))
+        #expect(await Self.isEmpty(stub.link))
+    }
+}
