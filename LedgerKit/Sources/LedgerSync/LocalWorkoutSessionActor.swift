@@ -55,6 +55,8 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
     var hasUnstoredEnds = false
     /// The workouts this host received another device's envelope for (`hasWatchParticipant(_:)`).
     var participants: Set<WorkoutID> = []
+    /// The transport, once connected (`connect(_:clock:)`).
+    var connection = Connection()
     private var subscribers: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
     /// Waits for the operation queued last.
     private var queued: @Sendable () async -> Void = {}
@@ -79,6 +81,11 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
         self.programs = programs
         self.device = device
         self.now = now
+    }
+
+    deinit {
+        connection.links.forEach { $0.cancel() }
+        connection.outbox?.finish()
     }
 
     // MARK: WorkoutSessionClient
@@ -193,6 +200,7 @@ private extension LocalWorkoutSessionActor {
             throw WorkoutSessionError.workoutInProgress(workout.id)
         }
         try await persist(envelope)
+        transmit(effects)
         clock = advanced
         guard kept == nil else {
             isRecovered = false
@@ -228,6 +236,7 @@ private extension LocalWorkoutSessionActor {
             throw WorkoutSessionError.incompleteLog(workout.id)
         }
         try await persist(envelope)
+        transmit(effects)
         (clock, seq) = (advanced, envelope.seq)
         let haptics = WorkoutSessionUpdate.haptics(from: effects)
         guard next.phase == .live else {
