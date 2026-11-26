@@ -123,6 +123,9 @@ final class WorkoutStore {
     /// The live connection to the watch as last heard (`followConnection()`), nil before its first word: the
     /// header's line about the watch, and nothing else (F17 criterion 12).
     private(set) var connection: LiveConnectionState?
+    /// Whether this cover has heard any state but `solo` (`followConnection()`): from then on `solo` means the watch
+    /// is away, not absent, and the header keeps its line. Never set back.
+    private(set) var hasHeardTheWatch = false
 
     @ObservationIgnored @Dependency(\.workoutSession) var session
     @ObservationIgnored @Dependency(\.liveConnection) private var liveConnection
@@ -154,7 +157,8 @@ final class WorkoutStore {
             isBusy: isBusy,
             locale: locale,
             calendar: calendar,
-            connection: connection
+            connection: connection,
+            hasHeardTheWatch: hasHeardTheWatch
         )
     }
 
@@ -244,11 +248,14 @@ extension WorkoutStore {
     }
 
     /// Hears the live connection to the watch for as long as the cover is up (F17 criterion 12): the state shown,
-    /// then each change. It only sets `connection`, which gives the header its line; no control waits on it, and a
-    /// stream that ends leaves the last state heard.
+    /// then each change. It only sets `connection` and `hasHeardTheWatch`, which give the header its line; no control
+    /// waits on it, and a stream that ends leaves the last state heard.
     func followConnection() async {
         for await state in await liveConnection.states() {
             connection = state
+            if state != .solo {
+                hasHeardTheWatch = true
+            }
         }
     }
 

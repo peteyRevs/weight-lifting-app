@@ -104,15 +104,16 @@ both (subsystem `com.petearevalo.Ledger`, category `sync`). Their fake-backed ha
 `F17-live-sync/implementation-notes.md` (§ Slice S8, "Device checklist") as well as the run's results file.
 
 **What the phone's header shows (F17 S8).** "Watch not connected — logging continues" shows under the progress bars
-only while the connection is `reconnecting`: the 30 s after the watch was last reached. `connected` (either channel),
-`degraded` and `solo` show no line. So:
+while the connection is `reconnecting` (the 30 s after the watch was last reached), and in `solo` once the open
+workout screen has heard the watch. `connected` (either channel) and `degraded` show no line, nor does `solo` on a
+screen that never heard the watch (a lifter with no watch). So:
 - Scenario 1's "phone header 'Connected'" reads as "no line under the bars": there is no "Connected" text.
-- In scenario 4 the phone's line shows for about 30 s after the watch goes out of reach, then goes (`solo`). The
-  watch's line ("iPhone not connected — logging continues") is F18's.
+- In scenario 4 the phone's line shows from the drop until the watch is reached again, through `reconnecting` and
+  then `solo`. The watch's line ("iPhone not connected — logging continues") is F18's.
 
 | # | Criterion | Steps | Expected |
 |---|---|---|---|
-| F17-a | 7 (extends 4) | Start on the watch. Put the phone in airplane mode, or 10 m away and locked, so the watch is `solo`. Log 12 sets on the watch over 10 min. Turn airplane mode off, or bring the phone back and unlock it. | Within the first 30 s of the drop the phone's header shows "Watch not connected — logging continues", and every control still answers. Within 5 s of the reconnect the phone shows all 12 sets; Console shows one handshake each way (`sync.handshake`) and no "conflicting envelope". |
+| F17-a | 7 (extends 4) | Start on the watch. Put the phone in airplane mode, or 10 m away and locked, so the watch is `solo`. Log 12 sets on the watch over 10 min. Turn airplane mode off, or bring the phone back and unlock it. | From the drop until the reconnect the phone's workout screen, if it was open with the watch connected, shows "Watch not connected — logging continues", and every control still answers. With Ledger on a phone that has no paired watch, no line ever shows. Within 5 s of the reconnect the phone shows all 12 sets; Console shows one handshake each way (`sync.handshake`) and no "conflicting envelope". |
 | F17-b | 11 (extends 10) | Start on the phone, log 2 sets. Put the watch out of reach (airplane mode on the watch). Finish on the phone (Save workout). Bring the watch back. | On reconnect the watch applies the finish: its HealthKit session ends (F16), the watch leaves the workout, and both Histories hold one workout with the 2 sets. Health holds one workout, saved by the watch. |
 | F17-c | 13 (extends 3) | With both apps open and mirroring off (the watch app not in a workout, or after a mirroring hang: `degraded`), log a set on the watch. Repeat 10 times. | The phone's row ticks in under 1 s each time. In Instruments (os_signpost, category `sync`) each `sync.roundtrip` interval is under 1 s; record the median and the worst. |
 | F17-d | 12 (the line) | During F17-a, with VoiceOver on, move to the line. | VoiceOver reads "Watch not connected — logging continues" once, as text, and does not re-announce it while it stays. Minimize, Finish and every set row still answer. |

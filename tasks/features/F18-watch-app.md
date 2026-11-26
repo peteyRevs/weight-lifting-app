@@ -101,8 +101,9 @@ _Filled in by agents during delivery:_
   code yet: `WatchFeatureWorkout` has no catalog, and `ModuleCopyTests` says why it cannot have one before F18 (the
   gate's catalog step reads only the iOS build). F18 adds it to the watch's catalog with its copy test.
 - **When it shows:** the phone shows its line ("Watch not connected — logging continues",
-  `WorkoutPresentation.connectionLine`) only while the connection is `.reconnecting`; `connected`, `degraded` and
-  `solo` show none (F17 S8, decision 1). The watch should follow the same rule, or Pete's ruling if he changes it.
+  `WorkoutPresentation.connectionLine`) while the connection is `.reconnecting`, and in `.solo` once its workout
+  screen has heard any other state; `connected`, `degraded` and a `solo` never preceded by another state show none
+  (F17 S8, decision 1). The watch should follow the same rule.
 - **Reading it:** `@Dependency(\.liveConnection)`, `states()`: the state now, then each change. The watch's
   composition already binds it to its transport (F17 S7b). `FakeLiveConnection(_:scripted: true)` scripts it in tests
   (`change(to:)`, `end()`).

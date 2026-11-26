@@ -185,7 +185,7 @@ keeping with no PR yet.
 
 - [ ] F16 · [x] F17 · [ ] F18 · [ ] F19 · [ ] F20
   - F16's code is on `main` (S1–S3b: #128, #130, #131, #132 and this slice). Its box stays unticked until Pete runs the device checklist in `features/F16-healthkit/implementation-notes.md` (§ Device checklist, with F20 scenario 15) on iPhone 17 + Apple Watch Series 9 and pastes the results there; most steps need the screens F17–F19 bring.
-  - F17's code is on `main` (S1–S7b: #136–#148, and S8). Every non-device criterion is met (1–6, 8–10, 12, and the fake-backed halves of 7, 11 and 13). The device halves of 7, 11 and 13, and the line read on a device, are in F20 ("Inputs from F17", rows F17-a to F17-d); 7 and 13 need F18's screens to log on the wrist. Open for Pete: whether the phone's line also shows in `solo` (`features/F17-live-sync/implementation-notes.md`, § Slice S8, "Needs Pete").
+  - F17's code is on `main` (S1–S7b: #136–#148, and S8). Every non-device criterion is met (1–6, 8–10, 12, and the fake-backed halves of 7, 11 and 13). The device halves of 7, 11 and 13, and the line read on a device, are in F20 ("Inputs from F17", rows F17-a to F17-d); 7 and 13 need F18's screens to log on the wrist.
   - F17 follow-up: #143, keep a saved workout's log until the peer acknowledges it (a log compacted after the save can drop envelopes a partitioned peer still lacks).
 - [ ] M2 exit: start on either device, log on both, disconnect mid-workout, reconnect, finish on either → one workout in history with HR, saved to Health.
 
