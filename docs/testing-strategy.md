@@ -641,6 +641,9 @@ xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch
   -resultBundlePath .derivedData/Results/PR-watchOS.xcresult \
   -parallel-testing-enabled YES -test-timeouts-enabled YES \
   -default-test-execution-time-allowance 60 -quiet | mise x -- xcbeautify
+#   as in step 3, check.sh builds first, then compares the watch modules'
+#   catalogs with the keys the watch build extracted, then tests      <1 s
+scripts/check-string-catalogs.sh --watch
 # 5 coverage gate                                                     ~10 s
 scripts/coverage-gate.sh .derivedData/Results/PR-iOS.xcresult .derivedData/Results/PR-watchOS.xcresult
 ```
@@ -668,8 +671,21 @@ Xcode updates a catalog with) would write it: keys in order, each written
 once, a comment given in code (`comment:`) kept as the code gives it. The
 final newline is set aside. The check runs in every mode that builds iOS (the
 full gate, `--ios-only`, `--skip-lint`, `--skip-static` and
-`--record-snapshots`), never on the watch build, and has its own line in the
-timing table. It only reads the catalog.
+`--record-snapshots`), and has its own line in the timing table. It only reads
+the catalog.
+
+Step 4 runs it again with `--watch` right after the watch build and before
+the watch tests, in every mode that builds the watch (the full gate,
+`--watch-only`, the nightly's watch legs, `--record-snapshots`), with its own
+timing line (F18 S0). Each run checks its own platform's modules and names the
+others as not checked there: `--watch` takes the watch modules
+(`LedgerWatchAppKit`, `WatchFeatureWorkout`; the script's `WATCH_MODULES`)
+and reads only the watch build's `.stringsdata`
+(`Debug-watchsimulator`); without it every other module is read from the iOS
+build's (`Debug-iphonesimulator`). A module's keys never come from the other
+platform's folder, where an older build may have left them. `--ios-only`, and
+so PR CI, builds no watch scheme and runs no `--watch` check: the full local
+gate does, before every merge.
 
 A lookup that is not in a copy file (`<Name>Copy.swift`,
 `<Name>Copy+<Area>.swift`) fails first, with its file and line, whether or not
@@ -683,9 +699,10 @@ key to the catalog or deletes it, or corrects the lookup.
 When the keys agree but the file differs, the failure shows a diff against
 what the tool writes, and the author edits the catalog to match. A catalog
 with no `.stringsdata` to compare with fails too, and so does a repository in
-which no catalog is found: the step never passes on nothing. That is also what
-a catalog in a watch module meets, because the iOS build does not compile it:
-`LedgerWatchAppKit` and `WatchFeatureWorkout` get their catalogs with F18.
+which no catalog of that platform's modules is found: the step never passes
+on nothing. A module the iOS build does not compile and the script does not
+list as a watch module fails without `--watch`, and the message says to list
+it.
 Any other `*.xcstrings` under `LedgerKit/Sources` fails the step: a module has
 one catalog, in one place. A record run stops at a failing catalog before any
 reference is recorded.

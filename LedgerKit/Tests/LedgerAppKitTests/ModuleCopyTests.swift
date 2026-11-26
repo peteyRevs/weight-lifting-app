@@ -7,7 +7,8 @@ import Testing
 ///
 /// - `CopyAudit` reads each audited module's sources: no copy outside its copy files, only the two lookup forms
 ///   inside them, a sound catalog.
-/// - The bundle the build made resolves every key of every catalog.
+/// - The bundle the build made resolves every key of every catalog. This bundle, in the iOS plan, holds no watch
+///   module's: each watch module's copy test, in the PR-Watch plan, asks the watch's (`watchOnly`).
 /// - That each catalog's keys are the keys the compiler extracted is the gate's step
 ///   (`scripts/check-string-catalogs.sh`), not a test.
 @Suite("Module copy")
@@ -28,17 +29,16 @@ nonisolated struct ModuleCopyTests {
     /// Modules that draw text and do not follow standards §7 yet. This table only shrinks: a module leaves it in
     /// the change that gives it a copy file and a catalog, and `notYetConverted_stillFailsTheAudit` fails for a
     /// module that could leave it and has not.
-    ///
-    /// The watch waits for F18. The gate's catalog step reads the iOS build, which compiles neither watch module,
-    /// and this test bundle does not embed their resource bundles, so a catalog there would fail both. F18 gives
-    /// `LedgerWatchAppKit` and `WatchFeatureWorkout` their catalogs (the second holds no copy yet, so it is
-    /// audited today and not listed here).
     static let notYetConverted = [
         "LedgerDesign": "14 lookups in six files (VoiceOver words in WeekStrip and SetRow, the Debug menu, the "
-            + "gallery's samples); the chore after F09 S1 converts it",
-        "LedgerWatchAppKit": "the placeholder's title and the can't-open screen, as literals; converts with F18, "
-            + "when the catalog step reads the watch build and a watch test target asks the watch bundles"
+            + "gallery's samples); the chore after F09 S1 converts it"
     ]
+
+    /// The modules only the watch build compiles (F18 S0). They are audited as every other module is, and the gate's
+    /// catalog step checks them after the watch build (its `WATCH_MODULES` names the same two). This test bundle, in
+    /// the iOS plan, embeds neither one's resource bundle, so each one's copy test (`WatchAppCopyTests`,
+    /// `WatchWorkoutCopyTests`), in the PR-Watch plan, asks the watch's bundle for every key of its catalog instead.
+    static let watchOnly: Set<String> = ["LedgerWatchAppKit", "WatchFeatureWorkout"]
 
     /// What each audited module sets aside (`CopyAudit.Exemptions`; standards §7: the reviewer confirms each).
     /// A shared file in the sense of M1 convention 4: a feature lane adds only its own module's entry.
@@ -87,6 +87,12 @@ nonisolated struct ModuleCopyTests {
             ],
             // The Debug menu's Diagnostics sections.
             debugOnly: ["AppComposition+Diagnostics.swift"]
+        ),
+        "LedgerWatchAppKit": CopyAudit.Exemptions(
+            // The UI-test launch argument (twice) and the temporary database's path: read by the launch, never drawn.
+            literals: ["WatchComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"]],
+            // The Debug menu's Diagnostics sections.
+            debugOnly: ["WatchComposition+Diagnostics.swift"]
         )
     ]
 
@@ -128,6 +134,7 @@ nonisolated struct ModuleCopyTests {
         #expect(named.subtracting(Self.modules) == [], "a table names a module the package does not have")
         #expect(Set(Self.withoutCopyByDesign.keys).intersection(Self.notYetConverted.keys) == [])
         #expect(Set(Self.exemptions.keys).subtracting(Self.audited) == [], "an exemption for a module not audited")
+        #expect(Self.watchOnly.subtracting(Self.audited) == [], "a watch module that is not audited")
         #expect(Self.audited.contains("LedgerAppKit") && Self.audited.contains("FeatureToday"))
     }
 
@@ -147,12 +154,24 @@ nonisolated struct ModuleCopyTests {
         )
     }
 
-    @Test("The bundle the build made resolves every key of a module's catalog", arguments: modules.filter(hasCatalog))
+    @Test(
+        "The bundle the build made resolves every key of a module's catalog",
+        arguments: modules.filter { hasCatalog($0) && !watchOnly.contains($0) }
+    )
     func builtBundle_resolvesEveryKey(of module: String) throws {
         let catalog = try StringCatalog(module: module)
         let bundle = try #require(StringCatalog.resourceBundle(ofModule: module), "no resource bundle for \(module)")
         #expect(!catalog.keys.isEmpty)
         #expect(catalog.unresolvedKeys(in: bundle) == [])
+    }
+
+    @Test(
+        "Each watch module has a catalog, whose bundle this one lacks: the watch's copy tests ask it",
+        arguments: watchOnly.sorted()
+    )
+    func watchModule_hasACatalogThisBundleCannotAsk(_ module: String) {
+        #expect(Self.hasCatalog(module))
+        #expect(StringCatalog.resourceBundle(ofModule: module) == nil, "this bundle has it now: ask it above")
     }
 
     @Test("At least one module has a catalog, so the bundle check above checks something")

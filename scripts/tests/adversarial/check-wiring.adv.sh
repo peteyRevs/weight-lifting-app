@@ -77,7 +77,9 @@ SH
 stub "$SB/scripts/check-package-graph.sh" 'log package-graph; fail_if package-graph'
 stub "$SB/scripts/check-package-pins.sh" 'log package-pins; fail_if package-pins'
 stub "$SB/scripts/check-catalog-version.sh" 'log catalog-version; fail_if catalog-version'
-stub "$SB/scripts/check-string-catalogs.sh" 'log "string-catalogs $*"; fail_if string-catalogs'
+# The watch modules' check (--watch) has its own id, so that a failure can be injected at either one.
+stub "$SB/scripts/check-string-catalogs.sh" 'id=string-catalogs; [ "${1-}" != --watch ] || id=string-catalogs-watch
+log "$id $*"; fail_if "$id"'
 stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; r="$1"; shift 2; log "$id $r${*:+ $*}"; fail_if "$id"'
 stub "$SB/scripts/coverage-gate.sh" 'log "coverage-gate $*"; fail_if coverage-gate'
 stub "$SB/scripts/tests/a.test.sh" 'log script-test-a; echo "${LEDGER_ADV_SUITES-unset}" >>"$LOG.suites"; fail_if script-test-a'
@@ -103,7 +105,7 @@ FULL="xcode-version mise-install swiftformat-version swiftlint-version swiftform
 package-pins catalog-version script-test-a script-test-b \
 simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR \
-simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
+simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify string-catalogs-watch \
 simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-test-results-PR-Watch coverage-gate"
 FULL="$(echo $FULL) "
 
@@ -161,7 +163,8 @@ if [[ $code -eq 0 && "$calls" == "$want" ]]; then pass "W09 --skip-lint runs too
 want: $want
 got:  $calls"; fi
 for id in xcodebuild-build-for-testing-Ledger string-catalogs xcodebuild-test-without-building-Ledger check-test-results-PR \
-    xcodebuild-build-for-testing-LedgerWatch xcodebuild-test-without-building-LedgerWatch check-test-results-PR-Watch coverage-gate; do
+    xcodebuild-build-for-testing-LedgerWatch string-catalogs-watch xcodebuild-test-without-building-LedgerWatch \
+    check-test-results-PR-Watch coverage-gate; do
     FAIL_AT="$id" run --skip-lint
     expect_exit "W10 --skip-lint: failure at $id fails" nonzero "$code"
 done
@@ -510,16 +513,21 @@ check "W68 the suites that need macOS, which run only on the Mac in PR CI, are e
     is "$marked" "catalog-version-attack.adv.sh ci-post-clone.adv.sh coverage-gate.adv.sh string-catalogs-tester.adv.sh \
 string-catalogs.adv.sh xcode27.adv.sh "
 
-# ---- F09: every String Catalog is checked against the keys the iOS build extracted ------------------
+# ---- F09: every String Catalog is checked against the keys its platform's build extracted ----------
 # W02 (the full gate), W09 (--skip-lint), W49 (--ios-only), W54 and W62 (--skip-static) pin its place:
 # after the iOS build, before the wait for the simulator and the iOS tests. W04, W10 and W53 stop on it.
+# The watch modules' (F18 S0): W02, W09, W89 and W91 pin it after the watch build, before the watch tests;
+# W04 and W10 stop on it.
 run
-check "W70 the string catalog check runs once, on check.sh's own repository and derived data (no argument), never after the watch build" \
+check "W70 the string catalog check runs twice, on check.sh's own repository and derived data: the iOS modules' (no argument) \
+before the watch build, the watch modules' (--watch alone) after it" \
     is "$code $(grep -c '^string-catalogs' "$LOG") $(grep -c '^string-catalogs $' "$LOG") \
-$(sed -n '/^xcodebuild-build-for-testing-LedgerWatch /,$p' "$LOG" | grep -c '^string-catalogs')" "0 1 1 0"
-check "W71 ... as part of step 3, with its own line in the timing summary" \
+$(sed -n '/^xcodebuild-build-for-testing-LedgerWatch /,$p' "$LOG" | grep '^string-catalogs')" \
+    "0 2 1 string-catalogs-watch --watch"
+check "W71 ... as part of steps 3 and 4, each with its own line in the timing summary" \
     is "$(grep -c '==> 3 · string catalogs (each against the keys the iOS build extracted)' <<<"$out") \
-$(grep -cE '^ +[0-9]+s  string catalogs$' <<<"$out")" "1 1"
+$(grep -c '==> 4 · string catalogs (each against the keys the watchOS build extracted)' <<<"$out") \
+$(grep -cE '^ +[0-9]+s  iOS string catalogs$' <<<"$out") $(grep -cE '^ +[0-9]+s  watchOS string catalogs$' <<<"$out")" "1 1 1 1"
 # A record run's calls are the full gate's, but each bundle is read where its results would be checked,
 # and the changed references are listed where the coverage gate would run.
 RECORD_CALLS="${FULL//check-test-results-PR-Watch/xcresulttool}"
@@ -534,6 +542,10 @@ check "W73 ... and a catalog that does not match stops the record run there: no 
 FAIL_AT=string-catalogs run --ios-only --record-snapshots
 check "W73 ... (--ios-only --record-snapshots the same)" \
     is "$code $(record_log) $(grep -c 'references recorded' <<<"$out")" "1 boot $I;build-for-testing $I; 0"
+FAIL_AT=string-catalogs-watch run --record-snapshots
+check "W73 ... and a watch catalog that does not match stops it after the watch build: the iOS references are recorded, no watch test runs" \
+    is "$code $(record_log) $(grep -c 'references recorded' <<<"$out")" \
+    "1 boot $I;build-for-testing $I;bootstatus $I;test-without-building $I;xcresulttool;boot $W;build-for-testing $W; 0"
 stub "$SB/scripts/tests/adversarial.test.sh" 'log "adversarial-${LEDGER_ADV_SUITES-unset}"; fail_if adversarial' # as W62
 FAIL_AT=string-catalogs run --ios-only --skip-static
 check "W74 --ios-only --skip-static (PR CI's Check): a catalog that does not match stops it after the iOS build, before any test" \
@@ -624,7 +636,7 @@ for ((n = 1; n <= watch_legs; n++)); do
     run --nightly --watch-only --skip-lint --shard "$n/$watch_legs"
     check "W89 --nightly --watch-only --skip-lint --shard $n/$watch_legs: tools, then only the watch build, boot, leg $n's tests and results" \
         is "$code $calls|$(grep '^check-test-results' "$LOG")|$(lifecycle)" "0 xcode-version mise-install swiftformat-version swiftlint-version \
-simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
+simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify string-catalogs-watch \
 simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-test-results-Nightly-Watch \
 |check-test-results-Nightly-Watch .derivedData/Results/Nightly-watchOS-shard$n.xcresult $(targets "$n" nightly-watch)\
 |boot $W;build-for-testing $W;bootstatus $W;test-without-building $W;"
@@ -640,7 +652,7 @@ run --skip-lint; pr_allowance="$(plan_args)"
 run --watch-only --skip-lint
 check "W91 --watch-only --skip-lint: the PR-Watch plan alone, no coverage gate (it reads both platforms)" \
     is "$code $calls|$(plan_args)|$(grep -c 'check\.sh (--watch-only) OK' <<<"$out")" "0 xcode-version mise-install swiftformat-version swiftlint-version \
-simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
+simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify string-catalogs-watch \
 simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-test-results-PR-Watch \
 |-testPlan PR-Watch -default-test-execution-time-allowance 60 |1"
 plan_max() { jq -r '.defaultOptions.maximumTestExecutionTimeAllowance' "$ROOT/TestPlans/$1.xctestplan"; }

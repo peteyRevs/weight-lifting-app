@@ -169,7 +169,12 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: uiSettings
         ),
-        .target(name: "WatchFeatureWorkout", dependencies: featureSpine, swiftSettings: uiSettings),
+        .target(
+            name: "WatchFeatureWorkout",
+            dependencies: featureSpine,
+            resources: [.process("Resources")],
+            swiftSettings: uiSettings
+        ),
 
         // ---- previews' and tests' fakes (ADR-008) ----------------------------
         // In-memory stores, fixtures and device fakes over LedgerDomain alone, every source inside `#if DEBUG`:
@@ -230,6 +235,7 @@ let package = Package(
                 "LedgerDesign",
                 dependenciesProduct
             ],
+            resources: [.process("Resources")],
             swiftSettings: uiSettings
         )
     ] + testedTargets.map { target in

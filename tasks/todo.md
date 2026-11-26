@@ -21,7 +21,7 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; M0's ap
   - [x] Xcode ▸ Settings ▸ Accounts: signed in (`Apple Development: Peter Arevalo` certificate issued 2026-09-22).
   - [x] Enrolled in the Apple Developer Program as an individual (2026-09-22).
   - [x] Team ID `95JAK545DF` recorded in `Config/Base.xcconfig`; confirmed paid Individual team (Xcode defaults, 2026-09-26).
-  - [x] App IDs `com.petearevalo.Ledger` and `com.petearevalo.Ledger.watchkitapp` exist (registered by Xcode; found 2026-09-29). **Pete:** confirm HealthKit is ticked on both before F16.
+  - [x] App IDs `com.petearevalo.Ledger` and `com.petearevalo.Ledger.watchkitapp` exist (registered by Xcode; found 2026-09-29). HealthKit is ticked on both (Pete confirmed: "it already is selected").
   - [ ] Register iCloud container `iCloud.com.petearevalo.Ledger` (assigned to the iOS App ID in F28; App Group added in F21/F22).
 - [x] Create the GitHub repository (private) and push `main`. (2026-09-18: github.com/peteyRevs/weight-lifting-app)
 - [x] Approve starting M0. (Pete, 2026-09-24)
@@ -46,7 +46,7 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; M0's ap
 - **On `main`:** F00–F07 and F32. Both apps launch to Today on a real database: the catalog is seeded (224 exercises), this device has its row, the HealthKit mirroring handler is assigned first, and a Debug-only menu opens the design gallery and Diagnostics (screenshots in `tasks/features/F07-composition-di/screenshots/`). Releases: v0.2.0–v0.4.0; release PR #23 (0.5.0) is open and is Pete's to merge.
 - **CI:** PR CI runs static checks on Linux, then iOS only on the `xcode-27` preview runner (risk R4); watchOS is tested by the full local gate before every merge. Actions is paid since 2026-09-30 with a $60 monthly limit, so a PR is pushed once, after a green local gate. A code PR's `Check` takes 20–29 minutes; the compilation cache restores but has not yet shortened the build (diagnosis queued).
 - **Process:** PR size is a 500-line code target with a split above ~1,000 (standards §10). Merging is delegated to the orchestrator unless a PR carries a product or architecture decision (workflow G5).
-- **Open for Pete:** the iCloud container (before F28); Xcode Cloud workflows (before F30); confirm HealthKit is ticked on both App IDs (before F16); in Xcode, delete the dangling `Fonts` synchronized group if it is still there.
+- **Open for Pete:** the iCloud container (before F28); Xcode Cloud workflows (before F30); in Xcode, delete the dangling `Fonts` synchronized group if it is still there.
 
 ### F00 delivery — merged 2026-09-27 (#1; the gate's result check landed via #3)
 
