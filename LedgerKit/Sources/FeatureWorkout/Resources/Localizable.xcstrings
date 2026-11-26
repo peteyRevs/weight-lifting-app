@@ -1136,6 +1136,17 @@
         }
       }
     },
+    "Watch not connected — logging continues" : {
+      "comment" : "Line in the workout's header while the Apple Watch is out of reach; every control still works",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watch not connected — logging continues"
+          }
+        }
+      }
+    },
     "Workout progress" : {
       "comment" : "Spoken label of the workout's progress bar",
       "localizations" : {

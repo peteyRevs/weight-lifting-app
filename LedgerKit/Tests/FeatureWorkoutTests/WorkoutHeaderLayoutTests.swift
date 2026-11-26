@@ -40,6 +40,26 @@
             }
         }
 
+        /// F17 S8: the line about the watch wraps under the bars at the largest sizes, inside the phone and over
+        /// no other stop, in every setting.
+        @Test(
+            "The line about the watch stays inside the phone and over nothing, at Accessibility 3 and 5",
+            arguments: [DynamicTypeSize.accessibility3, .accessibility5]
+        )
+        func connectionLine_staysInPlace(_ size: DynamicTypeSize) throws {
+            guard case let .workout(model) = WorkoutPreview.watchNotConnected.model else {
+                throw WorkoutPreview.Unreadable()
+            }
+            let line = try #require(model.header.connection)
+            let header = WorkoutHeader(model: model.header) { _ in }
+                .environment(\.workoutTimeline, .fixed(at: WorkoutPreview.watchNotConnected.now))
+            for setting in LayoutSetting.everySetting(size) {
+                #expect(setting.elements(of: header).last?.label == line, "\(setting.testDescription)")
+                let misplaced = WorkoutLayoutProbe.misplaced(in: header, setting)
+                #expect(misplaced.isEmpty, "\(setting.testDescription): \(misplaced)")
+            }
+        }
+
         /// At the default size the header keeps v2's one row: the time between the two buttons.
         @Test("At the default size the buttons and the time stand in one row")
         func defaultSize_isOneRow() throws {

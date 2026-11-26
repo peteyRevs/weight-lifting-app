@@ -83,6 +83,7 @@
                 "workout",
                 "workout",
                 "workout",
+                "workout",
                 "busy",
                 "loading",
                 "failed"
@@ -106,6 +107,8 @@
             #expect(round2.rows.map(\.state) == [.done, .done, .active, .pending, .pending, .pending])
             #expect(round2.current?.repeatLast == "Repeat")
             #expect(WorkoutPreview.started.model.page?.card?.last == "No history yet")
+            // F17 S8: the one case whose header says the watch is out of reach.
+            #expect(WorkoutPreview.allCases.filter { $0.model.header?.connection != nil } == [.watchNotConnected])
         }
     }
 #endif

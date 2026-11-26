@@ -20,6 +20,7 @@ nonisolated struct WorkoutCopyTests {
         #expect(WorkoutCopy.endWorkout == "End workout?")
         #expect(WorkoutCopy.discard == "Discard")
         #expect(WorkoutCopy.keepLifting == "Keep lifting")
+        #expect(WorkoutCopy.watchNotConnected == "Watch not connected — logging continues")
     }
 
     @Test("The texts the brief does not give read as the notes list them")
@@ -169,7 +170,7 @@ nonisolated struct WorkoutCopyTests {
     @Test("No text holds the product's name")
     func noText_namesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
-        #expect(catalog.keys.count == 109)
+        #expect(catalog.keys.count == 110)
         #expect(!catalog.keys.contains { $0.localizedCaseInsensitiveContains("ledger") })
     }
 }

@@ -10,11 +10,17 @@ nonisolated extension WorkoutPresentation {
     /// orange bar, "Exercise 2 of 5" and the card under them never disagree. The cursor is read through
     /// `checkedCursor`: one that names no row marks no segment, and the progress then has no value to speak.
     /// With every set logged the words name the exercise the cursor rests on, and no segment is current.
+    ///
+    /// `connection` is the live connection to the watch as last heard, nil before the first word of it, and
+    /// `hasHeardTheWatch` whether the cover has heard the watch reached: only the line reads them
+    /// (`connectionLine`), never `isEnabled`, so logging is never blocked on the watch.
     static func header(
         _ state: WorkoutState,
         isBusy: Bool,
         locale: Locale,
-        selection: WorkoutSelection? = nil
+        selection: WorkoutSelection? = nil,
+        connection: LiveConnectionState? = nil,
+        hasHeardTheWatch: Bool = false
     ) -> WorkoutHeaderModel {
         let shown = shownExercise(of: state, selection: selection)
         // The shown exercise is the current one while it has a set to log: none is current once every set is
@@ -31,8 +37,22 @@ nonisolated extension WorkoutPresentation {
             progressLabel: WorkoutCopy.workoutProgress,
             progressValue: shown.map {
                 WorkoutCopy.exercise($0 + 1, of: state.exercises.count, locale: locale)
-            } ?? ""
+            } ?? "",
+            connection: connectionLine(connection, hasHeardTheWatch: hasHeardTheWatch)
         )
+    }
+
+    /// F17 criterion 12: "Watch not connected — logging continues" while the transport is `reconnecting`, the 30 s
+    /// after the watch was last reached, and in `solo` once this cover has heard any other state
+    /// (`hasHeardTheWatch`): the watch took part and is still away. Connected says nothing, nor does degraded, whose
+    /// other channel still reaches the watch, nor solo on a cover that never heard the watch: a lifter with no
+    /// watch never reads the line (F17 S8, decision 1).
+    static func connectionLine(_ connection: LiveConnectionState?, hasHeardTheWatch: Bool = false) -> String? {
+        switch connection {
+        case .reconnecting: WorkoutCopy.watchNotConnected
+        case .solo where hasHeardTheWatch: WorkoutCopy.watchNotConnected
+        default: nil
+        }
     }
 
     /// Which exercise is the current one (F10 S4 criterion 19): the cursor's while it still has a set to log,

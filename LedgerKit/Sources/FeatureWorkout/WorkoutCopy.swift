@@ -41,6 +41,16 @@ nonisolated enum WorkoutCopy {
         )
     }
 
+    /// The header's line while the watch is out of reach (F17 criterion 12): logging never waits for it. The watch
+    /// says "iPhone not connected — logging continues" (F18, in the watch's own catalog).
+    static var watchNotConnected: String {
+        String(
+            localized: "Watch not connected — logging continues",
+            bundle: .module,
+            comment: "Line in the workout's header while the Apple Watch is out of reach; every control still works"
+        )
+    }
+
     // MARK: The conflict dialog
 
     static var workoutInProgress: String {

@@ -120,8 +120,15 @@ final class WorkoutStore {
     var swap: SwapState?
     /// The read the root's `.task(id:)` runs for the swap sheet: each "Swap exercise" makes the next.
     var swapAttempt = 0
+    /// The live connection to the watch as last heard (`followConnection()`), nil before its first word: the
+    /// header's line about the watch, and nothing else (F17 criterion 12).
+    private(set) var connection: LiveConnectionState?
+    /// Whether this cover has heard any state but `solo` (`followConnection()`): from then on `solo` means the watch
+    /// is away, not absent, and the header keeps its line. Never set back.
+    private(set) var hasHeardTheWatch = false
 
     @ObservationIgnored @Dependency(\.workoutSession) var session
+    @ObservationIgnored @Dependency(\.liveConnection) private var liveConnection
     @ObservationIgnored @Dependency(\.date) var date
     @ObservationIgnored @Dependency(\.locale) var locale
     @ObservationIgnored @Dependency(\.calendar) var calendar
@@ -149,7 +156,9 @@ final class WorkoutStore {
             selection: selection,
             isBusy: isBusy,
             locale: locale,
-            calendar: calendar
+            calendar: calendar,
+            connection: connection,
+            hasHeardTheWatch: hasHeardTheWatch
         )
     }
 
@@ -236,6 +245,18 @@ extension WorkoutStore {
             return
         }
         loseTheSession()
+    }
+
+    /// Hears the live connection to the watch for as long as the cover is up (F17 criterion 12): the state shown,
+    /// then each change. It only sets `connection` and `hasHeardTheWatch`, which give the header its line; no control
+    /// waits on it, and a stream that ends leaves the last state heard.
+    func followConnection() async {
+        for await state in await liveConnection.states() {
+            connection = state
+            if state != .solo {
+                hasHeardTheWatch = true
+            }
+        }
     }
 
     /// The session's updates ended while the cover was up: the store has lost its source and says so. The

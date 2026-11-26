@@ -94,3 +94,18 @@ _Filled in by agents during delivery:_
 - `F18-watch-app/implementation-notes.md`
 - `F18-watch-app/test-findings.md`
 - `F18-watch-app/review.md`
+
+## Inputs from F17 (2026-11-26)
+
+- **The connection line's copy** is "iPhone not connected — logging continues" (F17 criterion 12). It is not in the
+  code yet: `WatchFeatureWorkout` has no catalog, and `ModuleCopyTests` says why it cannot have one before F18 (the
+  gate's catalog step reads only the iOS build). F18 adds it to the watch's catalog with its copy test.
+- **When it shows:** the phone shows its line ("Watch not connected — logging continues",
+  `WorkoutPresentation.connectionLine`) while the connection is `.reconnecting`, and in `.solo` once its workout
+  screen has heard any other state; `connected`, `degraded` and a `solo` never preceded by another state show none
+  (F17 S8, decision 1). The watch should follow the same rule.
+- **Reading it:** `@Dependency(\.liveConnection)`, `states()`: the state now, then each change. The watch's
+  composition already binds it to its transport (F17 S7b). `FakeLiveConnection(_:scripted: true)` scripts it in tests
+  (`change(to:)`, `end()`).
+- **Accessibility:** a plain text, read where it stands; never `.updatesFrequently`. Nothing is disabled while it
+  shows.

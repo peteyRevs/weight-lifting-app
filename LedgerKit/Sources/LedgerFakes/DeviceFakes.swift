@@ -7,19 +7,46 @@
     // F19 and F21) has a fake that records nothing: the brief that adds a method grows its fake with scriptable
     // answers and recorded calls.
 
-    /// `LiveConnectionClient` for previews and tests: each stream holds `state` and ends. S8 grows it with changes.
-    public struct FakeLiveConnection: LiveConnectionClient {
-        public let state: LiveConnectionState
+    /// `LiveConnectionClient` for previews and tests. Made with a state alone, each stream holds that state and ends.
+    /// Made `scripted` (F17 S8), each reader's stream holds the state now, then each `change(to:)`, until `end()`; a
+    /// reader that comes after `end()` gets the state and an ended stream.
+    public actor FakeLiveConnection: LiveConnectionClient {
+        /// The state a new reader is handed first: the one made with, then the last `change(to:)`.
+        public private(set) var state: LiveConnectionState
+        private var readers: [AsyncStream<LiveConnectionState>.Continuation] = []
+        private var hasEnded: Bool
 
-        public init(_ state: LiveConnectionState = .solo) {
+        public init(_ state: LiveConnectionState = .solo, scripted: Bool = false) {
             self.state = state
+            hasEnded = !scripted
         }
 
         public func states() -> AsyncStream<LiveConnectionState> {
-            AsyncStream { continuation in
-                continuation.yield(state)
-                continuation.finish()
+            let (stream, reader) = AsyncStream.makeStream(of: LiveConnectionState.self)
+            reader.yield(state)
+            if hasEnded {
+                reader.finish()
+            } else {
+                readers.append(reader)
             }
+            return stream
+        }
+
+        /// The connection becomes `next`: every open reader hears it, and later readers start from it.
+        public func change(to next: LiveConnectionState) {
+            state = next
+            for reader in readers {
+                reader.yield(next)
+            }
+        }
+
+        /// The connection's owner stops: every stream ends.
+        public func end() {
+            hasEnded = true
+            for reader in readers {
+                reader.finish()
+            }
+            readers = []
         }
     }
 
