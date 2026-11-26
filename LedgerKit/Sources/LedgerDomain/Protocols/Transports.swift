@@ -51,6 +51,13 @@ public enum LiveConnectionState: Hashable, Sendable {
     case degraded(Channel)
 }
 
+/// The live connection to the other device, as the workout screen shows it (F17 S7b, criterion 12). Any number of
+/// readers: each call is a stream of its own.
+public protocol LiveConnectionClient: Sendable {
+    /// The state now, then each change, until the connection's owner stops.
+    func states() async -> AsyncStream<LiveConnectionState>
+}
+
 /// Non-live phone ⇄ watch transfer: programs, settings, finished workouts (architecture §8).
 /// Shape only: full contract in F19.
 public protocol CompanionTransport: Sendable {}

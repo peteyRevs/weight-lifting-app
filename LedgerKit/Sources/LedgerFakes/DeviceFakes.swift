@@ -7,6 +7,22 @@
     // F19 and F21) has a fake that records nothing: the brief that adds a method grows its fake with scriptable
     // answers and recorded calls.
 
+    /// `LiveConnectionClient` for previews and tests: each stream holds `state` and ends. S8 grows it with changes.
+    public struct FakeLiveConnection: LiveConnectionClient {
+        public let state: LiveConnectionState
+
+        public init(_ state: LiveConnectionState = .solo) {
+            self.state = state
+        }
+
+        public func states() -> AsyncStream<LiveConnectionState> {
+            AsyncStream { continuation in
+                continuation.yield(state)
+                continuation.finish()
+            }
+        }
+    }
+
     /// `CompanionTransport` for previews and tests; F19 adds recorded transfers.
     public struct FakeCompanionTransport: CompanionTransport {
         public init() {}

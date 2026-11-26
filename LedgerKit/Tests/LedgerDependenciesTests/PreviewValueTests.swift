@@ -63,6 +63,22 @@ struct PreviewValueTests {
         }
     }
 
+    @Test("In a preview the live connection is a fake that says solo")
+    func previewLiveConnection_isSolo() async {
+        let connection = withDependencies {
+            $0.context = .preview
+        } operation: {
+            @Dependency(\.liveConnection) var connection
+            return connection
+        }
+        #expect(connection is FakeLiveConnection)
+        var states: [LiveConnectionState] = []
+        for await state in await connection.states() {
+            states.append(state)
+        }
+        #expect(states == [.solo])
+    }
+
     @Test("In a preview the device keys are fakes and the device id is the fixtures'")
     func previewDevices_areFakes() {
         withDependencies {

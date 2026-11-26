@@ -99,6 +99,15 @@ struct UnimplementedLiveWorkoutTransport: LiveWorkoutTransport {
     }
 }
 
+/// Its stream ends at once.
+struct UnimplementedLiveConnection: LiveConnectionClient {
+    let stub = Unimplemented(key: "liveConnection")
+
+    func states() -> AsyncStream<LiveConnectionState> {
+        stub.emptyStream()
+    }
+}
+
 struct UnimplementedCompanionTransport: CompanionTransport {}
 
 struct UnimplementedHaptics: HapticsClient {

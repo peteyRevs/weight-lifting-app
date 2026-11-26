@@ -133,4 +133,22 @@ struct CompositeTransportTests {
         try await rig.transport.send(Self.started) // mirroring took it
         await rig.stop()
     }
+
+    @Test("The liveConnection client: each reader gets the state shown, then each change, until run() ends")
+    func states_haveManyReaders() async {
+        var rig = await Rig()
+        #expect(await rig.next() == .connected(.watchConnectivity))
+        var first = await rig.transport.states().makeAsyncIterator()
+        var second = await rig.transport.states().makeAsyncIterator()
+        #expect(await first.next() == .connected(.watchConnectivity))
+        #expect(await second.next() == .connected(.watchConnectivity))
+        rig.channel.connect(true)
+        #expect(await first.next() == .connected(.mirroring))
+        #expect(await second.next() == .connected(.mirroring))
+        await rig.stop()
+        #expect(await first.next() == nil)
+        var late = await rig.transport.states().makeAsyncIterator()
+        #expect(await late.next() == .connected(.mirroring))
+        #expect(await late.next() == nil)
+    }
 }

@@ -502,3 +502,74 @@ both compositions building store → transports → host and running them, `watc
    first.
 4. A message over the measured 65 536 bytes never appears: a replay of a long workout goes as several messages, and
    no "payloadTooLarge" (`WCError` 7012) is logged.
+
+## Slice S7b (G1, 2026-11-26)
+
+The wiring: both compositions build store → transports → host and run them.
+
+- **The phone** (`AppComposition`): when the database opens it builds the host, then the health store from
+  `Environment.makeHealthStore(HealthHooks)`, then, when the environment has a WatchConnectivity channel (the
+  activator's transport), `CompositeTransport(mirroring: MirroringTransport(channel: healthStore.remoteChannel),
+  watchConnectivity:)`. `HealthHooks.watchTookPart` is the host's `hasWatchParticipant`; `onMirrorStart` calls
+  `connectLiveSync()`. `resume(in:)` calls it too, after the recovery and before WatchConnectivity is activated.
+  `connectLiveSync()` runs once: it starts a task that runs the transport for the app's life and connects the host.
+- **The watch** (`WatchComposition`): its database is a lazy `DatabaseLaunch` with `onOpen` back to the composition,
+  as the phone's is. When the database opens it builds the host (bound as `workoutSession`, which the watch did not
+  bind before) and the transport over the watch's `LiveHealthStore`. `connectLiveSync()` (from `resume(in:)`, once)
+  runs the transport, a `HealthEventBroadcast` over the store's `events` and
+  `followPhoneStartRequests(broadcast.subscribe(), startOwn: environment.startOwnWorkout)`, then connects the host.
+- **The `liveConnection` key** (`LedgerDependencies`): `LiveConnectionClient` (LedgerDomain, beside
+  `LiveConnectionState`), with `states() async -> AsyncStream<LiveConnectionState>`, one stream per reader.
+  `CompositeTransport` conforms: each reader gets the state shown, then each change, until `run()` ends. Both
+  compositions bind it to their transport. The stub's stream ends at once; the preview's `FakeLiveConnection` holds one
+  state and ends (S8 grows it with changes, for the header's snapshots).
+- **Tests:**
+  - `LiveSyncWiringTests` (LedgerAppKitTests): a resume connects the host (an own envelope reaches the watch over
+    WatchConnectivity) and `liveConnection` is the transport; `watchTookPart` answers what `hasWatchParticipant`
+    answers, before and after the watch's envelope arrives; a mirrored start connects the host with no resume (a
+    background launch); without a channel, nothing is connected.
+  - `LiveSyncWiringTests` (LedgerWatchAppKitTests): the host is built, bound and connected; criterion 8's wiring
+    (the phone's request, no phone workout within 5 s on a clock whose waits end at once, so the watch's
+    `startOwnWorkout` runs); without a channel the host is still built.
+  - `CompositeTransportTests`: `states()` with two readers and a late one; `DependencyKeysTests`,
+    `PreviewValueTests` and `UnimplementedStubTests` gain the key.
+  - **`HealthWiringTests`' first line** now reads `Environment.live(…).makeHealthStore(hooks) is LiveHealthStore`.
+    It checks the same thing as before: the live environment's health store is the phone's `LiveHealthStore`. The
+    store is now made from the hooks instead of held.
+
+### Decisions (for review)
+
+1. **The phone's health store is made when the database opens**, not in `Environment.live`, because its
+   `watchTookPart` and `onMirrorStart` need the host. The handler is still assigned first in `boot()`, before the
+   database opens; the registrar buffers what it is handed until the store reads it. `healthStore` was already bound
+   only once the database is open, so `PhoneAppDelegate` sees no change.
+2. **A mirrored start connects the host.** A background launch from mirroring may connect no scene, so `resume(in:)`
+   may never run. The host's link-up runs its recovery first (`ready()`), so connecting is enough to resume the
+   workout and send the handshakes. `onMirrorStart` gets nil for the workout's id (F16), and the host learns the
+   workout from the watch's frames, so nothing else is needed. F21 adds the Live Activity to the same hook.
+3. **The connection is not a `LaunchStep`.** It cannot fail (the host logs its own failures), so the launch-order
+   tests and the root gate are unchanged. It runs after the recovery and before WatchConnectivity is activated, so
+   the first reachability report finds the host connected.
+4. **The live sync task is the composition's**, kept for the app's life. The composition root is not a store
+   (engineering-standards §3–4), and S6 left `run()` to the transport's owner.
+5. **No transport without both channels.** Tests and the package's host build pass none and connect nothing. A UI
+   test on the simulator does connect: WatchConnectivity is unreachable and mirroring is down, so the state is
+   `.solo`.
+6. **`startOwnWorkout` is a seam that only logs** ("The watch would start its own workout here (F18/F19)"). Starting
+   the watch's cached day (F19) from its workout screen (F18) belongs there. Until then, a phone start the watch does
+   not adopt within 5 s starts nothing on the watch, and the phone's workout arrives later through the handshakes.
+7. **`syncClock`** is injected in both environments (`ContinuousClock` in the app), shared by the transports, the
+   host's send timeout and the phone-start wait.
+8. **The watch now binds `workoutSession`** to its host. No watch screen reads it yet (F18).
+
+### Device checks for F20
+
+1. With the phone app killed, start a workout on the watch: the phone app relaunches in the background (mirroring)
+   and Console (category `sync`) shows its handshake; opening the phone shows every set the watch logged (criterion 7).
+2. The phone's workout header line is S8's; until then, check in Console that the connection moves to
+   `connected(mirroring)` once the mirror is up, and to `connected(watchConnectivity)` with mirroring stopped.
+3. A phone start request with the phone's `started` held back (airplane mode on the phone after the request): after
+   5 s the watch logs "The watch would start its own workout here (F18/F19)". After F18/F19 this becomes criterion
+   8's device half.
+4. Criterion 13 (a watch set ticks on the phone in < 1 s over WatchConnectivity) runs once F18 gives the watch a
+   screen that logs sets.
