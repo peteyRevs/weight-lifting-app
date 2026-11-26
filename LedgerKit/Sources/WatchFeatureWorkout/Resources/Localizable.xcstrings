@@ -1,6 +1,116 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Allow Health in iPhone Settings" : {
+      "comment" : "Line on the set screen when the lifter has not let the app read heart rate",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Health in iPhone Settings"
+          }
+        }
+      }
+    },
+    "GO" : {
+      "comment" : "Title of the rest screen for a moment once the rest is over",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GO"
+          }
+        }
+      }
+    },
+    "KG" : {
+      "comment" : "Unit beside the weight, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KG"
+          }
+        }
+      }
+    },
+    "LB" : {
+      "comment" : "Unit beside the weight, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LB"
+          }
+        }
+      }
+    },
+    "Next exercise" : {
+      "comment" : "Line on the rest screen when no set is left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next exercise"
+          }
+        }
+      }
+    },
+    "Next: %@ kg × %lld" : {
+      "comment" : "The set that comes after the rest: its weight in kilograms, then its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: %@ kg × %lld"
+          }
+        }
+      }
+    },
+    "Next: %@ lb × %lld" : {
+      "comment" : "The set that comes after the rest: its weight in pounds, then its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: %@ lb × %lld"
+          }
+        }
+      }
+    },
+    "REST" : {
+      "comment" : "Title of the rest screen while the countdown runs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REST"
+          }
+        }
+      }
+    },
+    "RPE %@" : {
+      "comment" : "The effort the set aims for, from 5 to 10",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RPE %@"
+          }
+        }
+      }
+    },
+    "SET %lld OF %lld" : {
+      "comment" : "Eyebrow of the set to log: its place, counted from 1, then the exercise's number of sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SET %lld OF %lld"
+          }
+        }
+      }
+    },
     "iPhone not connected — logging continues" : {
       "comment" : "Line under the set label while the iPhone is out of reach; every control still works",
       "localizations" : {
@@ -8,6 +118,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iPhone not connected — logging continues"
+          }
+        }
+      }
+    },
+    "× %lld" : {
+      "comment" : "The reps of the set to log",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "× %lld"
+          }
+        }
+      }
+    },
+    "—" : {
+      "comment" : "Stands for the heart rate when there is none to show",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
           }
         }
       }

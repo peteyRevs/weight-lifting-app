@@ -44,15 +44,11 @@ nonisolated extension WorkoutPresentation {
 
     /// F17 criterion 12: "Watch not connected — logging continues" while the transport is `reconnecting`, the 30 s
     /// after the watch was last reached, and in `solo` once this cover has heard any other state
-    /// (`hasHeardTheWatch`): the watch took part and is still away. Connected says nothing, nor does degraded, whose
-    /// other channel still reaches the watch, nor solo on a cover that never heard the watch: a lifter with no
-    /// watch never reads the line (F17 S8, decision 1).
+    /// (`hasHeardTheWatch`). When the watch counts as away is the Domain's (`LiveConnectionState.isPeerAway`), and
+    /// the watch's own line follows the same rule: a lifter with no watch never reads the line.
     static func connectionLine(_ connection: LiveConnectionState?, hasHeardTheWatch: Bool = false) -> String? {
-        switch connection {
-        case .reconnecting: WorkoutCopy.watchNotConnected
-        case .solo where hasHeardTheWatch: WorkoutCopy.watchNotConnected
-        default: nil
-        }
+        let isAway = LiveConnectionState.isPeerAway(connection, hasHeardThePeer: hasHeardTheWatch)
+        return isAway ? WorkoutCopy.watchNotConnected : nil
     }
 
     /// Which exercise is the current one (F10 S4 criterion 19): the cursor's while it still has a set to log,

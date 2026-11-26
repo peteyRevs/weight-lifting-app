@@ -12,8 +12,8 @@
     "WatchFeatureWorkout": 70,
     "Feature*": 70
   },
-  "required": ["FeatureHistory", "FeatureLibrary", "FeatureOnboarding", "FeatureProgram", "FeatureSettings", "FeatureToday", "FeatureWorkout", "LedgerDomain", "LedgerDependencies", "LedgerDesign", "LedgerFakes", "LedgerHealth", "LedgerPersistence", "LedgerSync"],
-  "watchOnly": [],
+  "required": ["FeatureHistory", "FeatureLibrary", "FeatureOnboarding", "FeatureProgram", "FeatureSettings", "FeatureToday", "FeatureWorkout", "LedgerDomain", "LedgerDependencies", "LedgerDesign", "LedgerFakes", "LedgerHealth", "LedgerPersistence", "LedgerSync", "WatchFeatureWorkout"],
+  "watchOnly": ["WatchFeatureWorkout"],
   "excludedModules": ["LedgerTestSupport", "LedgerSnapshotTesting", "LedgerAppKit", "LedgerWatchAppKit"],
   "excludedFiles": ["*+Previews.swift", "*/Generated/*", "LedgerHealth/Watch/*"]
 }
