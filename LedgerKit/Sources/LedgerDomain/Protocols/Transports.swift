@@ -51,6 +51,21 @@ public enum LiveConnectionState: Hashable, Sendable {
     case degraded(Channel)
 }
 
+public extension LiveConnectionState {
+    /// F17 criterion 12 (S8, decision 1), one rule for both devices: whether a workout screen says the other device
+    /// is out of reach. It does while `connection` is `.reconnecting`, and in `.solo` once the screen has heard any
+    /// other state (`hasHeardThePeer`): the other device took part and is still away. Connected says nothing, nor
+    /// degraded, whose other channel still reaches it, nor a solo never preceded by another state, so a lifter with
+    /// one device never reads the line. Nil is a connection not heard yet.
+    static func isPeerAway(_ connection: LiveConnectionState?, hasHeardThePeer: Bool) -> Bool {
+        switch connection {
+        case .reconnecting: true
+        case .solo: hasHeardThePeer
+        case .connected, .degraded, nil: false
+        }
+    }
+}
+
 /// The live connection to the other device, as the workout screen shows it (F17 S7b, criterion 12). Any number of
 /// readers: each call is a stream of its own.
 public protocol LiveConnectionClient: Sendable {
