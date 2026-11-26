@@ -88,7 +88,7 @@ check "WF52 [F32] the package cache restores on an exact key only (a stale Packa
 # on a red run too, under the restore step's key. Its keys hash the Xcode and both lockfiles; restore-keys are
 # the key without the commit, so a run starts from its PR's (or main's) newest cache.
 lockfiles="hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved')"
-check "WF64 the compilation cache: restore, check.sh with LEDGER_COMPILATION_CACHE=YES, then shard 1 saves under the same key, unless cancelled" \
+check "WF64 the compilation cache: restore, check.sh with LEDGER_COMPILATION_CACHE=YES, then shard 1 saves under the same key, unless cancelled, once its writers exit" \
     is "$(q pr '.jobs.check.steps | map(select(.uses // .run | test("actions/cache/(restore|save)|check\\.sh")))
         | map(.uses // .run | split("@")[0]) | join(" ")') \
 $(q pr '.jobs.check.steps[] | select(.uses // "" | test("actions/cache/restore")) | [.id, .with.key, .with["restore-keys"]] | join(" ")') \
@@ -96,8 +96,29 @@ $(q pr '.jobs.check.steps[] | select(.uses // "" | test("actions/cache/save")) |
 $(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .env.LEDGER_COMPILATION_CACHE')" \
     "actions/cache/restore scripts/check.sh --ios-only --skip-static --shard \${{ matrix.shard }}/2 actions/cache/save \
 compilation-cache compilation-\${{ $lockfiles }}-\${{ github.sha }} compilation-\${{ $lockfiles }}- \
-\${{ matrix.shard == 1 && !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' }} \${{ steps.compilation-cache.outputs.cache-primary-key }} \
+\${{ matrix.shard == 1 && !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' && steps.cas-idle.outputs.idle == 'true' }} \${{ steps.compilation-cache.outputs.cache-primary-key }} \
 .derivedData/CompilationCache.noindex YES"
+# #153: a cache tarred while the build service or a compiler still writes it restored as invalid. Right before
+# each save, ci-cas-idle.sh waits for them (ci-cache.adv.sh), under the save's own condition but the idle test.
+idle_then_save='.jobs[].steps | to_entries as $steps | $steps[] | select(.value.uses // "" | test("actions/cache/save"))
+    | $steps[.key - 1].value as $wait | [$wait.id, $wait.run, ($wait.if | rtrimstr(" }}")) + " && steps.cas-idle.outputs.idle == '"'true'"' }}" == .value.if] | map(tostring) | join(" ")'
+check "WF81 [#153] in pr.yml and main-cache.yml the step right before the save waits for the cache's writers, and the save needs it idle" \
+    is "$(jq -r "$idle_then_save" "$T/pr.json") | $(jq -r "$idle_then_save" "$T/mc.json")" \
+    "cas-idle scripts/ci-cas-idle.sh 120 true | cas-idle scripts/ci-cas-idle.sh 120 true"
+check "WF81 ... where main-cache.yml saves after a green build only" \
+    is "$(q mc '.jobs[].steps[] | select(.id == "cas-idle" or (.uses // "" | test("actions/cache/save"))) | .if' | paste -sd '|' -)" \
+    "\${{ success() }}|\${{ success() && steps.cas-idle.outputs.idle == 'true' }}"
+# #153: every Check shard and main's build report the hit rate and ValidateCAS's outcome from the bundle check.sh
+# wrote, red or green, right after check.sh.
+report_after='.jobs[] | select(."runs-on" == "xcode-27") | .steps | select(map(.run // "" | test("^scripts/check\\.sh")) | any) | to_entries | (map(select(.value.run // "" | test("^scripts/check\\.sh")))[0].key) as $build
+    | .[$build + 1].value | [.name, .if, .run, .env.BUILD // ""] | join(" | ")'
+check "WF82 [#153] right after check.sh, Check and main-cache.yml report the compilation cache from the build bundle, unless cancelled" \
+    is "$(jq -r "$report_after" "$T/pr.json")
+$(jq -r "$report_after" "$T/mc.json")" \
+    "Report the compilation cache | \${{ !cancelled() }} | scripts/ci-cache-report.sh \"\$BUILD\" .derivedData/CompilationCache.noindex | .derivedData/Results/PR-iOS-shard\${{ matrix.shard }}-build.xcresult
+Report the compilation cache | \${{ !cancelled() }} | scripts/ci-cache-report.sh .derivedData/Results/PR-iOS-build.xcresult .derivedData/CompilationCache.noindex | "
+check "WF82 ... and those are the bundles check.sh writes: <lane>-iOS[-shard<n>]-build.xcresult in .derivedData/Results" \
+    is "$(grep -cF -- '-resultBundlePath "$RESULTS/$6-build.xcresult"' "$ROOT/scripts/check.sh") $(grep -c '^RESULTS=".derivedData/Results"$' "$ROOT/scripts/check.sh")" "1 1"
 missing=""
 for f in .xcode-version LedgerKit/Package.resolved Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved; do
     [[ -f "$ROOT/$f" ]] || missing="$missing $f"
@@ -373,14 +394,13 @@ check "WF77 ... the tar holds what exists, and a leg that never built packs noth
 check "WF49 Check interrupts xcodebuild 1-5 min before its step's timeout, so its bundle is finalized" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | ."timeout-minutes" * 60 - .env.LEDGER_XCODEBUILD_DEADLINE
         | . >= 60 and . <= 300')" true
-# docs/ci-cd.md, "Deadline": a build of up to 1,864 s (cache restored, #94), 165 s of format and script tests, 12 s of
-# catalogs and boot, and a slow runner's ~1,600 s of a shard's tests end near 3,640 s; the deadline leaves 860 s past
-# that, 2 min before the step's end.
-check "WF65 the deadline is 4500 s, 2 min before the step's 77 min, and the job outlasts the step (82 min)" \
+# docs/ci-cd.md, "Deadline": with every restored cache invalid (#153) a shard's check.sh took up to 4,467 s, 33 s short
+# of the 4,500 s deadline; 5,400 s leaves about 930 s past that, 2 min before the step's end.
+check "WF65 the deadline is 5400 s, 2 min before the step's 92 min, and the job outlasts the step (97 min)" \
     is "$(q pr '.jobs.check | (.steps[] | select(.run // "" | test("check.sh"))) as $step
         | ($step."timeout-minutes" * 60 - $step.env.LEDGER_XCODEBUILD_DEADLINE) as $interrupt
         | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \($step."timeout-minutes") \(."timeout-minutes") \($interrupt)"')" \
-    "4500 77 82 120"
+    "5400 92 97 120"
 # Seeds on the runner (tasks/chores/2026-10-09-pr-lane-time.md): Check alone cuts the seeded properties, by the
 # plan's own variable under xcodebuild's TEST_RUNNER_ prefix. The plans keep their counts, and the nightly sets none.
 check "WF66 Check runs 40 property seeds, fewer than the PR plan's; no other job, and no nightly step, sets a count" \
@@ -405,25 +425,24 @@ $(q mc '.concurrency.group + " " + (.concurrency["cancel-in-progress"] | tostrin
 check "WF68 ... and those are exactly the paths Scope's step skips" \
     is "$(grep -oE '^ +docs/\* \| tasks/\* \| design/\* \|' "$T/scope.sh" | tr -d ' ')$(grep -cE '^ +\*\.md\) ;;$' "$T/scope.sh")" \
     "docs/*|tasks/*|design/*|1"
-# The steps up to the build are Check's own, so the job selects the same Xcode and tools and reads and
-# writes the same keys; the build is check.sh's, so its compile arguments, and with them every entry's key,
-# are Check's too (check-wiring W77).
+# The steps up to the build are Check's own, so the job selects the same Xcode and tools and writes the keys
+# Check reads; the build is check.sh's, so its compile arguments, and with them every entry's key, are Check's
+# too (check-wiring W77). It restores no compilation cache (#153): each entry is one cold build's.
 setup='[.jobs | to_entries[] | select([.value.steps[].run // "" | test("scripts/check\\.sh")] | any) | select(.value."runs-on" == "xcode-27") | .value.steps[]
-    | select((.uses // "" | test("actions/checkout|mise-action|actions/cache(@|/restore)")) or (.run // "" | test("xcode-select")))]'
-check "WF69 its one job runs on Check's image, and its checkout, Select, mise, package cache and restore are Check's, field for field" \
+    | select((.uses // "" | test("actions/checkout|mise-action|actions/cache@")) or (.run // "" | test("xcode-select")))]'
+check "WF69 its one job runs on Check's image, and its checkout, Select, mise and package cache are Check's, field for field" \
     is "$(q mc '[.jobs[]."runs-on"] | join(",")') $(jq -c "$setup" "$T/mc.json" | jq 'length') \
-$([[ "$(jq -cS "$setup" "$T/mc.json")" == "$(jq -cS "$setup" "$T/pr.json")" ]] && echo same)" "xcode-27 5 same"
+$([[ "$(jq -cS "$setup" "$T/mc.json")" == "$(jq -cS "$setup" "$T/pr.json")" ]] && echo same)" "xcode-27 4 same"
 # --build-only runs step 0 and the iOS build alone, no test plan (check-wiring W77).
-check "WF70 besides Select, its one run step is check.sh --build-only, with Check's cache setting alone (no runner variables)" \
-    is "$(q mc '[.jobs[].steps[].run // empty | select(test("xcode-select -s") | not)] | join(";")') \
+check "WF70 besides Select, the report and the wait, its one run step is check.sh --build-only, with Check's cache setting alone (no runner variables)" \
+    is "$(q mc '[.jobs[].steps[].run // empty | select(test("xcode-select -s|^scripts/ci-ca(che|s)-") | not)] | join(";")') \
 $(q mc '.jobs[].steps[] | select(.run // "" | test("check.sh")) | .env | tojson')" \
     'scripts/check.sh --build-only {"LEDGER_COMPILATION_CACHE":"YES"}'
-check "WF71 it saves the compilation cache under the restore step's key after a green build only (not red, not cancelled)" \
+check "WF71 it restores no compilation cache and saves a fresh one under the key Check restores first (no restore-keys), after a green build only" \
     is "$(q mc '.jobs[].steps | map(.uses // .run | split("@")[0] | select(test("actions/cache/|check\\.sh"))) | join(" ")') \
-$(q mc '.jobs[].steps[] | select(.uses // "" | test("actions/cache/save")) | [.if, .with.key, .with.path] | join(" ")')" \
-    "actions/cache/restore scripts/check.sh --build-only actions/cache/save \
-\${{ success() && steps.compilation-cache.outputs.cache-hit != 'true' }} \${{ steps.compilation-cache.outputs.cache-primary-key }} \
-.derivedData/CompilationCache.noindex"
+$(jq -r --arg key "$(q pr '.jobs.check.steps[] | select(.id == "compilation-cache") | .with.key')" \
+    '.jobs[].steps[] | select(.uses // "" | test("actions/cache/save")) | [.with.path, .with.key == $key] | map(tostring) | join(" ")' "$T/mc.json")" \
+    "scripts/check.sh --build-only actions/cache/save .derivedData/CompilationCache.noindex true"
 check "WF71 ... and the package checkouts through actions/cache, which saves its exact key after a green job" \
     is "$(q mc '[.jobs[].steps[] | select(.with.path // "" | test("SourcePackages")) | .uses | split("@")[0]] | join(",")')" actions/cache
 

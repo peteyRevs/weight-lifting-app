@@ -92,7 +92,7 @@ jobs:
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 82 # the step's 77, plus checkout, Xcode, mise, both caches and the uploads
+    timeout-minutes: 97 # the step's 92, plus checkout, Xcode, mise, both caches and the uploads
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -114,7 +114,8 @@ jobs:
       # mtimes cannot fool it and a changed file always compiles. That makes restore-keys safe here, unlike
       # for the package checkouts: a run starts from its PR's newest cache, or main's. The keys still carry
       # the Xcode and both lockfiles, so a toolchain or package bump starts a new cache. Xcode validates the
-      # cache once per boot (ValidateCAS), so a runner validates what it restored, and drops a corrupt one.
+      # cache once per boot (ValidateCAS), so a runner validates what it restored, and drops a corrupt one:
+      # then the build is cold (#153; the report step below says which happened).
       # A run may read only its PR's caches and main's. Only main-cache.yml saves on main (a PR run
       # cannot), building what this job builds on each push to main, under these keys. So a PR's first run starts
       # from main's newest cache, and its later pushes and re-runs from its own (docs/ci-cd.md,
@@ -132,16 +133,17 @@ jobs:
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
       # macOS run here.
       - name: Format, macOS script tests, iOS build, one shard's tests (check.sh --ios-only --skip-static --shard)
-        timeout-minutes: 77 # fails the step before the job times out, so the bundles still upload
+        timeout-minutes: 92 # fails the step before the job times out, so the bundles still upload
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). Since
           # 2026-11-11 each shard tests about half (scripts/pr-shards.txt): 928 and 1,303 s in #94's first
           # run. The runner's build varies far more than the tests: 496 to 1,864 s with the compilation cache
-          # restored (#94, 2026-11-12), and a 3,600 s deadline stopped a shard after that 1,864 s build. Its
-          # worst, 1,864 s of build, 165 s of format and script tests, 12 s of catalogs and boot and a slow
-          # runner's ~1,600 s of tests, is about 3,640 s; 4,500 s, the one job's deadline until then, leaves
-          # about 860 s. A green run still takes about 35 minutes; only a slow runner uses the rest.
-          LEDGER_XCODEBUILD_DEADLINE: 4500
+          # restored (#94, 2026-11-12), and a 3,600 s deadline stopped a shard after that 1,864 s build.
+          # Until #153 every restored cache was found invalid, so every build was cold: 1,660 s at the
+          # median, 2,310 s at worst, and a check.sh of 4,467 s came within 33 s of the 4,500 s deadline.
+          # 5,400 s leaves about 930 s past that while main's fresh caches prove themselves; a green run
+          # takes about 35 to 60 minutes, and only a slow runner uses the rest.
+          LEDGER_XCODEBUILD_DEADLINE: 5400
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a
           # TEST_RUNNER_ variable to the test runner without the prefix, where it replaces the plan's value.
@@ -156,6 +158,12 @@ jobs:
           # LEDGER_SWEEP and run every size and setting (docs/ci-cd.md, "Sweeps on the runner").
           TEST_RUNNER_LEDGER_SWEEP: pr
         run: scripts/check.sh --ios-only --skip-static --shard ${{ matrix.shard }}/2
+      # What the build reused and whether ValidateCAS passed, in every shard's log (#153). Never fails.
+      - name: Report the compilation cache
+        if: ${{ !cancelled() }}
+        run: scripts/ci-cache-report.sh "$BUILD" .derivedData/CompilationCache.noindex
+        env:
+          BUILD: .derivedData/Results/PR-iOS-shard${{ matrix.shard }}-build.xcresult
       # A bundle is ~35,000 small files, which download-artifact failed to extract on the macOS runner
       # (five retries, every attempt); one tar file round-trips.
       - name: Pack this shard's test bundle
@@ -186,8 +194,13 @@ jobs:
       # After a red run too, so the push that fixes it starts warm; the cache holds only finished
       # compilations, each under its inputs' hash. Not when cancelled: a newer push is already running.
       # Shard 1 alone: both shards build the same thing under the same key, and only one save can take it.
-      - name: Save compiled output
+      # Only once the build service and compilers have exited: a CAS tarred mid-write restores as invalid.
+      - name: Wait for the compilation cache's writers to exit
+        id: cas-idle
         if: ${{ matrix.shard == 1 && !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' }}
+        run: scripts/ci-cas-idle.sh 120
+      - name: Save compiled output
+        if: ${{ matrix.shard == 1 && !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' && steps.cas-idle.outputs.idle == 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .derivedData/CompilationCache.noindex
