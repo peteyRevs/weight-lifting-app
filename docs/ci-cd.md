@@ -62,7 +62,21 @@ authoritative; the plan differs:
     The SwiftPM checkout cache stays exact-key (above). Xcode validates the cache once per boot
     (`ValidateCAS`; `builtin/v1.validation` holds the boot time it last did), so a runner validates what
     it restored: a corrupted cache was dropped and filled again there (`recovered from invalid data`),
-    while one corrupted after that check, on the same boot, failed the build (notes, "Measured"). The
+    while one corrupted after that check, on the same boot, failed the build (notes, "Measured"). Until
+    #153 (2026-11-26) that drop was every PR's lot: each shard restored `main`'s 3.4 GB entry (about 2.5
+    min to download), spent 120–150 s in `ValidateCAS`, which said `recovered from invalid data`, and
+    built with `0 hits / 765 cacheable tasks (0%)`: cold, 1,660 s at the median and 2,310 s at worst.
+    The two likeliest causes, in order: the cache was tarred while the build service or a compiler could
+    still write it, and an entry that only ever grew went invalid. So both workflows now run, right
+    before each save, `scripts/ci-cas-idle.sh 120`: it waits, at most 120 s, until no `xcodebuild`,
+    `SWBBuildService`, `XCBBuildService`, `swift-driver`, `swift-frontend`, `clang` or `llvm-cas` is
+    running (by exact name; it kills nothing, and `xcodebuild` has no command that stops its service), and
+    the save runs only when it says `idle=true`. A missed save costs the next run a colder build; a torn
+    one cost every PR its cache. And right after `check.sh`, `scripts/ci-cache-report.sh` reads the build
+    bundle's log (`xcresulttool get log --type build`) and prints the hit rate, `ValidateCAS`'s outcome
+    (`validated successfully`, `validation skipped` or `recovered from invalid data`) and the cache's
+    size as notices, in every Check shard and every `main-cache.yml` run; it never fails the job
+    (`ci-cache.adv.sh`). The
     keys are taken to hold absolute paths (not tested from a second path); GitHub keeps the checkout at
     `/Users/runner/work/<repo>/<repo>`. Measured on a developer Mac (2026-10-01; notes, "Measured"):
     the iOS `build-for-testing` took 58–59 s with the cache off, 57 s filling an empty cache (1,113 misses)
@@ -77,22 +91,29 @@ authoritative; the plan differs:
     found for input keys: compilation-…`) and built cold: 937–1,458 s for #58–#61, and #59 reached the
     deadline in its tests at a 1,458 s build. `.github/workflows/main-cache.yml` runs on each push to
     `main` that changes more than `docs/`, `tasks/`, `design/` or root-level `*.md` (Scope's allowlist, as
-    `paths-ignore`). Its one job, on `xcode-27`, repeats Check's checkout, Xcode, mise, package-cache and
-    restore steps field for field (WF69) and runs `scripts/check.sh --build-only`: step 0 and step 3's iOS
+    `paths-ignore`). Its one job, on `xcode-27`, repeats Check's checkout, Xcode, mise and package-cache
+    steps field for field (WF69) and runs `scripts/check.sh --build-only`: step 0 and step 3's iOS
     `build-for-testing` through the same code, so the compiler's arguments, and every entry's key, are
-    Check's (check-wiring W77); nothing is tested. It saves the compilation cache under Check's key scheme,
+    Check's (check-wiring W77); nothing is tested. It restores no compilation cache (#153): until
+    2026-11-26 it restored `main`'s newest and added to it, so its entries grew from 2.8 to 3.7 GB and
+    never once started empty, and every PR found the one it restored invalid. Each run now builds cold
+    and saves that one build's cache, about 425 MB, under the key Check restores first
+    (`compilation-<Xcode and lockfiles>-<commit>`), so a PR's `restore-keys` still find `main`'s newest.
+    Its build step allows 45 min and the job 55 (a cold build took 1,215 s, and the PRs' cold builds up
+    to 2,310 s). It saves the compilation cache under Check's key scheme,
     and `actions/cache` saves the package checkouts under their exact key, both in `main`'s scope, after a
     green build only: a cancelled run (a newer push cancels it; `concurrency: main-cache`) or a red one saves
     nothing. A PR's first run therefore restores `main`'s newest cache and compiles only what differs from
-    it; its later pushes and re-runs restore its own. Expected first-run build: about 450–760 s on the
-    runner, as a PR's warm runs above, against 937–1,458 s cold. Locally `--build-only` took 114 s cold and
-    28–34 s warm (cache 1.5 GB, 452 MB through `tar | zstd`). Each save is an entry of about 450 MB; GitHub
-    keeps 10 GB per repository and evicts the least recently used, so `main`'s older entries, which no
-    restore picks once a newer one exists, go first. Cost: one warm build per code merge, about 10–14 macOS
-    minutes. Held back on 2026-10-17 for that cost (chore file, "Cost"); shipped 2026-10-20
+    it; its later pushes and re-runs restore its own. Expected first-run build, once `ValidateCAS` passes:
+    about 450–760 s on the runner, as a PR's warm runs above, against 1,200–2,300 s cold; until the
+    report shows `validated successfully` and a hit rate above 0 % on a PR, take every PR build as cold.
+    Locally `--build-only` took 114 s cold and 28–34 s warm. Each `main` save is an entry of about 425 MB
+    and a PR's a little more; GitHub keeps 10 GB per repository and evicts the least recently used, so
+    `main`'s older entries, which no restore picks once a newer one exists, go first. Cost: one cold build
+    per code merge, about 25 macOS minutes. Held back on 2026-10-17 for that cost (chore file, "Cost"); shipped 2026-10-20
     (`tasks/chores/ci-test-time.md`) once the repository was public, where standard runner minutes are free.
     Should it go private again, revisit both this and the deadline below: `main-cache.yml` would bill about
-    10–14 macOS minutes per code merge, and the deadline's headroom bills only on a hang (about 12 minutes
+    25 macOS minutes per code merge, and the deadline's headroom bills only on a hang (about 12 minutes
     more than at 3,120 s). Run by hand (`workflow_dispatch`) on `main`, it rebuilds a cache that was evicted
     or that a red or cancelled run did not save.
   - *Seeds on the runner (2026-10-09; `tasks/chores/2026-10-09-pr-lane-time.md`).* `Check` sets
@@ -169,8 +190,11 @@ authoritative; the plan differs:
       in four modules (at most 0.12 points), none more, as the gate's rule says.
     - *Cost.* Two macOS test jobs and a short Coverage job per PR: free while the repository is public; if
       it goes private again, about 1.3 times today's minutes for about half the wall time.
-  - *Deadline (2026-11-12).* `LEDGER_XCODEBUILD_DEADLINE` is 4,500 s per shard; the step's timeout is 77
-    min, 2 min after the deadline, and the job's 82. The first day's 3,600 s (step 62, job 67) stopped
+  - *Deadline (2026-11-26, #153).* `LEDGER_XCODEBUILD_DEADLINE` is 5,400 s per shard; the step's timeout is
+    92 min, 2 min after the deadline, and the job's 97. With every restored cache invalid (above) each
+    build was cold, and a shard's `check.sh` took up to 4,467 s, 33 s short of 4,500 s; 5,400 s leaves
+    about 930 s past that. A stopgap: once PRs build warm again, it can come back down.
+  - *Deadline 2026-11-12 to -26.* 4,500 s per shard; the step's timeout 77 min, and the job's 82. The first day's 3,600 s (step 62, job 67) stopped
     shard 2 of #94's second run in its tests after a 1,864 s build with the compilation cache restored;
     the run before built the same tree in 496 and 1,090 s. A shard's worst is then that build, 165 s of
     format and script tests, 12 s of catalogs and boot and a slow runner's ~1,600 s of tests, about
