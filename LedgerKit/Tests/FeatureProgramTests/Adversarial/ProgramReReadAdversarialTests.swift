@@ -20,9 +20,14 @@ struct ProgramReReadAdversarialTests {
         await s13Until { rig.session.heardDuringWrite != nil }
     }
 
-    /// Writes misses to the first slot of the active program directly, as a workout's save does, and gives the
-    /// main actor way so the store's follower hears the emission while the session's read is still running.
-    static func writeMisses(_ memory: InMemoryStores, _ misses: Set<Int>) async throws {
+    /// Writes misses to the first slot of the active program directly, as a workout's save does, and returns
+    /// once the store's follower has handed the session that write's emission, while the session's read is still
+    /// running.
+    static func writeMisses(
+        _ memory: InMemoryStores,
+        _ session: ProgramEditSession<ProgramBuilderEdit>,
+        _ misses: Set<Int>
+    ) async throws {
         guard let program = try await memory.programs.active() else {
             return
         }
@@ -31,8 +36,21 @@ struct ProgramReReadAdversarialTests {
             changed.days[0].slots[0].misses = misses
             return changed
         }
-        for _ in 0 ..< 20 {
-            await Task.yield()
+        await heardDuringTheRead(session) { $0.days[0].slots[0].misses == misses }
+    }
+
+    /// Returns once the session, writing, has heard a program that `matches`: what the hook wrote has reached
+    /// it before the hook lets the read answer. Issue #150: a count of yields here was no ordering, and when
+    /// the follower came later the read ended undisturbed and the re-read under test never ran.
+    static func heardDuringTheRead(
+        _ session: ProgramEditSession<ProgramBuilderEdit>,
+        _ matches: @escaping @MainActor @Sendable (Program) -> Bool
+    ) async {
+        await s13Until {
+            guard case let .some(.some(heard)) = session.heardDuringWrite else {
+                return false
+            }
+            return matches(heard)
         }
     }
 
@@ -44,9 +62,10 @@ struct ProgramReReadAdversarialTests {
         let hook = S13ReadHook()
         let rig = try S13Rig { S13HookedPrograms(base: $0, hook: hook) }
         let memory = rig.memory
+        let session = rig.session
         hook.set { read in
             if read <= bound {
-                try await Self.writeMisses(memory, [read % 3])
+                try await Self.writeMisses(memory, session, [read % 3])
             }
         }
         let tasks = await rig.start()
@@ -75,9 +94,10 @@ struct ProgramReReadAdversarialTests {
         let hook = S13ReadHook()
         let rig = try S13Rig { S13HookedPrograms(base: $0, hook: hook) }
         let memory = rig.memory
+        let session = rig.session
         hook.set { read in
             switch read {
-            case 1: try await Self.writeMisses(memory, [1])
+            case 1: try await Self.writeMisses(memory, session, [1])
             case 2: throw S13Refused()
             default: break
             }
@@ -111,12 +131,11 @@ struct ProgramReReadAdversarialTests {
         let hook = S13ReadHook()
         let rig = try S13Rig { S13HookedPrograms(base: $0, hook: hook) }
         let memory = rig.memory
+        let session = rig.session
         hook.set { read in
             if read == 1 {
                 try await memory.programs.setActive(other.id)
-                for _ in 0 ..< 20 {
-                    await Task.yield()
-                }
+                await Self.heardDuringTheRead(session) { $0.id == other.id }
             }
         }
         try await memory.programs.save(other)
