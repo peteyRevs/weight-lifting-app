@@ -1,6 +1,107 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ first" : {
+      "comment" : "The exercise today's session opens with",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ first"
+          }
+        }
+      }
+    },
+    "%@ kg" : {
+      "comment" : "A weight in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg"
+          }
+        }
+      }
+    },
+    "%@ lb" : {
+      "comment" : "A weight in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb"
+          }
+        }
+      }
+    },
+    "%@/%@" : {
+      "comment" : "The summary's sets: those logged, then all the workout's sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@/%@"
+          }
+        }
+      }
+    },
+    "%lld exercises" : {
+      "comment" : "The number of exercises of today's session",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercise"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld sets" : {
+      "comment" : "A number of sets, in the line under the day's name",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld set"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sets"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "AVG BPM" : {
+      "comment" : "Caption under the workout's average heart rate",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AVG BPM"
+          }
+        }
+      }
+    },
     "Allow Health in iPhone Settings" : {
       "comment" : "Line on the set screen when the lifter has not let the app read heart rate",
       "localizations" : {
@@ -8,6 +109,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Allow Health in iPhone Settings"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "comment" : "Button that closes the summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "ELAPSED" : {
+      "comment" : "Caption under the workout's time on the summary",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ELAPSED"
           }
         }
       }
@@ -34,6 +157,17 @@
         }
       }
     },
+    "KG MOVED" : {
+      "comment" : "Caption under the volume, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KG MOVED"
+          }
+        }
+      }
+    },
     "LB" : {
       "comment" : "Unit beside the weight, in pounds",
       "localizations" : {
@@ -41,6 +175,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "LB"
+          }
+        }
+      }
+    },
+    "LB MOVED" : {
+      "comment" : "Caption under the volume, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LB MOVED"
+          }
+        }
+      }
+    },
+    "Logged" : {
+      "comment" : "Marks today's session as already trained",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logged"
+          }
+        }
+      }
+    },
+    "Logged earlier today" : {
+      "comment" : "Line under the day's name when today's session was trained earlier, on either device",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logged earlier today"
+          }
+        }
+      }
+    },
+    "NEW PR" : {
+      "comment" : "Caption under the number of records the workout set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NEW PR"
           }
         }
       }
@@ -78,6 +256,61 @@
         }
       }
     },
+    "Next: %@ · %@" : {
+      "comment" : "The next session this program week: its weekday, then its day's short tag",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: %@ · %@"
+          }
+        }
+      }
+    },
+    "Next: week %lld" : {
+      "comment" : "The program week, counted from 1, that holds the next session",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: week %lld"
+          }
+        }
+      }
+    },
+    "No program on watch" : {
+      "comment" : "Title before a workout with no program",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No program on watch"
+          }
+        }
+      }
+    },
+    "Nothing scheduled today." : {
+      "comment" : "Line under the title on a rest day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing scheduled today."
+          }
+        }
+      }
+    },
+    "Open %@ on iPhone" : {
+      "comment" : "Asks the lifter to open the app, named first, on the iPhone, which sends the program",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open %@ on iPhone"
+          }
+        }
+      }
+    },
     "REST" : {
       "comment" : "Title of the rest screen while the countdown runs",
       "localizations" : {
@@ -100,6 +333,17 @@
         }
       }
     },
+    "Rest day" : {
+      "comment" : "Title before a workout on a day with no session",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest day"
+          }
+        }
+      }
+    },
     "SET %lld OF %lld" : {
       "comment" : "Eyebrow of the set to log: its place, counted from 1, then the exercise's number of sets",
       "localizations" : {
@@ -107,6 +351,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SET %lld OF %lld"
+          }
+        }
+      }
+    },
+    "SETS" : {
+      "comment" : "Caption under the summary's sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SETS"
+          }
+        }
+      }
+    },
+    "Start" : {
+      "comment" : "Button that starts today's session",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start"
+          }
+        }
+      }
+    },
+    "WEEK %lld OF %lld" : {
+      "comment" : "Eyebrow before a workout: the program week, counted from 1, then the weeks of the block",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WEEK %lld OF %lld"
+          }
+        }
+      }
+    },
+    "WEEK %lld OF %lld · DELOAD" : {
+      "comment" : "Eyebrow before a workout in a lighter week: the program week, then the weeks of the block",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WEEK %lld OF %lld · DELOAD"
+          }
+        }
+      }
+    },
+    "WORKOUT DONE" : {
+      "comment" : "Eyebrow of the summary of a saved workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WORKOUT DONE"
+          }
+        }
+      }
+    },
+    "empty day" : {
+      "comment" : "Ends the line of a session that has no exercise",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "empty day"
           }
         }
       }

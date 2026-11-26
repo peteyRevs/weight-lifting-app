@@ -65,4 +65,41 @@ nonisolated enum WatchSample {
             locale: Fixtures.locale
         )
     }
+
+    static func idle(
+        at now: Date = Fixtures.now,
+        workout: WorkoutState? = nil,
+        isTodayLogged: Bool = false,
+        settings: Settings = Fixtures.settingsLb,
+        program: (inout Program) -> Void = { _ in }
+    ) throws -> WatchIdleInput {
+        var seed = try Fixtures.seedProgram()
+        program(&seed)
+        return try WatchIdleInput(
+            program: seed, exercises: catalog(), workout: workout, isTodayLogged: isTodayLogged,
+            settings: settings, now: now, calendar: Fixtures.calendar, locale: Fixtures.locale, appName: "Ledger"
+        )
+    }
+
+    /// The plan `input` shows; nil when it shows no program.
+    static func plan(_ input: WatchIdleInput) -> WatchIdleModel.Plan? {
+        guard case let .plan(plan) = WatchPresentation.idle(input) else {
+            return nil
+        }
+        return plan
+    }
+
+    /// Lower A, built at `Fixtures.now`, every set logged at `weight` × `reps`, finished.
+    static func loggedLowerA(_ weight: Weight, reps: Int, sets: Int? = nil) throws -> WorkoutState {
+        var state = try session(day: 1)
+        let rows = state.exercises.indices.flatMap { index in state.exercises[index].sets.indices.map { (index, $0) } }
+        for (exercise, set) in rows.prefix(sets ?? rows.count) {
+            state.exercises[exercise].sets[set].weight = weight
+            state.exercises[exercise].sets[set].reps = Reps(clamping: reps)
+        }
+        state = logging(Array(rows.prefix(sets ?? rows.count)), in: state)
+        state.phase = .finished
+        state.endedAt = Fixtures.now.addingTimeInterval(3600)
+        return state
+    }
 }
