@@ -3,8 +3,9 @@ import SwiftUI
 /// The cover's content (F10 S4, S5): the live workout as the session shows it, with the "End workout?" sheet
 /// (F10 S7), the swap sheet (F10 S8b) and the alerts of a discard, a change and a save that failed. It owns
 /// the store and runs its work: following the session and applying the page's taps for as long as the cover
-/// is up, the discard, the save, the shown rest's time (F10 S6), and the swap sheet's read and the bests of
-/// an exercise a swap brings in (F10 S8b), each from a `.task`, so all end with the view.
+/// is up, the discard, the save, the shown rest's time (F10 S6), the swap sheet's read and the bests of an
+/// exercise a swap brings in (F10 S8b), and the live connection to the watch (F17 S8), each from a `.task`, so
+/// all end with the view.
 ///
 /// It closes nothing itself. When the store says the cover is done (`WorkoutStore.exit`), `onExit` tells
 /// the launcher, which takes the cover down and hands the app its route.
@@ -75,6 +76,9 @@ struct WorkoutRoot: View {
         }
         .task {
             await store.pump()
+        }
+        .task {
+            await store.followConnection()
         }
         .task(id: store.discardAttempt) {
             await store.discard()

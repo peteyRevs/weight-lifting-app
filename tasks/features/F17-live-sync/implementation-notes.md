@@ -573,3 +573,71 @@ The wiring: both compositions build store → transports → host and run them.
    8's device half.
 4. Criterion 13 (a watch set ticks on the phone in < 1 s over WatchConnectivity) runs once F18 gives the watch a
    screen that logs sets.
+
+## Slice S8 (G1, 2026-11-26)
+
+The connection line, the last F17 slice (criterion 12; the device halves of 7, 11 and 13 go to F20).
+
+- **The line:** `WorkoutCopy.watchNotConnected`, "Watch not connected — logging continues", drawn by `WorkoutHeader`
+  under the progress bars (`.caption`, `inkSecondary`, wrapping at the large sizes) when the header model's
+  `connection` is set. `WorkoutPresentation.connectionLine(_:)` decides: the line for `.reconnecting`, nil for every
+  other state and before anything is heard. `isEnabled` and the page never read the connection, so every control
+  stays enabled (tested: the header with the line, less the line, equals the header without it, and the pages are
+  equal).
+- **The store** reads `@Dependency(\.liveConnection)`: `followConnection()` sets `connection` from `states()` for as long
+  as the cover is up (a `.task` of `WorkoutRoot`, as `follow()` and `pump()`); a stream that ends leaves the last state.
+- **Accessibility:** a plain `Text`, so VoiceOver reads it once where it stands, after the progress; no
+  `.updatesFrequently`. The tree tests pin it as `.staticText` alone, which fails if that trait is ever added.
+- **`FakeLiveConnection`** is now an actor. Made with a state alone it behaves as before (each stream holds the state
+  and ends: the preview value); made `scripted: true`, each reader gets the state, then each `change(to:)`, until
+  `end()`. `withTestDependencies` does not bind it: F07 criterion 3 (an unconfigured key fails the test) holds for
+  `liveConnection` too, so the two adversarial suites that host `WorkoutRoot` bind one (sanctioned edits, as for the
+  bests in F10 S7b).
+- **Tests:** `WorkoutConnectionLineTests` (the rule for every state; nothing disabled; the store hearing each change
+  with a tap applied while reconnecting; an ended stream keeping its state); a preview case `watchNotConnected`
+  (`minutes` with the line) with its VoiceOver tree, its 44 pt targets and its render; a layout test at
+  Accessibility 3 and 5 in every setting; `WorkoutCopyTests` gains the line.
+- **Snapshots:** `header_connection_matchesReferences`, {connected, reconnecting, solo} × {light, dark} × {`.large`,
+  `.xLarge`}, 12 new references. Connected and solo draw the header exactly as `header_matchesReferences` does; they
+  pin that no line appears. No existing reference changed.
+- **The watch's copy**, "iPhone not connected — logging continues", is written into F18's brief ("Inputs from F17")
+  and not into code: `WatchFeatureWorkout` has no catalog, and `ModuleCopyTests` records why it cannot get one before
+  F18 (the gate's catalog step reads only the iOS build).
+- **F20** gains "Inputs from F17": the device checklist for criteria 7, 11, 13 and the line itself (F17-a to F17-d),
+  and how scenarios 1 and 4 read with this line.
+
+### Decisions (for review)
+
+1. **The line shows for `.reconnecting` only.** Criterion 12 names only `.reconnecting`. `.solo` is also "no other
+   device takes part" (its doc, S2): a lifter with no watch, or one who left it at home, who would otherwise read
+   "Watch not connected" through every workout, and the transport cannot tell those apart from a watch gone for more
+   than 30 s. `connected` and `degraded` (whose other channel still reaches the watch) show nothing. The cost: after
+   30 s out of reach the line goes, although the watch is still away. F18's "when not connected" and F20 scenario 4
+   ("phone in bag 10 min") lean the other way; **Pete to rule** (see below).
+2. **No "Connected" text.** F20 scenario 1 expects "phone header 'Connected'"; the spec's criterion 12 and test plan
+   give no connected copy, so connected draws nothing, and F20's inputs say so.
+3. **Nil before the first word.** The header shows no line until the stream's first state arrives; the transport's
+   first state is the one it has, so there is no flash of the line at the cover's opening.
+4. **The line sits under the progress bars**, the header's last element, so VoiceOver reads it after the workout's
+   name and progress. The prototype has no connection line; this is the simplest place that moves nothing.
+5. **The rule stays in FeatureWorkout**, not the domain: the watch has its own copy and may rule differently; F18 can
+   move it to `LiveConnectionState` if both screens share it.
+
+### Needs Pete
+
+- **Solo with the line or without** (decision 1). If the line should stay while the watch is away for longer than
+  30 s, the smallest change that keeps a watch-less lifter free of it is: show the line in `.solo` too once this cover
+  has heard any other state (`connected`, `degraded` or `reconnecting`). That is one more stored flag in the store and
+  two more tests.
+
+### Device checklist
+
+F20 "Inputs from F17", rows F17-a to F17-d (criteria 7, 11, 13 and the line), plus the S7a and S7b device checks above.
+
+### Verification (2026-11-26, iPhone 17 iOS 27.0 and Watch Series 9 simulators)
+
+- PR plan (iOS): 6,019 tests, 5,969 passed, 0 failed, 30 skipped; coverage gate (`--ios-only`) passes, FeatureWorkout
+  98.68 %, LedgerFakes 99.18 %, LedgerDependencies 97.51 %, overall 98.09 %.
+- PR-Watch plan: 2,846 tests, 2,821 passed, 0 failed, 20 skipped. FeatureWorkout is not in the watch plan.
+- `WorkoutConnectionLineTests` 20 runs on iOS: 20/20. No new test runs on the watch.
+- `scripts/check.sh --lint-only`: OK.

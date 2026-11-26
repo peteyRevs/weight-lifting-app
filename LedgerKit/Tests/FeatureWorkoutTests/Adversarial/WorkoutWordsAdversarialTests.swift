@@ -52,7 +52,7 @@ struct WorkoutWordsAdversarialTests {
         #expect(texts.count == expected.count)
     }
 
-    @Test("The catalog holds the 109 texts and no other")
+    @Test("The catalog holds the 110 texts and no other")
     func catalog_holdsExactlyTheSlicesTexts() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
         let expected: Set = [
@@ -87,7 +87,9 @@ struct WorkoutWordsAdversarialTests {
             // F10 S9 (sanctioned edit): the keys of a superset's block.
             "Superset · block %lld of %lld", "Round %lld of %lld", "Rest %@ after %@", "%lld × %lld @ %@ lb",
             "%lld × %lld @ %@ kg", "Swap %@", "%@, set %lld", "%@, drop set", "Log set %@", "Undo set %@",
-            "%@ · %@ lb × %lld", "%@ · %@ kg × %lld"
+            "%@ · %@ lb × %lld", "%@ · %@ kg × %lld",
+            // F17 S8 (sanctioned edit): the header's line while the watch is out of reach.
+            "Watch not connected — logging continues"
         ]
         #expect(catalog.keys.subtracting(expected).sorted() == [])
         #expect(expected.subtracting(catalog.keys).sorted() == [])

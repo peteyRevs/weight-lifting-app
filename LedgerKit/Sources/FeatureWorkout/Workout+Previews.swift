@@ -15,7 +15,8 @@
     /// `logging` gives every exercise a last workout, and `dropSet` shows the last exercise in kilograms
     /// with a drop set. Upper A ends with a superset (Lat Pulldown and Cable Lateral Raise), drawn as one
     /// block (F10 S9): `dropSet` shows it with "BD", `hour` in its second round with B current, and
-    /// `supersetRound2` after A1 and B1, with a last workout, while the group's rest runs.
+    /// `supersetRound2` after A1 and B1, with a last workout, while the group's rest runs. `watchNotConnected` is
+    /// `minutes` with the watch out of reach (F17 S8).
     ///
     /// The engine starts a rest at each logged set, so every case with a set logged shows the rest panel
     /// (F10 S6): at "Rest over" where its moment is past the rest's end, as in `logging`, whose second set
@@ -30,6 +31,7 @@
         case restOver = "Rest over"
         case dropSet = "A drop set, in kilograms"
         case supersetRound2 = "A superset, round 2"
+        case watchNotConnected = "Watch not connected"
         case discarding = "Discarding"
         case loading = "Loading"
         case failed = "Could not open"
@@ -46,7 +48,7 @@
             case .restOver: (2, 2 * 60 + 155)
             case .dropSet: (0, 41 * 60 + 12)
             case .supersetRound2: (14, 14 * 60 + 30)
-            case .minutes, .discarding: (6, 24 * 60 + 22)
+            case .minutes, .watchNotConnected, .discarding: (6, 24 * 60 + 22)
             case .hour: (15, 3600 + 65)
             }
         }
@@ -77,9 +79,21 @@
             return WorkoutSelection(exerciseIndex: 4, setID: raise.sets[1].id)
         }
 
+        /// What the header hears of the watch (F17 S8): out of reach in `watchNotConnected`, which is `minutes`
+        /// with the line; nothing yet in every other case, which draws no line.
+        var connection: LiveConnectionState? {
+            self == .watchNotConnected ? .reconnecting : nil
+        }
+
         /// What the screen is handed. A fixture that does not build shows as the failed state, and fails
         /// `PreviewTests`, which asks each case for its workout.
         var model: WorkoutScreenModel {
+            model(connection: connection)
+        }
+
+        /// The case's screen with the header hearing `connection` instead: the header's references for each
+        /// state of the connection (F17 S8).
+        func model(connection: LiveConnectionState?) -> WorkoutScreenModel {
             let state: Loadable<WorkoutState> = switch self {
             case .loading: .loading
             case .failed: .failed(Unreadable())
@@ -91,7 +105,8 @@
                 selection: selection,
                 isBusy: self == .discarding,
                 locale: Fixtures.locale,
-                calendar: Fixtures.calendar
+                calendar: Fixtures.calendar,
+                connection: connection
             )
         }
 
@@ -206,6 +221,10 @@
 
     #Preview("A superset, round 2") {
         WorkoutPreview.supersetRound2.content
+    }
+
+    #Preview("Watch not connected") {
+        WorkoutPreview.watchNotConnected.content
     }
 
     #Preview("Discarding") {

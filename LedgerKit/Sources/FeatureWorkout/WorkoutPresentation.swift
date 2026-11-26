@@ -6,20 +6,24 @@ import LedgerDomain
 /// function reads a clock, a calendar, a locale or a time zone of its own.
 nonisolated enum WorkoutPresentation {
     /// The cover's state. `isBusy` disables the header's buttons and the page's controls; `selection` is the
-    /// row the lifter chose, where it is not the engine's cursor.
+    /// row the lifter chose, where it is not the engine's cursor; `connection` gives the header its line about the
+    /// watch, and disables nothing.
     static func screen(
         _ workout: Loadable<WorkoutState>,
         selection: WorkoutSelection? = nil,
         isBusy: Bool,
         locale: Locale,
-        calendar: Calendar
+        calendar: Calendar,
+        connection: LiveConnectionState? = nil
     ) -> WorkoutScreenModel {
         switch workout {
         case .idle, .loading:
             .loading
         case let .loaded(state):
             .workout(WorkoutModel(
-                header: header(state, isBusy: isBusy, locale: locale, selection: selection),
+                header: header(
+                    state, isBusy: isBusy, locale: locale, selection: selection, connection: connection
+                ),
                 page: page(
                     state,
                     selection: selection,

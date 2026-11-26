@@ -1,6 +1,7 @@
 #if DEBUG
     @testable import FeatureWorkout
     import LedgerDesign
+    import LedgerDomain
     import SwiftUI
 
     /// The cover's pinned header over its page, without the scroll view the screen puts the page in, on the
@@ -13,11 +14,13 @@
     struct WorkoutParts: View {
         let preview: WorkoutPreview
         var headerOnly = false
+        /// The live connection the header hears instead of the case's own (F17 S8); nil keeps the case's.
+        var connection: LiveConnectionState?
         var send: (WorkoutAction) -> Void = { _ in }
 
         var body: some View {
             VStack(spacing: 0) {
-                if case let .workout(workout) = preview.model {
+                if case let .workout(workout) = preview.model(connection: connection ?? preview.connection) {
                     WorkoutHeader(model: workout.header, send: send)
                         .padding(.horizontal, LedgerSpacing.screen)
                         .padding(.vertical, LedgerSpacing.l)

@@ -38,6 +38,9 @@ nonisolated struct WorkoutHeaderModel: Equatable, Sendable {
     let progressLabel: String
     /// "Exercise 2 of 5"; empty when the workout's cursor names no row.
     let progressValue: String
+    /// "Watch not connected — logging continues" while the watch is out of reach (F17 criterion 12), else nil. It
+    /// disables nothing: `isEnabled` never reads the connection.
+    var connection: String?
 }
 
 nonisolated struct WorkoutFailedModel: Equatable, Sendable {

@@ -38,6 +38,8 @@
                     $0.date = .constant(Fixtures.now.addingTimeInterval(900))
                     // F10 S7b (edited for the audit): the root reads the bests (`readBests()`).
                     $0.inMemoryStores()
+                    // F17 S8 (sanctioned edit): the root hears the live connection (`followConnection()`).
+                    $0.liveConnection = FakeLiveConnection()
                 } operation: {
                     WorkoutStore()
                 }

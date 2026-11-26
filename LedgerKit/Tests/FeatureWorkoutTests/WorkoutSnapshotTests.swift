@@ -1,6 +1,7 @@
 #if DEBUG
     @testable import FeatureWorkout
     import LedgerDesign
+    import LedgerDomain
     import LedgerSnapshotTesting
     import SnapshotTesting
     import SwiftUI
@@ -19,6 +20,8 @@
     ///   Increase Contrast.
     /// - F10 S9: a superset's block in its second round, light and dark at `.large` and `.xLarge`, and dark
     ///   `.accessibility3`; the drop set's references now draw its superset's block.
+    /// - F17 S8: the header in each state of the live connection (connected, reconnecting, solo), light and dark
+    ///   at `.large` and `.xLarge`.
     @Suite("Workout snapshots", .serialized, .tags(.feature, .snapshot))
     struct WorkoutSnapshotTests {
         private func header(_ preview: WorkoutPreview) -> some View {
@@ -32,6 +35,22 @@
         @Test("The header after some minutes matches its references")
         func header_matchesReferences() {
             assertLedgerSnapshot(of: header(.minutes), devices: [.phone], typeSizes: [.large, .xLarge])
+        }
+
+        /// F17 S8, criterion 12: the header after some minutes as each state of the live connection draws it.
+        /// Reconnecting adds its line under the bars; connected and solo draw no line.
+        @Test(
+            "The header in each state of the live connection matches its references",
+            arguments: [
+                ("connected", LiveConnectionState.connected(.mirroring)),
+                ("reconnecting", .reconnecting),
+                ("solo", .solo)
+            ]
+        )
+        func header_connection_matchesReferences(_ name: String, _ connection: LiveConnectionState) {
+            let header = WorkoutParts(preview: .minutes, headerOnly: true, connection: connection)
+                .frame(width: SnapshotConfig.phoneWidth)
+            assertLedgerSnapshot(of: header, named: name, devices: [.phone], typeSizes: [.large, .xLarge])
         }
 
         @Test("Past an hour the elapsed time reads 1:01:05")

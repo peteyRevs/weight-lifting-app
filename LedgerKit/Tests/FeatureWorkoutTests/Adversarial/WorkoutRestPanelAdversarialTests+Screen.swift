@@ -170,6 +170,8 @@
                     $0.haptics = haptics
                     $0.continuousClock = clock
                     $0.date = DateGenerator { Fixtures.now.addingTimeInterval(clock.elapsed / .seconds(1)) }
+                    // F17 S8 (sanctioned edit): the root hears the live connection (`followConnection()`).
+                    $0.liveConnection = FakeLiveConnection()
                 }
                 let root = WorkoutRoot(store: store) { _ in }.environment(\.dynamicTypeSize, .accessibility3)
                 host = UIHostingController(rootView: root)

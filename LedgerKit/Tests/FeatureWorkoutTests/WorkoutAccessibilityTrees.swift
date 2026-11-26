@@ -57,7 +57,9 @@
 
         /// The header's five stops: its row, left to right, then the workout's name and its progress. The
         /// elapsed time is its name alone, with no time for VoiceOver to read stale, and a text (F15-S2-2).
-        static func header(progress: String, isEnabled: Bool = true) -> [Stop] {
+        /// While the watch is out of reach a sixth follows, its line (F17 S8): a plain text, never
+        /// `.updatesFrequently`, and the buttons stay enabled.
+        static func header(progress: String, isEnabled: Bool = true, connection: String? = nil) -> [Stop] {
             let button: UIAccessibilityTraits = isEnabled ? .button : [.button, .notEnabled]
             return [
                 Stop("Minimize", button),
@@ -65,7 +67,7 @@
                 Stop("Finish", button),
                 Stop("Upper A — Push focus", [.header, .staticText]),
                 Stop("Workout progress", value: progress, [])
-            ]
+            ] + (connection.map { [Stop($0, .staticText)] } ?? [])
         }
 
         /// The page's stops: the card from its place to "+ Add set", then "REMAINING" and its rows. Each set
@@ -183,6 +185,7 @@
             .restOver: rest("Rest over", timeLeft: "", next: "Set 3, 200 pounds, 5 reps"),
             .logging: rest("Rest over", timeLeft: "", next: "Set 3, 200 pounds, 5 reps"),
             .minutes: rest("Rest over", timeLeft: "", next: "Set 2, 52.5 pounds, 11 reps"),
+            .watchNotConnected: rest("Rest over", timeLeft: "", next: "Set 2, 52.5 pounds, 11 reps"),
             .supersetRound2: rest(
                 "Resting", timeLeft: "45 seconds", next: "Lat Pulldown, set 2, 102.5 pounds, 13 reps"
             ),
@@ -212,6 +215,9 @@
                 ["Done", "Done", "Current set", "Pending", "Pending", "Pending"],
                 current: 3, last: "Sep 9 · 3×13 @ 100 lb", canRepeat: true
             )),
+            .watchNotConnected: header(
+                progress: "Exercise 2 of 5", connection: "Watch not connected — logging continues"
+            ) + page(incline),
             .discarding: header(progress: "Exercise 2 of 5", isEnabled: false) + page(incline, isEnabled: false),
             .loading: [],
             .failed: [

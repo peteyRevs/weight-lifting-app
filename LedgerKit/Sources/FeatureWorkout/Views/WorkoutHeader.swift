@@ -2,8 +2,8 @@ import LedgerDesign
 import SwiftUI
 
 /// The cover's pinned header (v2 "Active workout"): "Minimize", the orange dot and the elapsed time, and
-/// "Finish" in one row; under it the workout's name (v1's eyebrow; v2 draws none) and one progress segment
-/// per exercise.
+/// "Finish" in one row; under it the workout's name (v1's eyebrow; v2 draws none), one progress segment
+/// per exercise and, while the watch is out of reach, the line that says so (F17 S8).
 ///
 /// The elapsed time counts by the wall clock from the workout's start (`WorkoutTimeline`), so the model is
 /// not rebuilt each second. VoiceOver reads its name and no time: a spoken time would be as old as the last
@@ -36,6 +36,9 @@ struct WorkoutHeader: View {
                     .accessibilityIdentifier("workout.header.title")
                 ProgressSegments(model.segments, label: model.progressLabel, value: model.progressValue)
                     .accessibilityIdentifier("workout.header.progress")
+                if let connection = model.connection {
+                    connectionLine(connection)
+                }
             }
         }
     }
@@ -53,6 +56,17 @@ struct WorkoutHeader: View {
         PillButton(model.finish) { send(.finish) }
             .disabled(!model.isEnabled)
             .accessibilityIdentifier("workout.header.finish")
+    }
+
+    /// "Watch not connected — logging continues" (F17 criterion 12), under the bars: a text VoiceOver reads once
+    /// where it stands, never as a frequently updating element. It wraps at the larger sizes, and nothing beside it
+    /// is disabled.
+    private func connectionLine(_ text: String) -> some View {
+        Text(text)
+            .ledgerFont(.caption)
+            .foregroundStyle(LedgerColor.inkSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("workout.header.connection")
     }
 
     private var elapsed: some View {
