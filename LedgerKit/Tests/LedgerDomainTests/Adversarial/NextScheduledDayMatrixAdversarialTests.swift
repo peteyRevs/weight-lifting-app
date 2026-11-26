@@ -46,11 +46,12 @@ struct NextScheduledDayMatrixAdversarialTests {
         Change("Africa/Cairo", "2026-10-05", "2026-10-29T21:00:00Z", "2026-10-29", "2026-10-30", 3, .friday),
         Change("Africa/Cairo", "2026-10-05", "2026-10-29T21:59:59Z", "2026-10-29", "2026-10-30", 3, .friday),
         Change("Africa/Cairo", "2026-10-05", "2026-10-29T22:00:00Z", "2026-10-30", "2026-10-31", 3, .saturday),
-        // Havana: Sunday 2026-11-01 has two midnights (00:59:59 → 00:00).
-        Change("America/Havana", "2026-10-05", "2026-11-01T03:59:59Z", "2026-10-31", "2026-11-01", 3, .sunday),
-        Change("America/Havana", "2026-10-05", "2026-11-01T04:00:00Z", "2026-11-01", "2026-11-02", 4, .monday),
-        Change("America/Havana", "2026-10-05", "2026-11-01T05:00:00Z", "2026-11-01", "2026-11-02", 4, .monday),
-        Change("America/Havana", "2026-10-05", "2026-11-01T05:30:00Z", "2026-11-01", "2026-11-02", 4, .monday),
+        // The Azores: Sunday 2026-10-25 has two midnights (00:59:59 → 00:00). Havana's 2026 fall-back was dropped
+        // in tzdata 2026f, so it no longer carries this case.
+        Change("Atlantic/Azores", "2026-10-05", "2026-10-24T23:59:59Z", "2026-10-24", "2026-10-25", 2, .sunday),
+        Change("Atlantic/Azores", "2026-10-05", "2026-10-25T00:00:00Z", "2026-10-25", "2026-10-26", 3, .monday),
+        Change("Atlantic/Azores", "2026-10-05", "2026-10-25T01:00:00Z", "2026-10-25", "2026-10-26", 3, .monday),
+        Change("Atlantic/Azores", "2026-10-05", "2026-10-25T01:30:00Z", "2026-10-25", "2026-10-26", 3, .monday),
         // Havana: midnight of Sunday 2026-03-08 is skipped.
         Change("America/Havana", "2026-03-02", "2026-03-08T04:59:59Z", "2026-03-07", "2026-03-08", 0, .sunday),
         Change("America/Havana", "2026-03-02", "2026-03-08T05:00:00Z", "2026-03-08", "2026-03-09", 1, .monday),

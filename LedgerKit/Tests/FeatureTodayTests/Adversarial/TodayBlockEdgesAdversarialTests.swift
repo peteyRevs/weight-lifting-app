@@ -45,7 +45,7 @@ nonisolated struct TodayBlockEdgesAdversarialTests {
         // New York falls back on Sunday 11-01, Lord Howe springs forward on 10-04: a change lies in between.
         Before("America/New_York", [2026, 11, 2], before: 3, "Monday, November 2"),
         Before("Australia/Lord_Howe", [2026, 10, 5], before: 2, "Monday, October 5"),
-        Before("America/Havana", [2026, 11, 1], before: 1, "Sunday, November 1")
+        Before("Atlantic/Azores", [2026, 10, 25], before: 1, "Sunday, October 25")
     ]
 
     @Test(
