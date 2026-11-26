@@ -246,19 +246,19 @@ extension WeekCalendarTests {
                 "Sunday 00:00:00, 25 hours after Saturday began"
             ),
             MidnightRow(
-                "America/Havana", [11, 1], hours: 25, offset: -1, next: [11, 1],
+                "Atlantic/Azores", [10, 25], hours: 25, offset: -1, next: [10, 25],
                 "Saturday 23:59:59, before the 25-hour Sunday"
             ),
             MidnightRow(
-                "America/Havana", [11, 1], hours: 25, offset: 900, next: [11, 2],
+                "Atlantic/Azores", [10, 25], hours: 25, offset: 900, next: [10, 26],
                 "Sunday's first 00:15"
             ),
             MidnightRow(
-                "America/Havana", [11, 1], hours: 25, offset: 4500, next: [11, 2],
+                "Atlantic/Azores", [10, 25], hours: 25, offset: 4500, next: [10, 26],
                 "Sunday's second 00:15, an hour later"
             ),
             MidnightRow(
-                "America/Havana", [11, 1], hours: 25, offset: 25 * 3600 - 1, next: [11, 2],
+                "Atlantic/Azores", [10, 25], hours: 25, offset: 25 * 3600 - 1, next: [10, 26],
                 "the last second of the 25-hour Sunday"
             ),
             MidnightRow(

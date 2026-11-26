@@ -32,11 +32,11 @@ nonisolated extension TodayPresentationTests {
             monday: [2026, 4, 20],
             dates: ["20", "21", "22", "23", "24", "25", "26"]
         ),
-        // Sunday 1 November has 25 hours: midnight to 01:00 comes twice.
+        // Sunday 25 October has 25 hours: midnight to 01:00 comes twice.
         ZoneWeek(
-            zone: "America/Havana",
-            monday: [2026, 10, 26],
-            dates: ["26", "27", "28", "29", "30", "31", "1"]
+            zone: "Atlantic/Azores",
+            monday: [2026, 10, 19],
+            dates: ["19", "20", "21", "22", "23", "24", "25"]
         ),
         // The far ends of the day line.
         ZoneWeek(
