@@ -2,9 +2,9 @@
 # Fails unless every module's String Catalog agrees with the module's code (F09): the catalog's keys are
 # exactly the keys the code looks up, and the file is written as Xcode's own tool writes it.
 #
-# The keys come from the compiler, not from reading Swift: every Xcode build of the iOS scheme writes the
-# keys it extracted from each source file to <Source>.stringsdata, beside the object files. For every
-# LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings this script
+# The keys come from the compiler, not from reading Swift: every Xcode build writes the keys it extracted from
+# each source file to <Source>.stringsdata, beside the object files. For every
+# LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings of one platform's modules this script
 #   1. fails every lookup that is not in a copy file (<Name>Copy.swift, <Name>Copy+<Area>.swift), with its
 #      file and line, whether or not the catalog has its key: a bare Text("...") in a view or a preview is
 #      one, and so is Button("\(a)/\(b)"), which has no letter for the source audit to see;
@@ -23,26 +23,37 @@
 # A module has one catalog, at that path. Any other .xcstrings under LedgerKit/Sources fails this step: the
 # build would compile it into the module's bundle, and nothing would check it.
 #
-# Only the iOS build is read. A module that only the watch build compiles (LedgerWatchAppKit,
-# WatchFeatureWorkout) gets its catalog with F18, when this step learns to read the watch build
-# (docs/engineering-standards.md §7); until then a catalog there fails with "nothing to be compared with".
+# Each platform's build is read for its own modules only (F18 S0). The watch's modules, WATCH_MODULES below,
+# are checked with --watch, against the watch build's .stringsdata alone; every other module without it,
+# against the iOS build's alone. So a module's keys are never taken from the other platform's folder, where an
+# older build may have left them. A watch module that is not listed there fails without --watch: the iOS
+# build does not compile it, and the message says to list it.
 #
-# The committed catalog is only read, and may be read-only. Nothing here builds: run it after an iOS build
-# (check.sh step 3). A known limit: a source edited since that build is compared by the .stringsdata the
-# build wrote, so a run by hand needs a build first; check.sh always builds before this step.
+# The committed catalog is only read, and may be read-only. Nothing here builds: run it after that platform's
+# build (check.sh steps 3 and 4). A known limit: a source edited since that build is compared by the
+# .stringsdata the build wrote, so a run by hand needs a build first; check.sh always builds before this step.
 #
-#   scripts/check-string-catalogs.sh [<repository root> [<derived data>]]
+#   scripts/check-string-catalogs.sh [--watch] [<repository root> [<derived data>]]
 #
 # <repository root> defaults to this script's repository, <derived data> to .derivedData in that root
 # (check.sh's -derivedDataPath).
 #
 # Exit 0: every catalog matches. 1: a catalog does not match or has no build output to compare with (the
-# others are still checked), a catalog stands somewhere else, or there is no catalog at all: the app has
-# copy, so finding none means the catalogs moved, and this step must not pass on nothing. 2: wrong arguments.
+# others are still checked), a catalog stands somewhere else, or the platform has no catalog at all: the app
+# has copy on both, so finding none means the catalogs moved, and this step must not pass on nothing.
+# 2: wrong arguments.
 set -euo pipefail
 
-if [[ $# -gt 2 ]]; then
-    echo "usage: $0 [<repository root> [<derived data>]]" >&2
+# The modules only the watch build compiles; ModuleCopyTests.watchOnly names the same two.
+WATCH_MODULES=(LedgerWatchAppKit WatchFeatureWorkout)
+
+WATCH=0
+if [[ "${1:-}" == --watch ]]; then
+    WATCH=1
+    shift
+fi
+if [[ $# -gt 2 || "${1:-}" == -* || "${2:-}" == -* ]]; then # the flag comes first, and is the only one
+    echo "usage: $0 [--watch] [<repository root> [<derived data>]]" >&2
     exit 2
 fi
 ROOT="${1:-$(dirname "$0")/..}"
@@ -53,9 +64,14 @@ if ! cd "$ROOT"; then
     exit 2
 fi
 
-# Where the iOS build (scheme Ledger, Debug, an arm64 simulator) leaves the package's intermediates; a
-# module's files are in <Module>-t.build/Objects-normal/arm64 there. The watch build's are not read.
-INTERMEDIATES="$DERIVED/Build/Intermediates.noindex/LedgerKit.build/Debug-iphonesimulator"
+# Where the platform's build (Debug, an arm64 simulator) leaves the package's intermediates; a module's files
+# are in <Module>-t.build/Objects-normal/arm64 there. The other platform's are not read.
+if [[ $WATCH -eq 1 ]]; then
+    PLATFORM=watchOS BUILT_BY="the watchOS build" SDK_FOLDER=Debug-watchsimulator
+else
+    PLATFORM=iOS BUILT_BY="the iOS build" SDK_FOLDER=Debug-iphonesimulator
+fi
+INTERMEDIATES="$DERIVED/Build/Intermediates.noindex/LedgerKit.build/$SDK_FOLDER"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ledger-string-catalogs.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -131,21 +147,31 @@ check_catalog() {
     done < <(find "LedgerKit/Sources/$module" -type f -name '*.swift' -print0 | LC_ALL=C sort -z)
 
     if [[ ${#files[@]} -eq 0 ]]; then
-        cat >&2 <<MSG
-error: $catalog has nothing to be compared with: the iOS build left no
+        if [[ $WATCH -eq 1 ]]; then
+            cat >&2 <<MSG
+error: $catalog has nothing to be compared with: $BUILT_BY left no
+       .stringsdata for $module's Swift files in
+       $objects
+       watchOS has not been built: scripts/check.sh builds it, then runs this step with --watch. The iOS
+       build's folder is not read for a watch module. Or Xcode's build folder is laid out differently
+       now, and this script must follow it.
+MSG
+        else
+            cat >&2 <<MSG
+error: $catalog has nothing to be compared with: $BUILT_BY left no
        .stringsdata for $module's Swift files in
        $objects
        One of three things. iOS has not been built: scripts/check.sh builds it, then runs this step.
-       Or $module is a watch module, which the iOS build does not compile: this step reads the iOS
-       build only, and LedgerWatchAppKit and WatchFeatureWorkout get their catalogs with F18
-       (docs/engineering-standards.md §7), so take this catalog out until then. Or Xcode's build folder
-       is laid out differently now, and this script must follow it.
+       Or $module is a watch module, which the iOS build does not compile: name it in WATCH_MODULES in
+       this script (and in ModuleCopyTests.watchOnly), and it is checked after the watch build, with
+       --watch. Or Xcode's build folder is laid out differently now, and this script must follow it.
 MSG
+        fi
         return 1
     fi
     if [[ ${#unbuilt[@]} -gt 0 ]]; then
-        echo "error: $catalog cannot be compared with all of $module's code: the iOS build left" >&2
-        echo "       no .stringsdata for these files. Build iOS again (scripts/check.sh does), then run this step:" >&2
+        echo "error: $catalog cannot be compared with all of $module's code: $BUILT_BY left" >&2
+        echo "       no .stringsdata for these files. Build $PLATFORM again (scripts/check.sh does), then run this step:" >&2
         printf '         %s\n' "${unbuilt[@]}" >&2
         return 1
     fi
@@ -207,12 +233,32 @@ MSG
     echo "string catalog matches the code: $catalog (keys: $(jq '.strings | length' "$catalog"))"
 }
 
-checked=0 failed=0
+# is_watch_module <module>: whether only the watch build compiles it.
+is_watch_module() {
+    local each
+    for each in "${WATCH_MODULES[@]}"; do [[ "$each" != "$1" ]] || return 0; done
+    return 1
+}
+
+checked=0 failed=0 other_platform=()
 for catalog in LedgerKit/Sources/*/Resources/Localizable.xcstrings; do
     [[ -f "$catalog" ]] || continue # no match leaves the pattern itself
+    module="$(basename "$(dirname "$(dirname "$catalog")")")"
+    if is_watch_module "$module"; then watch_module=1; else watch_module=0; fi
+    if [[ $watch_module -ne $WATCH ]]; then
+        other_platform+=("$module")
+        continue
+    fi
     checked=$((checked + 1))
     check_catalog "$catalog" || failed=$((failed + 1))
 done
+if [[ ${#other_platform[@]} -gt 0 ]]; then
+    if [[ $WATCH -eq 1 ]]; then
+        echo "not checked here: ${other_platform[*]}, against the iOS build (this step without --watch)"
+    else
+        echo "not checked here: ${other_platform[*]}, against the watch build (this step with --watch)"
+    fi
+fi
 
 # A catalog anywhere else under the sources is one the loop above did not see.
 elsewhere=0
@@ -225,7 +271,12 @@ while IFS= read -r -d '' other; do
 done < <(find LedgerKit/Sources -name '*.xcstrings' -print0 2>/dev/null | LC_ALL=C sort -z)
 
 if [[ $checked -eq 0 ]]; then
-    echo "error: no String Catalog at LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings under $PWD." >&2
+    if [[ $WATCH -eq 1 ]]; then
+        echo "error: no String Catalog of a watch module (${WATCH_MODULES[*]}) at" >&2
+        echo "       LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings under $PWD." >&2
+    else
+        echo "error: no String Catalog at LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings under $PWD." >&2
+    fi
     echo "       The app has user-facing copy, so the catalogs moved or the root is wrong: nothing was checked." >&2
     exit 1
 fi

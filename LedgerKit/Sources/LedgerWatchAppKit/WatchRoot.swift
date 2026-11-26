@@ -42,10 +42,7 @@ public struct WatchRoot: View {
 struct DatabaseUnavailableView: View {
     var body: some View {
         ScrollView {
-            EmptyState(
-                "Can't open your data right now",
-                body: "Your workouts are still on this watch. Ledger tries again when you come back to it."
-            )
+            EmptyState(WatchAppCopy.databaseUnavailableTitle, body: WatchAppCopy.databaseUnavailableBody)
         }
         .background(LedgerColor.watchGround)
     }

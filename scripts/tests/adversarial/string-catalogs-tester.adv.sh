@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/check-string-catalogs.sh, attacked by the G2 tester (F09 S1 close-out, 2026-10-05). The implementer's
-# suite beside this one (string-catalogs.adv.sh, SC00-SC70) proves the step; these cases (ST..) are the ones it
+# suite beside this one (string-catalogs.adv.sh, SC00-SC91) proves the step; these cases (ST..) are the ones it
 # does not have, written from docs/engineering-standards.md §7 ("Who checks what", 1; "Catalog") before the
 # script was read: comments in both directions, modules beside each other, layouts, a second language, paths
 # with spaces, a repository that cannot be written, keys a shell could mangle, and a tool that fails.
@@ -306,6 +306,31 @@ nearly ST31 StartCopy '"Start workout"' 'a tab for the space' 'Start\tworkout' '
 nearly ST32 StartCopy '"Start workout"' 'a line feed at the end' 'Start workout\n' '"Start workout\n"'
 nearly ST33 StartCopy '"Start workout"' 'a fullwidth capital (U+FF33)' "$(printf '\xef\xbc\xb3tart workout')" \
     "$(printf '"\xef\xbc\xb3tart workout" (spelled "\\u{FF33}tart workout")')"
+
+# ---- F18 S0: the watch's modules (--watch) -------------------------------------------------------------
+# watch_module <repository> <Module> <Source>...: as module, with the .stringsdata where the watch build leaves them.
+watch_module() {
+    module "$@"
+    mkdir -p "$R/$BUILD/Debug-watchsimulator/$2-t.build/Objects-normal" &&
+        mv "$OBJECTS" "$R/$BUILD/Debug-watchsimulator/$2-t.build/Objects-normal/arm64"
+}
+watch_module 'a watch repository with spaces' LedgerWatchAppKit TabsCopy && keys 'History' 'Today' &&
+    mv "$R/.derivedData" "$ADV_TMP/watch derived data"
+out="$(cd "$ADV_TMP" && /bin/bash "$SCRIPT" --watch "$R" 'watch derived data' 2>&1)"
+code=$?
+expect "ST38 --watch on a repository and derived data whose paths have spaces, the second relative to the caller, passes" \
+    "$(found) $(matched LedgerWatchAppKit)" "0 0/0/0 1"
+watch_module watch-named-like WatchFeatureWorkoutExtra TabsCopy && keys 'History' 'Today' && run
+expect "ST39 Reach: a module is a watch module only by its exact name; WatchFeatureWorkoutExtra is not one, so without --watch \
+it fails (the iOS build left nothing for it), and the message says to list it in WATCH_MODULES" \
+    "$(found) $(grep -c 'name it in WATCH_MODULES' <<<"$out")" "1 0/0/0 1"
+# The script's list and ModuleCopyTests.watchOnly name the same modules: a module in one list and not the other
+# would be skipped by one check and asked of the wrong platform's build by the other.
+script_list="$(sed -n 's/^WATCH_MODULES=(\(.*\))$/\1/p' "$ROOT/scripts/check-string-catalogs.sh" | tr ' ' '\n' | sort | tr '\n' ' ')"
+tests_list="$(grep -oE 'static let watchOnly: Set<String> = \[[^]]*\]' "$ROOT/LedgerKit/Tests/LedgerAppKitTests/ModuleCopyTests.swift" |
+    grep -oE '"[A-Za-z]+"' | tr -d '"' | sort | tr '\n' ' ')"
+expect "ST40 the script's WATCH_MODULES and ModuleCopyTests.watchOnly name the same two watch modules" \
+    "$script_list|$tests_list" "LedgerWatchAppKit WatchFeatureWorkout |LedgerWatchAppKit WatchFeatureWorkout "
 
 # ---- the tool fails ------------------------------------------------------------------------
 # with_tool <body of a fake xcstringstool>: the script on $R with an xcrun whose xcstringstool is that.

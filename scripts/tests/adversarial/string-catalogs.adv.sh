@@ -134,12 +134,13 @@ check "SC00 the fixture sources compile, and the compiler writes one .stringsdat
 
 # ---- fixture repositories ------------------------------------------------------------------------
 # module <repository> <Module> <Source>...: adds a module to the repository $ADV_TMP/<repository>: those
-# sources, and their .stringsdata where the iOS build leaves them. Sets $R and $CATALOG for the next calls.
+# sources, and their .stringsdata where the iOS build leaves them (the watch build, with SDK=Debug-watchsimulator).
+# Sets $R and $CATALOG for the next calls.
 module() {
     local source objects
     R="$ADV_TMP/$1"
     CATALOG="LedgerKit/Sources/$2/Resources/Localizable.xcstrings"
-    objects="$R/$BUILD/Debug-iphonesimulator/$2-t.build/Objects-normal/arm64"
+    objects="$R/$BUILD/${SDK:-Debug-iphonesimulator}/$2-t.build/Objects-normal/arm64"
     mkdir -p "$R/LedgerKit/Sources/$2/Resources" "$objects"
     shift 2
     for source in "$@"; do
@@ -184,8 +185,13 @@ keys() {
     catalog ${entries[@]+"${entries[@]}"}
 }
 # run [<derived data>]: the script on the repository $R, from another directory; sets $code and $out.
+# run_watch: the same, with --watch.
 run() {
     out="$(cd "$ADV_TMP" && /bin/bash "$SCRIPT" "$R" "$@" 2>&1)"
+    code=$?
+}
+run_watch() {
+    out="$(cd "$ADV_TMP" && /bin/bash "$SCRIPT" --watch "$R" "$@" 2>&1)"
     code=$?
 }
 # found: "<exit code> <lookups the catalog lacks>/<catalog keys no code looks up>/<diffs against the tool>"
@@ -307,10 +313,10 @@ expect "SC17 a catalog with no .stringsdata (iOS not built) fails with a clear m
 $(grep -c 'iOS has not been built: scripts/check.sh builds it, then runs this step' <<<"$out")" "1 0/0/0 1 1"
 module watch-only Tabs TabsCopy && keys 'History' 'Today' &&
     mv "$R/$BUILD/Debug-iphonesimulator" "$R/$BUILD/Debug-watchsimulator" && run
-expect "SC18 ... and the watch build's .stringsdata are not read: the same failure, which says a watch module's catalog waits for F18" \
+expect "SC18 ... and the watch build's .stringsdata are not read for a module that is not a watch module: the same failure, \
+which says to name a watch module in WATCH_MODULES" \
     "$(found) $(grep -c 'has nothing to be compared with' <<<"$out") \
-$(grep -c 'Or Tabs is a watch module, which the iOS build does not compile' <<<"$out") \
-$(grep -c 'LedgerWatchAppKit and WatchFeatureWorkout get their catalogs with F18' <<<"$out")" "1 0/0/0 1 1 1"
+$(grep -c 'Or Tabs is a watch module, which the iOS build does not compile: name it in WATCH_MODULES' <<<"$out")" "1 0/0/0 1 1"
 module stale Tabs TabsCopy && keys 'History' 'Today' &&
     cp "$DATA/StartCopy.stringsdata" "$R/$BUILD/Debug-iphonesimulator/Tabs-t.build/Objects-normal/arm64/"
 passes "SC19 a stale .stringsdata, of a source file the module no longer has, is ignored"
@@ -393,6 +399,56 @@ expect "SC30 the derived data is .derivedData in the repository unless the secon
     "$default|$absolute|$(found)" "1 0/0/0|0 0/0/0|0 0/0/0"
 out="$(/bin/bash "$SCRIPT" "$R" "$ADV_TMP/built-elsewhere" extra 2>&1)"
 expect "SC31 a third argument is a usage error (exit 2)" "$? $(grep -c '^usage: ' <<<"$out")" "2 1"
+usage=""
+for args in "$R --watch" "$R $ADV_TMP/built-elsewhere --watch" "--watch --watch $R" "--ios $R" "--watch $R $ADV_TMP/built-elsewhere extra"; do
+    # shellcheck disable=SC2086 # each case is its words
+    out="$(/bin/bash "$SCRIPT" $args 2>&1)"
+    usage+="$? $(grep -c '^usage: .* \[--watch\] ' <<<"$out") "
+done
+expect "SC82 --watch comes first and alone: after the root, twice, another flag, or with three paths, it is a usage error (exit 2)" \
+    "$usage" "2 1 2 1 2 1 2 1 2 1 "
+
+# ---- F18 S0: each platform's modules against that platform's build alone ----------------------------
+# The watch modules are LedgerWatchAppKit and WatchFeatureWorkout. A real module name, with fixture sources.
+module watch-pass WatchFeatureWorkout StartCopy && keys 'Start workout' &&
+    mv "$R/$BUILD/Debug-iphonesimulator" "$R/$BUILD/Debug-watchsimulator" && run_watch
+expect "SC83 --watch checks a watch module's catalog against the watch build's .stringsdata: a match passes, with the count" \
+    "$(found) $(grep -c "^string catalog matches the code: $CATALOG (keys: 1)$" <<<"$out") $(tail -1 <<<"$out")" \
+    "0 0/0/0 1 string catalogs: 1 checked, each matches its module's code"
+keys 'Start workout' 'Today' && run_watch
+expect "SC84 ... and a key the watch module's catalog has and its code does not fails, naming the key" \
+    "$(found) $(unused '"Today"')" "1 0/1/0 1"
+keys && run_watch
+expect "SC85 ... and so does a key its code looks up and the catalog lacks" "$(found) $(lacked '"Start workout"')" "1 1/0/0 1"
+module watch-in-ios WatchFeatureWorkout StartCopy && keys 'Start workout' && run_watch
+expect "SC86 --watch never reads the iOS build's folder: a watch module whose .stringsdata stand only there has nothing to be compared with" \
+    "$(found) $(grep -c "^error: $CATALOG has nothing to be compared with: the watchOS build left no$" <<<"$out") \
+$(grep -c 'watchOS has not been built: scripts/check.sh builds it, then runs this step with --watch' <<<"$out")" "1 0/0/0 1 1"
+run
+expect "SC87 ... and without --watch a watch module is not checked, whatever its catalog says: it is named as the watch build's" \
+    "$code $(grep -cx 'not checked here: WatchFeatureWorkout, against the watch build (this step with --watch)' <<<"$out") \
+$(grep -c 'nothing was checked' <<<"$out")" "1 1 1"
+module watch-beside-ios Tabs TabsCopy && keys 'History' 'Today'
+module watch-beside-ios LedgerWatchAppKit StartCopy && keys 'Settings' && run
+ios_run="$(found) $(grep -cx 'not checked here: LedgerWatchAppKit, against the watch build (this step with --watch)' <<<"$out")"
+SDK=Debug-watchsimulator module watch-beside-ios LedgerWatchAppKit StartCopy && keys 'Start workout' && run_watch
+expect "SC88 beside an iOS module: without --watch the iOS module passes and the watch one, wrong as it is, waits; with --watch \
+the watch one is checked against the watch build and the iOS one waits" \
+    "$ios_run|$(found) $(grep -cx 'not checked here: Tabs, against the iOS build (this step without --watch)' <<<"$out") \
+$(grep -c 'string catalog matches the code: LedgerKit/Sources/LedgerWatchAppKit/' <<<"$out")" "0 0/0/0 1|0 0/0/0 1 1"
+module watch-none Tabs TabsCopy && keys 'History' 'Today' && run_watch
+expect "SC89 --watch on a repository with no watch module's catalog fails: nothing was checked" \
+    "$code $(grep -c '^error: no String Catalog of a watch module (LedgerWatchAppKit WatchFeatureWorkout) at$' <<<"$out")" "1 1"
+SDK=Debug-watchsimulator module watch-stale WatchFeatureWorkout StartCopy && keys 'Start workout' &&
+    cp "$DATA/TabsCopy.stringsdata" "$R/$BUILD/Debug-watchsimulator/WatchFeatureWorkout-t.build/Objects-normal/arm64/"
+run_watch
+expect "SC90 ... and the watch build's .stringsdata of a source the module no longer has is ignored, as SC19's" "$(found)" "0 0/0/0"
+SDK=Debug-watchsimulator module watch-added WatchFeatureWorkout StartCopy TabsCopy && keys 'History' 'Start workout' 'Today' &&
+    rm "$R/$BUILD/Debug-watchsimulator/WatchFeatureWorkout-t.build/Objects-normal/arm64/TabsCopy.stringsdata" &&
+    mkdir -p "$R/$BUILD/Debug-iphonesimulator/WatchFeatureWorkout-t.build/Objects-normal/arm64" &&
+    cp "$DATA/TabsCopy.stringsdata" "$R/$BUILD/Debug-iphonesimulator/WatchFeatureWorkout-t.build/Objects-normal/arm64/" && run_watch
+expect "SC91 ... and a source the watch build left no .stringsdata for fails, though the iOS folder has one: build watchOS again" \
+    "$(found) $(grep -cx '         LedgerKit/Sources/WatchFeatureWorkout/TabsCopy.swift' <<<"$out") $(grep -c 'Build watchOS again' <<<"$out")" "1 0/0/0 1 1"
 
 # ---- moved from CatalogBuildAdversarialTests.auditKey_isFoundationsKey ---------------------------
 # Twelve lookups; each passes when the catalog's key is the one shown.

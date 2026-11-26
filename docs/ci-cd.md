@@ -328,7 +328,9 @@ authoritative; the plan differs:
   bundle measures it.
 - **String catalogs (F09).** Step 3 of `check.sh` runs `scripts/check-string-catalogs.sh` right after the
   iOS build and before the iOS tests, in every mode that builds iOS: `Check` (`--ios-only --skip-static`)
-  runs it, and so does the full local gate. The watch build is never read. During the build the compiler
+  runs it, and so does the full local gate. It checks the iOS modules only; the watch modules' catalogs
+  are checked by step 4 (`--watch`, against the watch build alone), which `--ios-only` skips, so the full
+  local gate and the nightly's watch legs check them, and PR CI does not. During the build the compiler
   writes the keys it extracted from each source file (`.stringsdata`, under `.derivedData`). The script
   compares each `LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings` with its module's keys: the
   catalog must hold exactly those keys, byte for byte, and read as `xcrun xcstringstool sync` would write

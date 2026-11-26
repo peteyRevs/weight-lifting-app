@@ -38,8 +38,9 @@
 #                                       --shard (docs/ci-cd.md, "Nightly legs"). Takes no --fast,
 #                                       --lint-only, --static-only or --record-snapshots
 #
-# Step 3 also checks every String Catalog against the keys its iOS build extracted
-# (scripts/check-string-catalogs.sh), in every mode that builds iOS, --record-snapshots too.
+# Steps 3 and 4 also check each String Catalog against the keys its platform's build extracted
+# (scripts/check-string-catalogs.sh): the iOS modules' after the iOS build, the watch modules' (--watch)
+# after the watch build, in every mode that builds that platform, --record-snapshots too.
 #
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
@@ -298,10 +299,10 @@ if [[ $IOS_ONLY -eq 0 ]]; then WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_
 # before an app-hosted test could launch, which ran out the CI step (F01 notes, "Second CI run").
 # Packages resolve only to the committed Package.resolved: a stale one fails the build rather than
 # being rewritten, as Swift 6.4 rewrote it (F32 notes, "Package pins").
-# The iOS build leaves the keys the compiler extracted from each module's code. Before any iOS test runs,
-# every String Catalog is compared with them (F09; scripts/check-string-catalogs.sh). The watch build's
-# keys are not read. A record run stops there too: a screen recorded from a catalog that does not match
-# the code would have to be recorded again.
+# Each build leaves the keys the compiler extracted from each module's code. Before that platform's tests run,
+# its modules' String Catalogs are compared with them (F09; scripts/check-string-catalogs.sh): the iOS
+# modules' with the iOS build's, the watch modules' with the watch build's alone (F18 S0). A record run stops
+# there too: a screen recorded from a catalog that does not match the code would have to be recorded again.
 # ARCHS=arm64: every simulator here (a developer Mac, the xcode-27 image) runs on Apple silicon. Without it
 # the iOS build also builds the embedded watch app and its package modules for x86_64, since the active-arch
 # rule covers only the destination's own platform (tasks/chores/2026-10-18-arm64-only.md). Both actions
@@ -321,11 +322,9 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
         -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
     done_step "$2 build"
     if [[ $BUILD_ONLY -eq 1 ]]; then return; fi
-    if [[ "$2" == iOS ]]; then
-        step "$1 · string catalogs (each against the keys the $2 build extracted)"
-        scripts/check-string-catalogs.sh
-        done_step "string catalogs"
-    fi
+    step "$1 · string catalogs (each against the keys the $2 build extracted)"
+    if [[ "$2" == iOS ]]; then scripts/check-string-catalogs.sh; else scripts/check-string-catalogs.sh --watch; fi
+    done_step "$2 string catalogs"
     step "$1 · $2 simulator boot"
     scripts/sim-boot.sh --wait "$5"
     done_step "$2 boot"

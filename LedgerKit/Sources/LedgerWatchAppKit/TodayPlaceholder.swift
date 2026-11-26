@@ -8,7 +8,7 @@ struct TodayPlaceholder: View {
     var onTitleLongPress: () -> Void = {}
 
     var body: some View {
-        Text("Today")
+        Text(WatchAppCopy.today)
             .ledgerFont(.watchTitle)
             .foregroundStyle(LedgerColor.watchInk)
             .accessibilityAddTraits(.isHeader)

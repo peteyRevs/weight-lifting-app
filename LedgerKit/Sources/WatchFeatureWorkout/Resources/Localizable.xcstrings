@@ -1,0 +1,17 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "iPhone not connected — logging continues" : {
+      "comment" : "Line under the set label while the iPhone is out of reach; every control still works",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone not connected — logging continues"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

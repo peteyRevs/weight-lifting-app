@@ -177,9 +177,10 @@ M1 convention (2026-10-04), built in F09 S1 and revised in its fix round 1.
 `LedgerAppKit` is the model: `AppCopy.swift` and
 `Resources/Localizable.xcstrings`. A feature adds a catalog and a copy file,
 and nothing else: no test of its own and no entry in a list. Three checks find
-both without being told ("Who checks what"). This holds for the modules the
-iOS build compiles; a watch module gets its catalog with F18 ("Not yet
-converted" below).
+both without being told ("Who checks what"). A watch module (one only the
+watch build compiles: `LedgerWatchAppKit`, `WatchFeatureWorkout`) does the
+same, and its copy test asks the watch's bundle (check 3 below); a new watch
+module is also named in the two lists of watch modules (F18 S0).
 
 - **Catalog.** A module with copy has one hand-written
   `Sources/<Module>/Resources/Localizable.xcstrings`, and its target declares
@@ -262,10 +263,13 @@ hand.
 
 1. **The catalog's keys are the code's keys: the gate, with the compiler's
    keys.** `scripts/check-string-catalogs.sh` runs in `scripts/check.sh` after
-   the iOS build, in every mode that builds iOS, and so in CI. For every
+   the iOS build, in every mode that builds iOS, and so in CI; with `--watch`
+   it runs after the watch build, in every mode that builds the watch, for the
+   watch modules (the script's `WATCH_MODULES`), and each platform's run skips
+   the other's modules. For every
    `LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings` it takes the
-   keys the compiler extracted from that module's sources (the build's
-   `.stringsdata` files). First it fails every lookup that is not in a copy
+   keys the compiler extracted from that module's sources (the `.stringsdata`
+   files of its own platform's build, never the other's). First it fails every lookup that is not in a copy
    file, with its file and line, whether or not the catalog has its key. The
    compiler sees what no source check can: a bare `Text("…")` in a preview is
    such a lookup, and so is `Button("\(done)/\(total)")`, which has no letter.
@@ -323,23 +327,21 @@ hand.
 
 `ModuleCopyTests` (`LedgerAppKitTests`) runs 2 and 3 over every folder of
 `LedgerKit/Sources`: 2 on every module, with its catalog when it has one, and
-3 on every module that has a catalog. Two tables in that suite name the
-modules it does not audit:
+3 on every module that has a catalog, except the watch modules
+(`ModuleCopyTests.watchOnly`, the same list as the script's): the iOS tests do
+not embed the watch's bundles. Each watch module's copy test runs 3 on its
+own catalog instead, in the PR-Watch plan (`WatchAppCopyTests`,
+`WatchWorkoutCopyTests`). Two tables in that suite name the modules it does
+not audit:
 
 - **No user-facing copy by design**, each with its reason: `LedgerDomain`,
   `LedgerPersistence`, `LedgerDependencies`, `LedgerSync`, `LedgerHealth`,
   `LedgerFakes`, `LedgerTestSupport`, `LedgerSnapshotTesting`. Their literals
   are data, SQL, keys and log lines.
 - **Not yet converted**: `LedgerDesign` (VoiceOver words looked up in
-  components, the Debug gallery) and `LedgerWatchAppKit` (its placeholder and
-  can't-open screen). This table only shrinks, and a module that passes the
-  audit while still listed fails the suite. The chore after F09 S1 converts
-  `LedgerDesign` only. `LedgerWatchAppKit` converts with F18, and
-  `WatchFeatureWorkout` gets its catalog then too: the iOS build compiles
-  neither, so check 1 has nothing to compare a catalog there with and fails
-  it, and the iOS tests do not embed the watch bundles, so check 3 cannot ask
-  them. F18 teaches the step to read the watch build and gives a watch test
-  target check 3.
+  components, the Debug gallery). This table only shrinks, and a module that
+  passes the audit while still listed fails the suite. The chore after F09 S1
+  converts it. `LedgerWatchAppKit` left the table in F18 S0.
 
 A module with a counted string also tests it through its copy file, with one
 and with several.
