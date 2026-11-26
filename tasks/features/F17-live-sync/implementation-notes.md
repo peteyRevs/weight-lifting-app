@@ -19,7 +19,7 @@ larger-slice rule (2026-10-08).
 | **S7** WatchConnectivity + wiring | `WCBoostTransport` (`sendMessageData` while reachable, errors logged and swallowed) behind a session seam as `CompanionSessionActivator` does; one `WCSessionDelegate` registered at launch on both apps; both compositions build store → transports → host; `watchTookPart` bound to `hasWatchParticipant`; `onMirrorStart` reaches the host; a `liveConnection` key for the connection stream. | 13 (device), wiring for all | ~800 |
 | **S8** connection line | The phone's workout header line "Watch not connected — logging continues" (watch copy "iPhone not connected — logging continues", for F18), controls stay enabled, accessibility label without `.updatesFrequently`; snapshots {connected, reconnecting, solo} × {light, dark} × {default, XL}; device checklist for criteria 7, 11, 13 (F20). | 12, device halves of 7, 11, 13 | ~600 |
 
-S3 and S4 split again (receive versus transmit; handshake versus property tests) if either passes ~1,000 lines.
+S3 and S4 split again (receive versus transmit; handshake versus property tests) if either passes ~1,000 lines. S7 splits into S7a (the WatchConnectivity transport) and S7b (the wiring).
 
 ## Where the brief predates the repo, and how each is resolved
 
@@ -442,3 +442,63 @@ HealthKit, no new dependency. Neither is wired yet (S7 builds the compositions a
 7. **Unstructured tasks, kept and cancelled:** the hung sends and the reconnect timer. Both are owned by the actor
    and ended with `run()`; neither is a store's (engineering-standards §4). The reconnect timer carries a drop
    number, so a timer that fires late cannot close a later window.
+
+## Slice S7a (G1, 2026-11-26)
+
+S7 splits: **S7a** (this slice) is the WatchConnectivity transport and its one delegate; **S7b** is the wiring:
+both compositions building store → transports → host and running them, `watchTookPart` bound to
+`hasWatchParticipant`, `onMirrorStart` reaching the host, the `liveConnection` key, and on the watch the
+`HealthEventBroadcast` with `followPhoneStartRequests(…startOwn:)`. All of S7 measured over 1,000 lines.
+
+- **`WatchConnectivityTransport`** (`LedgerSync/Transports/`, the spec's `WCBoostTransport`): sends each frame as
+  `WireCodec`'s parts, one `sendMessageData` each, only while the session says the peer is reachable (else
+  `unreachable`, nothing sent); a message the session later reports as failed is logged and swallowed (ADR-005
+  §5); `tooLarge` (or the codec's `unencodable`) refuses the frame. Each message that arrives is decoded alone onto
+  `incoming`; one that cannot be read is logged and dropped. `link` is `false` when made, then each change of
+  reachability once. No WatchConnectivity import: the session is the `MessageSession` seam, so the rules run and are
+  tested on every platform, `swift test` included.
+- **`CompanionSessionActivator` is the one `WCSessionDelegate`** on both apps, as before; it now owns the transport
+  (`transport`, over `DefaultMessageSession`, the two `WCSession.default` calls) and feeds it: reachability after
+  activation and on each `sessionReachabilityDidChange`, and every `session(_:didReceiveMessageData:)`.
+- **Tests:** `WatchConnectivityTransportTests` on a stand-in session (only while reachable, failures swallowed, a
+  400-envelope frame cut under 60 000 bytes and decoded back in order, `tooLarge` and `unencodable` refused, the
+  link's changes, incoming decoding, and a host connected to it whose clock never moves handing over every own
+  envelope); `CompanionSessionActivatorTests` gains the delegate feeding the transport.
+
+### Decisions (for review)
+
+1. **The name is `WatchConnectivityTransport`, on Apple's framework.** "WCBoost" in the spec is ADR-005 §3's "latency
+   boost", not a library: no ADR names a third-party WatchConnectivity package and none is in `Package.swift`. The
+   file sits where the spec puts `WCBoostTransport.swift`.
+2. **A send returns once the session has the data** (S6's open question: can a WatchConnectivity send hang?).
+   `sendMessageData` queues and returns; its delivery, or failure, is reported later through the error handler,
+   which the transport only logs. So the transport never waits on the peer, and the host's serial sender is never
+   held: the host test runs with a clock that never moves, so a send that waited could not have been ended by the
+   host's 3 s timeout. The host's timeout stays for mirroring.
+3. **No reply handler.** With `replyHandler: nil` the peer's `session(_:didReceiveMessageData:)` (without reply) is
+   called, and the error handler still reports a failed delivery. A reply would only acknowledge what the
+   handshakes already heal.
+4. **Unreachable throws, failures later do not.** The composite needs to know whether either channel took a frame
+   (S6); a frame handed to the session counts as taken, as a queued mirrored frame does (S6, decision 1).
+5. **The last reachability sits behind a `Mutex`**: the delegate is called synchronously on WatchConnectivity's
+   queue, engineering-standards §4's exception (as `MirroringStartRegistrar`). The transport is a final class with
+   `let`s only; no `@unchecked Sendable`.
+6. **One delegate, owned by the activator.** `WCSession` has a single delegate, so the live channel and F19's
+   companion transport share the activator: the live channel owns messages (`sendMessageData`), F19 the
+   application context, user info and files (ADR-005 §5). Until S7b connects the transport, nothing sends on
+   either device, so nothing arrives.
+7. **Coverage:** `DefaultMessageSession`'s two `WCSession.default` calls are the only lines no test runs (no
+   WatchConnectivity in tests); the delegate methods that read the session run with `WCSession.default` unactivated,
+   as the activator's existing test does.
+
+### Device checks for F20
+
+1. Phone and watch apps open, the watch app frontmost: Console (subsystem `com.petearevalo.Ledger`, category
+   `sync`) shows "WCSession activation completed in state 2" on both, and no "A WatchConnectivity message failed".
+2. Once S7b lands, with mirroring off (watch app not in a workout), a set logged on the watch ticks on the phone in
+   under 1 s (criterion 13, signpost `sync.roundtrip`), and the reverse while the watch app is frontmost.
+3. Watch app moved to the background with no workout: the phone hands nothing to WatchConnectivity (no "A
+   WatchConnectivity message failed" in Console) until the watch is reachable again, and then its handshake goes
+   first.
+4. A message over the measured 65 536 bytes never appears: a replay of a long workout goes as several messages, and
+   no "payloadTooLarge" (`WCError` 7012) is logged.

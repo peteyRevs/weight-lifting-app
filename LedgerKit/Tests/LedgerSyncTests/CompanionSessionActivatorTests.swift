@@ -1,13 +1,15 @@
 #if canImport(WatchConnectivity)
+    import LedgerDomain
     @testable import LedgerSync
     import Testing
     import WatchConnectivity
 
     /// `CompanionSessionActivator` on a stand-in session: no real `WCSession` is activated (testing-strategy §3).
-    @Suite("Companion session activator")
+    @Suite("Companion session activator", .timeLimit(.minutes(1)))
     struct CompanionSessionActivatorTests {
         final class StandInSession: CompanionSession {
             weak var delegate: (any WCSessionDelegate)?
+            var isReachable = false
             private(set) var activations = 0
 
             func activate() {
@@ -41,6 +43,21 @@
             #if os(iOS)
                 activator.sessionDidBecomeInactive(WCSession.default)
             #endif
+        }
+
+        @Test("As the session's one delegate it reports reachability to the transport and hands it each message")
+        func delegate_feedsTheTransport() async throws {
+            let activator = CompanionSessionActivator()
+            var link = activator.transport.link.makeAsyncIterator()
+            var incoming = activator.transport.incoming.makeAsyncIterator()
+            #expect(await link.next() == false)
+            let session = StandInSession()
+            session.isReachable = true
+            activator.reachabilityChanged(of: session)
+            #expect(await link.next() == true)
+            let frame = WireFrame.handshake(workoutID: Sample.session.id, contiguousSeq: [:])
+            try activator.session(WCSession.default, didReceiveMessageData: #require(WireCodec.encode(frame).first))
+            #expect(await incoming.next() == frame)
         }
 
         #if os(iOS)
