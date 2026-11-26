@@ -170,10 +170,18 @@
             let content: CGSize
         }
 
-        /// The real screen's scroll view, hosted at an iPhone 17's size at `textSize`.
-        private static func scroll(_ cover: some View, at textSize: DynamicTypeSize) throws -> Scroll {
+        /// The real screen's scroll view, `preview` with the rest panel `rest` or none, hosted at an iPhone
+        /// 17's size at `textSize`. Time stands still at the preview's moment, as on every other hosted screen:
+        /// with the wall clock the header's elapsed time would be drawn from whenever each of the two
+        /// hostings happens to run, and the two screens compared would not be the same screen.
+        private static func scroll(
+            _ preview: WorkoutPreview,
+            rest: RestPanelModel?,
+            at textSize: DynamicTypeSize
+        ) throws -> Scroll {
             let phone = WorkoutScreenTests.phone
-            let screen = cover
+            let screen = WorkoutScreen(model: preview.model, rest: rest) { _ in }
+                .environment(\.workoutTimeline, .fixed(at: preview.now))
                 .frame(height: phone.height)
                 .environment(\.dynamicTypeSize, textSize)
             let host = UIHostingController(rootView: screen)
@@ -199,9 +207,8 @@
         )
         func screen_keepsRoomForThePanel(_ size: DynamicTypeSize) throws {
             let preview = WorkoutPreview.resting
-            let withThePanel = WorkoutScreen(model: preview.model, rest: preview.restPanel) { _ in }
-            let resting = try Self.scroll(withThePanel, at: size)
-            let without = try Self.scroll(WorkoutScreen(model: preview.model) { _ in }, at: size)
+            let resting = try Self.scroll(preview, rest: preview.restPanel, at: size)
+            let without = try Self.scroll(preview, rest: nil, at: size)
             #expect(resting.frame == without.frame, "the panel floats: it takes nothing from the scroll view's frame")
             #expect(resting.content == without.content, "the page is the same page")
             // The panel's three stops, outside the scroll view, in the window's coordinates.
