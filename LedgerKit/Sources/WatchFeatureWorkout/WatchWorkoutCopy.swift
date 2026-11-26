@@ -1,8 +1,10 @@
 import Foundation
+import LedgerDomain
 
 /// WatchFeatureWorkout's copy (standards §7): every string the watch's workout shows or speaks is looked up here, in
 /// this module's `Resources/Localizable.xcstrings`, whose keys are the English text. No other file in the module
-/// holds a user-facing literal or a localized lookup; the presentation is handed these `String`s.
+/// holds a user-facing literal or a localized lookup; the presentation is handed these `String`s. The phone's
+/// words for the same things are in FeatureToday's and FeatureWorkout's catalogs: modules do not share a catalog.
 nonisolated enum WatchWorkoutCopy {
     /// F17 criterion 12, the watch's half: one line under the set label while the iPhone is out of reach. Logging
     /// goes on, and nothing is disabled. The phone's line is `WorkoutCopy.watchNotConnected`, in FeatureWorkout.
@@ -12,5 +14,15 @@ nonisolated enum WatchWorkoutCopy {
             bundle: .module,
             comment: "Line under the set label while the iPhone is out of reach; every control still works"
         )
+    }
+}
+
+// MARK: - Counted texts
+
+nonisolated extension Locale {
+    /// The locale every counted text of the module is looked up with: the Domain's `forCountedText(in:)`, bound to
+    /// this module's catalog (standards §7).
+    var forCountedText: Locale {
+        forCountedText(in: .module)
     }
 }
