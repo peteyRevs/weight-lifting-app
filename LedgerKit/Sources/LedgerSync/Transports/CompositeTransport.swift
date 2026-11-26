@@ -12,8 +12,9 @@ import LedgerDomain
 ///   `.connected(.watchConnectivity)` otherwise; else `.reconnecting` for `reconnectWindow` (30 s) after the peer
 ///   was last reached; else `.solo`.
 ///
-/// `run()` runs the mirroring transport and reads both channels; the owner runs it for the transport's life.
-public actor CompositeTransport: LiveWorkoutTransport {
+/// `run()` runs the mirroring transport and reads both channels; the owner runs it for the transport's life. It is
+/// the `liveConnection` key's client too (S7b): `states()` gives any number of readers the state shown.
+public actor CompositeTransport: LiveWorkoutTransport, LiveConnectionClient {
     /// How long after the peer dropped out of reach the screen says it is reconnecting.
     public static let reconnectWindow = Duration.seconds(30)
 
@@ -30,6 +31,9 @@ public actor CompositeTransport: LiveWorkoutTransport {
     private let connectionSink: AsyncStream<LiveConnectionState>.Continuation
 
     private var isRunning = false
+    private var isFinished = false
+    /// The readers of `states()`.
+    private var watchers: [AsyncStream<LiveConnectionState>.Continuation] = []
     private var mirroringStatus = MirroringTransport.Status.down
     private var isWatchConnectivityUp = false
     private var isReconnecting = false
@@ -100,6 +104,9 @@ public actor CompositeTransport: LiveWorkoutTransport {
         incomingSink.finish()
         linkSink.finish()
         connectionSink.finish()
+        isFinished = true
+        watchers.forEach { $0.finish() }
+        watchers = []
     }
 
     private var isReachable: Bool {
@@ -160,6 +167,7 @@ public actor CompositeTransport: LiveWorkoutTransport {
         if state != shown {
             shown = state
             connectionSink.yield(state)
+            tellWatchers(state)
         }
     }
 
@@ -172,6 +180,30 @@ public actor CompositeTransport: LiveWorkoutTransport {
             return mirroringStatus == .degraded ? .degraded(.mirroring) : .connected(.watchConnectivity)
         }
         return isReconnecting ? .reconnecting : .solo
+    }
+}
+
+extension CompositeTransport {
+    /// A new stream of the state shown now, then each change, as `connection`; it ends when `run()` does.
+    public func states() -> AsyncStream<LiveConnectionState> {
+        let (stream, continuation) = AsyncStream<LiveConnectionState>.makeStream(bufferingPolicy: .unbounded)
+        continuation.yield(shown)
+        if isFinished {
+            continuation.finish()
+        } else {
+            watchers.append(continuation)
+        }
+        return stream
+    }
+
+    /// `state` to every reader of `states()`; one that stopped reading is dropped.
+    private func tellWatchers(_ state: LiveConnectionState) {
+        watchers = watchers.filter { watcher in
+            if case .terminated = watcher.yield(state) {
+                return false
+            }
+            return true
+        }
     }
 
     private static func result(_ send: @Sendable () async throws -> Void) async -> Result<Void, any Error> {

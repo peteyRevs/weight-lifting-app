@@ -41,7 +41,10 @@ final class Harness {
     func composition(
         now: Date = Harness.now,
         processStart: Date? = nil,
-        healthStore: (any HealthStore)? = nil
+        healthStore: (any HealthStore)? = nil,
+        watchConnectivity: (any LiveWorkoutTransport)? = nil,
+        syncClock: any Clock<Duration> = ContinuousClock(),
+        startOwnWorkout: @escaping @Sendable () async -> Void = {}
     ) -> WatchComposition {
         WatchComposition(
             WatchComposition.Environment(
@@ -53,7 +56,10 @@ final class Harness {
                 activateCompanionSession: { [weak self] in self?.log.append(.companionActivated) },
                 preparesDependencies: false,
                 processStart: processStart,
-                healthStore: healthStore
+                healthStore: healthStore,
+                watchConnectivity: watchConnectivity,
+                syncClock: syncClock,
+                startOwnWorkout: startOwnWorkout
             )
         )
     }

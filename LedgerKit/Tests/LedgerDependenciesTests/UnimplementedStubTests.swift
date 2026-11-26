@@ -196,6 +196,11 @@ extension UnimplementedStubTests {
 }
 
 extension UnimplementedStubTests {
+    @Test("The live connection's stub ends its stream at once")
+    func liveConnection() async {
+        #expect(await Self.isEmpty(LiveConnectionKey.liveValue.states()))
+    }
+
     @Test("The live transport's stub throws from send and ends both streams")
     func liveWorkoutTransport() async {
         let stub = LiveWorkoutTransportKey.liveValue

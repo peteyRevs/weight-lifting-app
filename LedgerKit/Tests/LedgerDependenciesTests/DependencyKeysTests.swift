@@ -30,6 +30,7 @@ struct DependencyKeysTests {
         Read(key: "dataReset") { @Dependency(\.dataReset) var value; _ = value },
         Read(key: "healthStore") { @Dependency(\.healthStore) var value; _ = value },
         Read(key: "liveWorkoutTransport") { @Dependency(\.liveWorkoutTransport) var value; _ = value },
+        Read(key: "liveConnection") { @Dependency(\.liveConnection) var value; _ = value },
         Read(key: "companionTransport") { @Dependency(\.companionTransport) var value; _ = value },
         Read(key: "notifications") { @Dependency(\.notifications) var value; _ = value },
         Read(key: "liveActivities") { @Dependency(\.liveActivities) var value; _ = value },

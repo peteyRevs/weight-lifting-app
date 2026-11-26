@@ -14,7 +14,8 @@
     struct HealthWiringTests {
         @Test("The live environment holds the phone's LiveHealthStore; a booted composition binds the one it is given")
         func composition_bindsTheHealthStore() {
-            #expect(AppComposition.Environment.live(arguments: ["Ledger"]).healthStore is LiveHealthStore)
+            let hooks = HealthHooks(watchTookPart: { _ in false }, onMirrorStart: { _ in })
+            #expect(AppComposition.Environment.live(arguments: ["Ledger"]).makeHealthStore(hooks) is LiveHealthStore)
             let harness = Harness()
             defer { harness.remove() }
             let fake = FakeHealthStore(authorization: .authorized)

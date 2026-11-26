@@ -29,6 +29,12 @@ public final class AppComposition {
     )
     /// The live workout's host over the open database (F10): what `workoutSession` is bound to.
     private(set) var session: LocalWorkoutSessionActor?
+    /// The phone's health store, made when the database opens with the host's answers (`HealthHooks`).
+    var healthStore: (any HealthStore)?
+    /// Mirroring and WatchConnectivity as one transport (F17 S7b), when the environment has both channels.
+    var transport: CompositeTransport?
+    /// Runs `transport` for the app's life, once the host is connected to it (`connectLiveSync()`).
+    var liveSync: Task<Void, Never>?
     private var isCompanionActive = false
     #if DEBUG
         /// Whether `saveUITestProgramIfAsked()` has run in this process: it runs once.
@@ -46,13 +52,15 @@ public final class AppComposition {
     /// F23's, which passes its client here. Until then a rest that starts schedules nothing, and nothing
     /// calls the `notifications` key's stub.
     private func opened(_ stores: LedgerStores) {
-        session = LocalWorkoutSessionActor(
+        let host = LocalWorkoutSessionActor(
             events: stores.events,
             workouts: stores.workouts,
             programs: stores.programs,
             device: stores.deviceID,
             now: environment.now
         )
+        session = host
+        makeLiveSync(over: host)
         if environment.preparesDependencies {
             prepareDependencies {
                 bind(&$0)
@@ -128,6 +136,7 @@ public final class AppComposition {
                 try await session.resumeFromStore()
             }
         }
+        await connectLiveSync()
         if !isCompanionActive {
             environment.record(.began(.activateCompanionSession))
             isCompanionActive = true
@@ -187,41 +196,6 @@ public final class AppComposition {
         let milliseconds = Int((elapsed / .milliseconds(1)).rounded())
         environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
     }
-
-    /// Binds the six stores, this device's id, the live workout's host, the haptics its cover plays and the
-    /// announcements it makes (F10 S6, S7), and the health store (F16 S3a); binds nothing until the database is
-    /// open. The app binds once, process-wide, through `prepareDependencies`; the logger and the other device keys
-    /// keep their live values (stubs until F17–F23).
-    public func bind(_ values: inout DependencyValues) {
-        if let stores {
-            Self.bind(stores, into: &values)
-            if let healthStore = environment.healthStore {
-                values.healthStore = healthStore
-            }
-        }
-        if let session {
-            values.workoutSession = session
-            #if DEBUG
-                if let failures = environment.failedFinishes {
-                    // A UI test's failing save (`UITestSaveFailures`).
-                    values.workoutSession = UITestFailingFinishSession(base: session, failures: failures)
-                }
-            #endif
-            values.haptics = LiveHaptics()
-            values.announcements = LiveAnnouncements()
-        }
-    }
-
-    static func bind(_ stores: LedgerStores, into values: inout DependencyValues) {
-        values.exerciseRepository = stores.exercises
-        values.programRepository = stores.programs
-        values.workoutRepository = stores.workouts
-        values.workoutEventStore = stores.events
-        values.settingsRepository = stores.settings
-        values.statsQueries = stores.stats
-        values.dataReset = stores.reset
-        values.deviceID = stores.deviceID
-    }
 }
 
 extension AppComposition {
@@ -254,14 +228,22 @@ extension AppComposition {
         var regionalSettings: LedgerDomain.Settings?
         /// The appearance a UI test asked for (`UITestAppearance`); nil follows the device.
         var colorScheme: ColorScheme?
-        /// The phone's HealthKit store, over the mirroring handler's sessions (F16 S3a); nil binds none.
-        var healthStore: (any HealthStore)?
+        /// Makes the phone's HealthKit store over the mirroring handler's sessions (F16 S3a), once, when the
+        /// database opens, with the host's answers (F17 S7b); nil binds none.
+        var makeHealthStore: (HealthHooks) -> (any HealthStore)? = { _ in nil }
+        /// The live workout's WatchConnectivity channel (the activator's transport); nil connects no live sync.
+        var watchConnectivity: (any LiveWorkoutTransport)?
+        /// The live transports' and the host's timers.
+        var syncClock: any Clock<Duration> = ContinuousClock()
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
             let health = liveHealth()
             #if canImport(WatchConnectivity)
                 let activator = CompanionSessionActivator()
+                let liveChannel: (any LiveWorkoutTransport)? = activator.transport
+            #else
+                let liveChannel: (any LiveWorkoutTransport)? = nil
             #endif
             let offset = UITestClock.liveOffset(arguments: arguments)
             let isUITest = arguments.contains("-LEDGER_UITEST")
@@ -287,7 +269,8 @@ extension AppComposition {
                 uiTestHistoryWeeks: UITestHistory.liveWeeks(arguments: arguments),
                 regionalSettings: UITestRegion.liveSettings(isUITest: isUITest),
                 colorScheme: UITestAppearance.liveColorScheme(arguments: arguments),
-                healthStore: health.store
+                makeHealthStore: health.makeStore,
+                watchConnectivity: liveChannel
             )
         }
     }

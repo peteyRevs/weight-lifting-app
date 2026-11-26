@@ -21,6 +21,12 @@ public extension DependencyValues {
         set { self[LiveWorkoutTransportKey.self] = newValue }
     }
 
+    /// What the workout screen says about the other device (F17 S7b): the composition binds the live transport.
+    var liveConnection: any LiveConnectionClient {
+        get { self[LiveConnectionKey.self] }
+        set { self[LiveConnectionKey.self] = newValue }
+    }
+
     var companionTransport: any CompanionTransport {
         get { self[CompanionTransportKey.self] }
         set { self[CompanionTransportKey.self] = newValue }
@@ -70,6 +76,13 @@ enum LiveWorkoutTransportKey: DependencyKey {
     static let liveValue: any LiveWorkoutTransport = UnimplementedLiveWorkoutTransport()
     #if DEBUG
         static let previewValue: any LiveWorkoutTransport = FakeLiveWorkoutTransport()
+    #endif
+}
+
+enum LiveConnectionKey: DependencyKey {
+    static let liveValue: any LiveConnectionClient = UnimplementedLiveConnection()
+    #if DEBUG
+        static let previewValue: any LiveConnectionClient = FakeLiveConnection()
     #endif
 }
 
