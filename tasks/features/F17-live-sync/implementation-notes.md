@@ -377,3 +377,68 @@ Pete's rule (option C, 2026-11-25), in `LocalWorkoutSessionActor+DoubleStart.swi
    lacks some of its sets, the peer completes the partial copy it holds; the device that logged them keeps them
    whole in its history. Nothing is lost, but the two histories can differ until a history sync exists. Keeping a
    saved log until the peer acknowledges its end would close this, for both a finish and a loser.
+
+## Slice S6 (G1, 2026-11-25)
+
+Both transports in `LedgerSync/Transports/` (the spec's path), over the domain's `RemoteSessionChannel`: no
+HealthKit, no new dependency. Neither is wired yet (S7 builds the compositions and runs them).
+
+- **`MirroringTransport`** (an actor; its owner runs `run()` for its life, as `HealthEventBroadcast`):
+  - **Nothing before `.prepared`:** a send while the channel's `connection` is false throws `unreachable` and
+    keeps nothing. F16 reports `connection` true only after `.prepared` and the mirror's start (watch) or a
+    mirrored session handed over (phone), so the channel's state is the gate; the transport reads no health events.
+  - **Batching:** a frame handed into an empty queue begins a batch; at `batchWindow` (150 ms) on the injected
+    clock the queue goes out, neighbouring `.envelopes` frames joined into one, cut by `WireCodec`. `send` returns
+    once queued, so the host's serial sender can hand the next frame inside the window. A drop empties the queue.
+  - **Handshake first after `.mirrorConnected`:** the first batch after each `connection` true leads with the
+    first handshake queued in it; if none was queued, with an empty handshake for the batch's first workout.
+  - **Watchdog:** each channel send races `watchdog` (3 s). The send runs as a task the race does not wait for
+    (HealthKit's async `sendToRemoteWorkoutSession` need not return when cancelled); a hung one is kept and
+    cancelled when `run()` ends. A hang makes the transport `degraded`: what is queued is dropped, and nothing more
+    goes on the channel for the workouts it knew of then, also across reconnects, until a frame of a workout it
+    had never seen is handed to it.
+  - **One retry** of a send that fails with `HealthError.underlying` (notes, item 12: the "delegate is not set up"
+    code is not pinned; F20 pins it on device). Other failures are logged and dropped.
+  - Incoming: each `Data` of a batch decoded alone (every cut part is a whole frame, S1); one that cannot be read
+    is logged and dropped. `status` (`down`, `open`, `degraded`) is the composite's view; `link` is the protocol's.
+- **`CompositeTransport`** (an actor, `run()` runs the mirroring transport too): `send` goes to both channels at
+  once and succeeds if either took it (else throws mirroring's error); `incoming` merges both; `link` and
+  `connection` as below.
+- **`LiveConnectionState`:** `.connected(.mirroring)` while mirroring is open; else, while WatchConnectivity is
+  up, `.degraded(.mirroring)` after a hang or `.connected(.watchConnectivity)`; else `.reconnecting` for
+  `reconnectWindow` (30 s) after the peer was last reachable (a timer task on the injected clock, cancelled when
+  the peer is reached again); else `.solo` (also the state when made). Each change once.
+- **`LiveWorkoutTransport.link`'s doc** now says what the host already does: a handshake on every `true`, and a
+  transport may report `true` again when a second channel comes up.
+- **Tests:** `MirroringTransportTests` on `ScriptedChannel` (Support: scripted answers, sends announced, a hang
+  that ignores cancellation until released) and `ManualClock`: nothing before up, 150 ms batching and joining,
+  handshake first (moved, or an empty one), the 3 s watchdog and its stickiness until a new workout, the one retry,
+  an unencodable frame dropped, incoming decoding. `CompositeTransportTests` on `ScriptedChannel` + a
+  `FakeLiveNetwork`: the state derivation including 30 s reconnecting, merged incoming, a send that neither channel
+  takes, and criterion 6 with the host: `start` and `apply` return with no time gone by and are published, the
+  connection becomes `.degraded(.mirroring)` at 3 s, and the frames reach the watch over WatchConnectivity.
+
+### Decisions (for review)
+
+1. **`send` returns when queued, not when sent.** With the host's serial sender, a send that waited for its batch
+   could never batch two frames. The protocol's "returning means the frame left this device" is kept for the
+   composite as a whole only in spirit: a queued mirrored frame can still be dropped by a drop or a hang, and the
+   next handshake replays it, as for any lost frame.
+2. **The empty handshake.** "The first frame after `.mirrorConnected` is always the handshake" cannot wait for the
+   host's: with an empty store at link-up the host sends none, and a held batch would then never go. An empty
+   vector is a true lower bound (it asks for the whole log of that workout); the peer replays it and answers with
+   its own handshake. It happens only when no handshake reached the batch within 150 ms of the link-up, so in
+   practice for a workout begun after the link came up, whose log is short.
+3. **Degraded until a new workout, not for the process.** R1 §2.5 #2 says the hang stays for that workout; a new
+   workout is a new HealthKit session, so the first frame of a workout the transport never saw clears it. Frames
+   of old workouts then go on mirroring again (on the new session).
+4. **The composite's `link` repeats `true`** when mirroring comes up while WatchConnectivity is up (and on each
+   new mirrored session the phone is handed), so the host's link-up handshakes reach the new channel first. The
+   host's link-up round is idempotent; at worst a peer answers a handshake on both channels twice.
+5. **No frame dedupe in the composite.** The host stores envelopes by `(device, seq)` and replies to a handshake
+   idempotently, so a frame arriving on both channels costs one extra reply at most; remembering frames to drop
+   repeats would also drop a legitimate repeated handshake.
+6. **Retry at once, under its own watchdog.** The blog's fix is "retry the first send"; no delay is documented.
+7. **Unstructured tasks, kept and cancelled:** the hung sends and the reconnect timer. Both are owned by the actor
+   and ended with `run()`; neither is a store's (engineering-standards §4). The reconnect timer carries a drop
+   number, so a timer that fires late cannot close a later window.

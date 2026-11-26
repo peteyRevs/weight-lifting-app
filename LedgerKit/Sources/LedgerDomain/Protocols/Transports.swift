@@ -11,7 +11,8 @@ public protocol LiveWorkoutTransport: Sendable {
     /// Every frame the peer sent that arrived, in arrival order, for the life of the transport. One consumer.
     var incoming: AsyncStream<WireFrame> { get }
     /// Whether the peer is reachable on this transport: the state when the transport was made first, then each
-    /// change. One consumer. The host sends its handshake on every `true` after a `false`.
+    /// change, and `true` again each time a channel comes up while another already reaches the peer (a new
+    /// channel must carry a handshake first). One consumer. The host sends its handshake on every `true`.
     var link: AsyncStream<Bool> { get }
     /// Hands `frame` to the transport. Returning means the frame left this device, not that it arrived. Throws a
     /// `TransportError`. A send may also never return (a mirrored session's send can hang, R1 §2.5): the caller
