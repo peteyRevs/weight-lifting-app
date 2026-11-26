@@ -24,8 +24,8 @@ public extension LocalWorkoutSessionActor {
     ///   published with the rebuild's haptics, its rest notification follows, and an end the peer made completes
     ///   as an own end does (`finish(endedAt:)`). With no live workout, a live workout the peer started becomes
     ///   the live one; one that arrives already ended is saved or dropped without being shown. A log that
-    ///   replays to nothing (its `started` has not arrived) waits in the store, and a second live workout waits
-    ///   for the double-start rule (F17 S5).
+    ///   replays to nothing (its `started` has not arrived) waits in the store, and a second live workout is
+    ///   judged by the double-start rule (`resolveDoubleStarts()`, F17 S5b).
     ///
     /// Throws what the store threw; what it stored before then stays stored, and the next call recovers first.
     /// Also throws, before storing anything, what kept a waiting end from completing.
@@ -69,11 +69,13 @@ extension LocalWorkoutSessionActor {
         for envelope in accepted where !workouts.contains(envelope.workoutID) {
             workouts.append(envelope.workoutID)
         }
+        var tookAStart = false
         for workout in workouts {
             let stored = try await store(accepted.filter { $0.workoutID == workout })
             guard !stored.isEmpty else {
                 continue
             }
+            tookAStart = tookAStart || stored.contains(where: \.isStarted)
             for envelope in stored {
                 clock.observe(envelope.wallClock)
             }
@@ -81,6 +83,9 @@ extension LocalWorkoutSessionActor {
                 participants.insert(workout)
             }
             try await rebuild(workout, after: stored)
+        }
+        if tookAStart {
+            try await resolveDoubleStarts()
         }
     }
 

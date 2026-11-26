@@ -5,9 +5,9 @@ import LedgerTestSupport
 import Testing
 
 /// F17 S5a, criterion 8's first half: after `.startRequestedByPhone` the watch adopts the phone's workout when its
-/// `started` arrives within 5 s, and starts its own otherwise. Two live workouts are then both kept on both
-/// devices (S3); which goes on is S5b's, pending Pete. Time is a `ManualClock`; the two-host tests run on
-/// `LiveSyncPair`, driven from the test's task.
+/// `started` arrives within 5 s, and starts its own otherwise; the double-start rule then settles the two
+/// (S5b, `HostDoubleStartTests`). Time is a `ManualClock`; the two-host tests run on `LiveSyncPair`, driven from
+/// the test's task.
 @Suite("LocalWorkoutSessionActor · a start the phone asks for", .tags(.sync), .timeLimit(.minutes(1)))
 struct HostPhoneStartTests {
     /// How many times the watch started its own workout.
@@ -69,8 +69,8 @@ struct HostPhoneStartTests {
         #expect(try await pair.converged())
     }
 
-    @Test("Criterion 8: no started within 5 s starts the watch's own; both workouts are then kept on both devices")
-    func noPhoneStart_startsOwn_andKeepsBoth() async throws {
+    @Test("Criterion 8: no started within 5 s starts the watch's own; after the heal the phone's earlier one wins")
+    func noPhoneStart_startsOwn_thenThePhonesWins() async throws {
         let pair = await LiveSyncPair.make(seed: 82)
         defer { pair.close() }
         let (clock, starts) = (ManualClock(), Starts())
@@ -93,13 +93,13 @@ struct HostPhoneStartTests {
         await pair.watch.rest()
         await pair.heal()
         await pair.settle()
-        #expect(try await pair.phone.host.current()?.id == Sample.session.id)
-        #expect(try await pair.watch.host.current()?.id == Self.watchSession.id)
-        for workout in [Sample.session.id, Self.watchSession.id] {
-            let (onPhone, onWatch) = await (pair.phone.log(of: workout), pair.watch.log(of: workout))
-            let keptOnBoth = !onPhone.isEmpty && onPhone == onWatch
-            #expect(keptOnBoth, "\(workout.rawValue): both devices hold the whole log")
-        }
+        #expect(try await pair.converged())
+        #expect(try await pair.watch.host.current()?.id == Sample.session.id)
+        let (onPhone, onWatch) = await (
+            pair.phone.log(of: Self.watchSession.id),
+            pair.watch.log(of: Self.watchSession.id)
+        )
+        #expect(onPhone.isEmpty && onWatch.isEmpty, "the watch's own held nothing of the lifter's: dropped on both")
     }
 
     @Test("Other events are ignored, and a wait cut short by cancellation starts nothing")

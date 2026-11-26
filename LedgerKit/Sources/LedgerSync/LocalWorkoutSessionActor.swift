@@ -182,7 +182,7 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
 
 // MARK: - Own actions (ADR-004, "The host loop")
 
-private extension LocalWorkoutSessionActor {
+extension LocalWorkoutSessionActor {
     /// `start`: the snapshot is judged first, by the engine, then the session. The envelope takes this
     /// device's next `seq` in the store's log of that id: 1, unless the store kept envelopes of this device
     /// under it (a log that replays to nothing is kept). Then the workout is what that whole log replays

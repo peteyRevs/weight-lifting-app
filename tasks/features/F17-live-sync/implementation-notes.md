@@ -14,7 +14,7 @@ larger-slice rule (2026-10-08).
 | **S2** transport contract + fake | `LiveWorkoutTransport` filled (`incoming`, `link`, `send`), `TransportError`, `LiveConnectionState` and `Channel` in LedgerDomain; `FakeLiveWorkoutTransport` over `FakeLinkBus<WireFrame>` (loss, duplication, delay/reorder, partition, hang knobs; its own manual time); the unimplemented stub and `ProtocolsAdversarialTests`' brief conformance grown to the protocol; fake tests. | test-plan fakes for 4–7 | ~750 |
 | **S3** the host receives | `LocalWorkoutSessionActor` takes frames: receipt checks (stamp drift bound, F04 items 3 and 9), append before rebuild, `WorkoutEngine.replay` + `effects(from:to:)` (one haptic per rebuild, none at a terminal), the one-by-one retry on `conflictingEnvelope`, a peer-started workout becoming the live one, the clock observing received stamps; `hasWatchParticipant(_:)`. Tests over the in-memory store. | 9 (+ batch and terminal companions), part of 4 | ~850 |
 | **S4** the host transmits + handshake | Own envelopes sent as `.transmit` runs, off the operation queue, under a 3 s timeout on an injected clock (`send` never waits on it); the contiguous vector; handshake on every link-up and after a resume; replies with what the peer's vector lacks, own handshake at most every 10 s; `.replayRequest` after `unreadable`; signposts `sync.send`, `sync.handshake`. Property tests on S2's fake: convergence under loss/reorder/duplication (100 seeds, printed on failure), partition-heal, idempotent replay; resume + handshake with the in-memory store. | 4, 5, 7 (fake), 10, 11 (ordering) | ~900 |
-| **S5** double start | Two `started` envelopes with different `WorkoutID`s within 60 s: the earlier `(wallClock, device)` wins on both devices, the loser's log is dropped and the UI re-renders; the watch adopts the phone's `started` within 5 s of `.startRequestedByPhone`, else starts its own. Needs a broadcast over `HealthStore.events` (F16: one consumer), decided here. | 8 | ~700 |
+| **S5** double start | Two `started` envelopes with different `WorkoutID`s within 60 s: the earlier `(wallClock, device)` wins on both devices and the UI re-renders; the loser is saved to History when it holds set data, dropped only when it holds none (Pete 2026-11-25, option C; S5b); the watch adopts the phone's `started` within 5 s of `.startRequestedByPhone`, else starts its own. Needs a broadcast over `HealthStore.events` (F16: one consumer), decided here. | 8 | ~700 |
 | **S6** mirroring + composite | `MirroringTransport` over `RemoteSessionChannel`: 150 ms batching, 3 s watchdog, sticky `.degraded(.mirroring)`, one retry on "remote session delegate is not set up", nothing sent before `.prepared`, the handshake first after `.mirrorConnected`; `CompositeTransport`: fan-out, merged `incoming`, `LiveConnectionState` derivation (30 s `reconnecting`). Tests on a scripted channel and a manual clock (house pattern: `RestCoverClock`, F16's `ManualClock`). | 6, part of 12 | ~900 |
 | **S7** WatchConnectivity + wiring | `WCBoostTransport` (`sendMessageData` while reachable, errors logged and swallowed) behind a session seam as `CompanionSessionActivator` does; one `WCSessionDelegate` registered at launch on both apps; both compositions build store → transports → host; `watchTookPart` bound to `hasWatchParticipant`; `onMirrorStart` reaches the host; a `liveConnection` key for the connection stream. | 13 (device), wiring for all | ~800 |
 | **S8** connection line | The phone's workout header line "Watch not connected — logging continues" (watch copy "iPhone not connected — logging continues", for F18), controls stay enabled, accessibility label without `.updatesFrequently`; snapshots {connected, reconnecting, solo} × {light, dark} × {default, XL}; device checklist for criteria 7, 11, 13 (F20). | 12, device halves of 7, 11, 13 | ~600 |
@@ -280,7 +280,7 @@ held under them, so no product code changed.
 ## Slice S5a (G1, 2026-11-25)
 
 S5 splits: **S5a** (this slice) is the broadcast of the health store's events and the watch's 5 s rule;
-**S5b** is the double-start rule for the losing workout, **pending Pete: A/B/C/D, recommended C** (below).
+**S5b** is the double-start rule for the losing workout: Pete chose **C** on 2026-11-25 (below, and S5b).
 Nothing in S5a drops a log: two live workouts are both kept, on both devices, as S3 keeps them.
 
 - **`HealthEventBroadcast`** (`LedgerHealth/HealthEventBroadcast.swift`), an actor over `HealthStore.events`:
@@ -315,7 +315,7 @@ Nothing in S5a drops a log: two live workouts are both kept, on both devices, as
 4. **The 5 s wait starts when the request is taken**, not at the phone's stamp: the watch's and phone's clocks
    are not compared here (S3 bounds drift only ahead).
 
-### Pending Pete: the losing workout (S5b), A/B/C/D, recommended C
+### The losing workout (S5b): A/B/C/D, Pete chose C (2026-11-25)
 
 The spec drops the loser's log on both devices. The only way to drop a log is `WorkoutEventStore.compact`, which
 deletes it for good, and the loser can hold sets the lifter logged: the 60 s window compares the two `started`
@@ -328,3 +328,52 @@ watch's own workout, which then loses. Options:
   its own workout through the normal save, so it shows in History and Pete deletes it himself; an empty loser is
   dropped as in A.
 - **D.** As the spec says: drop the loser's log, accepting the loss.
+
+## Slice S5b (G1, 2026-11-25)
+
+Pete's rule (option C, 2026-11-25), in `LocalWorkoutSessionActor+DoubleStart.swift`:
+
+- **`resolveDoubleStarts()`**, run in turn after a receipt that stored a `started`, and by recovery when it finds
+  more than one live log. Of the live logs whose `started` envelopes come from **different devices** and lie within
+  `doubleStartWindow` (60 s) of the earliest, the earliest in the engine's order (`wallClock`, then device) wins:
+  - when the workout shown lost, the winner becomes the live workout and is published (no haptic): the UI
+    re-renders straight from the loser to the winner, without the loser's end in between;
+  - **only the device that started a loser ends it**, with an envelope of its own: `finished(endedAt:)` at the
+    loser's last stamp when its log holds anything but `started`, `exerciseSelected` and rest events, else
+    `discarded`. It then completes the end as any end (`complete`: a finished loser is saved to history with its
+    misses and its log dropped; a discarded one's log is dropped). The other device keeps the loser's log until
+    that end arrives, then completes it as any ended workout it was not shown. One end, made once, so both devices
+    reach the same outcome, nothing is saved twice, and no end answers another;
+  - the end goes to the peer **in one frame with the loser's whole log**, so an end that arrives brings every set.
+- **Recovery** resumes the later of two live logs as before, then applies the rule, so a device killed between
+  storing the winner's `started` and ending its own loser settles it on launch.
+- **A link-up resets the handshake rate limit** (`+Transport`, product fix): the double-start property found a
+  watch that never learned the phone's workout, because its one request for it had been lost seconds before the
+  last reconnect and the 10 s limit refused the next. What a host asked for before a link-up may have been lost
+  with the link.
+- **Tests:** `HostDoubleStartTests`: criterion 8 on `LiveSyncPair` for each device losing, with and without sets
+  (saved on both with its sets / dropped on both; the winner live and converged on both); starts 61 s apart are no
+  double start; recovery settles one; a saved loser's log relayed back is not saved over the whole one.
+  `DoubleStartPropertyTests` (LiveSyncPropertyTests' seeds): starts 0–50 s apart (or 61–120 s), partitioned or
+  racing on a lossy, duplicating, delaying link, sets logged on whatever each device shows; after a clean
+  reconnect every set each device logged is done on it, live or in history, and within the window both show one
+  converged workout. A mutation that discards every loser fails it on many seeds. `HostTransportTests` gains the
+  rate-limit reset. `HostPhoneStartTests`' S5a test now expects the rule's outcome (the phone's earlier workout
+  wins, the watch's empty one is dropped on both), not S3's interim "both kept".
+
+### Decisions (for review)
+
+1. **Health:** the loser is not saved to Health. The host never writes Health; Health's save follows the lifter's
+   finish (F16, wired in S7/F18), and a loser's end is the host's, so no Health workout is made for it. The watch's
+   HealthKit session goes on with the winner (F18).
+2. **The loser's save is the normal finish save**, misses and program changes included, as Pete asked ("the same
+   as a finished workout"). A loser of another program day therefore records misses on that day's slots.
+3. **Only starts from different devices.** Two live logs of one device's own only damage makes (start refuses a
+   second); recovery keeps resuming the later of those, as its test documents.
+4. **A saved loser's log that comes back** (the end's frame was lost and the peer's handshake asked for its copy)
+   is dropped, never saved over the whole one in history; an end is still sent so the peer completes its copy, with
+   a `seq` above 2³² so it can never collide with one the peer holds.
+5. **Residual gap, as for any finish (F04 item 8):** if the frame with the loser's end is lost and the peer's copy
+   lacks some of its sets, the peer completes the partial copy it holds; the device that logged them keeps them
+   whole in its history. Nothing is lost, but the two histories can differ until a history sync exists. Keeping a
+   saved log until the peer acknowledges its end would close this, for both a finish and a loser.
