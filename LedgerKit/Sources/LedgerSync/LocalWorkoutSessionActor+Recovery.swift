@@ -87,14 +87,17 @@ extension LocalWorkoutSessionActor {
             }
         }
         try await resume(resumable)
+        if resumable.count > 1 {
+            try await resolveDoubleStarts()
+        }
         isRecovered = true
         hasUnstoredEnds = !failures.isEmpty
         return failures
     }
 
     /// Makes the live log the workout, with this device's highest stored `seq`, and tells any stream that
-    /// was told otherwise. `start` refuses a second live workout, so only a peer can bring two (F17, whose
-    /// rule it will be): until then the one that started last is resumed and the other kept.
+    /// was told otherwise. `start` refuses a second live workout, so only a peer can bring two: the one that
+    /// started last is resumed, and then the double-start rule (`resolveDoubleStarts()`, F17 S5b) judges them.
     private func resume(_ resumable: [WorkoutState]) async throws {
         guard let resumed = resumable.max(by: Self.startedBefore) else {
             if let shown = live, ending == nil {

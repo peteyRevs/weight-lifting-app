@@ -122,10 +122,14 @@ extension LocalWorkoutSessionActor {
         return vector
     }
 
-    /// The link-up handshakes, in turn, after recovery: the launch's resume is covered too.
+    /// The link-up handshakes, in turn, after recovery: the launch's resume is covered too. A link-up starts the
+    /// rate limit afresh: what this host asked for before the link went down may have been lost with it, and a
+    /// workout only the peer holds is learned only by asking (F17 S5b; the double-start property found a watch
+    /// that never learned the phone's workout because its one request had been lost seconds before).
     private func linkCameUp() async {
         do {
             try await inTurn {
+                await self.forgetAsked()
                 try await self.ready()
                 for workout in try await self.events.uncompactedWorkoutIDs() {
                     try await self.handshake(for: workout)
@@ -134,6 +138,11 @@ extension LocalWorkoutSessionActor {
         } catch {
             logger.error("No handshake on link-up: \(String(describing: error))")
         }
+    }
+
+    /// Clears the rate limit's memory (`handshakeInterval`).
+    private func forgetAsked() {
+        connection.lastAsked = [:]
     }
 
     /// A frame from the transport's listener: errors are the host's to log, not the transport's.
