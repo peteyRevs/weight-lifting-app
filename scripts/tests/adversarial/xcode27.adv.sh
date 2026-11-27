@@ -407,10 +407,12 @@ cp "$ROOT/.xcode-version" "$SEL/repo/.xcode-version"
 # F32 fix round (T5): every Mac job checks the selected Xcode against the pin before it builds: the nightly's
 # dependency report and Coverage in the run step right after Select, and Check, main-cache's build and the nightly's legs
 # by running check.sh, whose step 0 is that check in every mode, --ios-only, --build-only, --shard and --nightly
-# included (W40, W77, W79, W88). A watch leg's new simulator (step watch-sim) is made before check.sh; it builds nothing.
+# included (W40, W77, W79, W88). A watch leg's new simulator (step watch-sim) is made before check.sh; it builds nothing,
+# nor does the restored cache's pre-validation (step cas-validate, #161): a wrong Xcode's llvm-cas can at worst drop
+# the cache, and check.sh's step 0 then fails the run before any build.
 checked="$(for w in pr nightly main-cache; do
     jq -r '.jobs | to_entries[] | select(.value."runs-on" | startswith("ubuntu") | not) | .key as $job
-        | [.value.steps[] | select(.run and .id != "watch-sim") | .run] as $runs
+        | [.value.steps[] | select(.run and .id != "watch-sim" and .id != "cas-validate") | .run] as $runs
         | ($runs | map(test("xcode-select -s")) | index(true)) as $sel
         | "\($job):\($runs[$sel + 1] // "none" | if test("^scripts/check-xcode-version\\.sh$|^scripts/check\\.sh( --[a-z-]+| --shard \\$\\{\\{ matrix\\.shard \\}\\}/[0-9]+| \"--\\$PLATFORM-only\"| --shard \"\\$SHARD\")*$")
             then "checked" else "unchecked" end)"' \

@@ -66,17 +66,25 @@ authoritative; the plan differs:
     #153 (2026-11-26) that drop was every PR's lot: each shard restored `main`'s 3.4 GB entry (about 2.5
     min to download), spent 120–150 s in `ValidateCAS`, which said `recovered from invalid data`, and
     built with `0 hits / 765 cacheable tasks (0%)`: cold, 1,660 s at the median and 2,310 s at worst.
-    The two likeliest causes, in order: the cache was tarred while the build service or a compiler could
-    still write it, and an entry that only ever grew went invalid. So both workflows now run, right
-    before each save, `scripts/ci-cas-idle.sh 120`: it waits, at most 120 s, until no `xcodebuild`,
-    `SWBBuildService`, `XCBBuildService`, `swift-driver`, `swift-frontend`, `clang` or `llvm-cas` is
-    running (by exact name; it kills nothing, and `xcodebuild` has no command that stops its service), and
-    the save runs only when it says `idle=true`. A missed save costs the next run a colder build; a torn
-    one cost every PR its cache. And right after `check.sh`, `scripts/ci-cache-report.sh` reads the build
-    bundle's log (`xcresulttool get log --type build`) and prints the hit rate, `ValidateCAS`'s outcome
-    (`validated successfully`, `validation skipped` or `recovered from invalid data`) and the cache's
-    size as notices, in every Check shard and every `main-cache.yml` run; it never fails the job
-    (`ci-cache.adv.sh`). The
+    The data was not torn (#161, reproduced locally): `ValidateCAS` runs `llvm-cas --validate-if-needed
+    --check-hash --allow-recovery`, which validates in a child process and kills it after a fixed 120 s.
+    The parent reads that timeout as invalid data and, allowed to recover, renames the data `corrupt.*`
+    and starts empty. The check takes 11–86 s on a quiet machine, but a slow runner booting the simulator
+    at the same time passed 120 s. So both `pr.yml`'s Check and the nightly's legs, right after the
+    restore and only when a cache was restored, run `scripts/ci-cas-validate.sh`: the same check with
+    `--in-process`, which has no such cap (the step's own limit is 10 min, and it never fails the job).
+    It writes this boot's time to `builtin/v1.validation`, the check's only per-machine input, so Xcode's
+    own `ValidateCAS` then prints `validation skipped`. The jobs' timeouts grew by those 10 min (107 and
+    155). `scripts/ci-cas-idle.sh 120` still runs right before each save, in `pr.yml` and
+    `main-cache.yml`: it waits, at most 120 s, until no `xcodebuild`, `SWBBuildService`,
+    `XCBBuildService`, `swift-driver`, `swift-frontend`, `clang` or `llvm-cas` is running (by exact name;
+    it kills nothing, and `xcodebuild` has no command that stops its service), and the save runs only
+    when it says `idle=true`, so no cache is tarred mid-write. And right after `check.sh`,
+    `scripts/ci-cache-report.sh` reads the build bundle's log (`xcresulttool get log --type build`) and
+    prints the hit rate, `ValidateCAS`'s outcome (`validated successfully`, `validation skipped` or
+    `recovered from invalid data`, a warning when that recovery took 115 s or more: the cap, not
+    corruption) and the cache's size as notices, in every Check shard and every `main-cache.yml` run; it
+    never fails the job (`ci-cache.adv.sh`). The
     keys are taken to hold absolute paths (not tested from a second path); GitHub keeps the checkout at
     `/Users/runner/work/<repo>/<repo>`. Measured on a developer Mac (2026-10-01; notes, "Measured"):
     the iOS `build-for-testing` took 58–59 s with the cache off, 57 s filling an empty cache (1,113 misses)
@@ -191,7 +199,7 @@ authoritative; the plan differs:
     - *Cost.* Two macOS test jobs and a short Coverage job per PR: free while the repository is public; if
       it goes private again, about 1.3 times today's minutes for about half the wall time.
   - *Deadline (2026-11-26, #153).* `LEDGER_XCODEBUILD_DEADLINE` is 5,400 s per shard; the step's timeout is
-    92 min, 2 min after the deadline, and the job's 97. With every restored cache invalid (above) each
+    92 min, 2 min after the deadline, and the job's 107 (97 until #161 added the cache's 10 min validation). With every restored cache invalid (above) each
     build was cold, and a shard's `check.sh` took up to 4,467 s, 33 s short of 4,500 s; 5,400 s leaves
     about 930 s past that. A stopgap: once PRs build warm again, it can come back down.
   - *Deadline 2026-11-12 to -26.* 4,500 s per shard; the step's timeout 77 min, and the job's 82. The first day's 3,600 s (step 62, job 67) stopped
@@ -322,7 +330,8 @@ authoritative; the plan differs:
       products handed to the legs' `test-without-building`, would save each leg its build (about 500–1,500 s)
       at the cost of an artifact round trip; a follow-up, not this change.
     - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 7,800 s in every leg; the step's timeout is 132 min, 2 min
-      after it, and the job's 145, for checkout, Xcode, mise and the tar and upload. An iOS leg's tests take
+      after it, and the job's 155, for checkout, Xcode, mise, the cache's validation (10 min, #161) and the
+      tar and upload. An iOS leg's tests take
       at most ~4,400 s, after a build of up to 2,092 s (run 43250355937's slowest) and ~30 s of tools,
       catalogs and boot: about 6,500 s at worst, ~5,750 s with each leg's own build in that run. Minutes are
       free while the repository is public.

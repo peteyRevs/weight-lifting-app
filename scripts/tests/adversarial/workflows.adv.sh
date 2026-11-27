@@ -117,6 +117,20 @@ check "WF82 [#153] right after check.sh, Check and main-cache.yml report the com
 $(jq -r "$report_after" "$T/mc.json")" \
     "Report the compilation cache | \${{ !cancelled() }} | scripts/ci-cache-report.sh \"\$BUILD\" .derivedData/CompilationCache.noindex | .derivedData/Results/PR-iOS-shard\${{ matrix.shard }}-build.xcresult
 Report the compilation cache | \${{ !cancelled() }} | scripts/ci-cache-report.sh .derivedData/Results/PR-iOS-build.xcresult .derivedData/CompilationCache.noindex | "
+# #161: Xcode's ValidateCAS kills its out-of-process check after 120 s and drops the cache as invalid. Right after
+# each restore, so before check.sh, a restored cache is validated in-process (no cap), bounded, never failing.
+validate_after='.jobs[] | .steps | select(map(.id == "compilation-cache") | any) | to_entries
+    | (map(select(.value.id == "compilation-cache"))[0].key) as $restore
+    | (map(select(.value.run // "" | test("^scripts/check\\.sh")))[0].key) as $build
+    | .[$restore + 1].value as $v
+    | [$v.id, $v.if, $v."timeout-minutes", $v."continue-on-error", $v.run, $build > $restore + 1] | map(tostring) | join(" | ")'
+want_validate="cas-validate | steps.compilation-cache.outputs.cache-matched-key != '' | 10 | true | scripts/ci-cas-validate.sh .derivedData/CompilationCache.noindex/builtin | true"
+check "WF83 [#161] in Check and each nightly leg, right after the restore, so before check.sh, a restored cache is pre-validated" \
+    is "$(jq -r "$validate_after" "$T/pr.json") || $(jq -r "$validate_after" "$T/nightly.json")" "$want_validate || $want_validate"
+check "WF83 ... in-process, the flag that lifts llvm-cas's 120 s cap" \
+    is "$(grep -c -- '"$tool" --cas "$cas" --validate-if-needed --check-hash --allow-recovery --in-process' "$ROOT/scripts/ci-cas-validate.sh")" 1
+check "WF83 ... and main-cache.yml, which restores no compilation cache, validates none" \
+    is "$(q mc '[.jobs[].steps[] | select((.run // "" | test("ci-cas-validate")) or (.uses // "" | test("actions/cache/restore")))] | length')" 0
 check "WF82 ... and those are the bundles check.sh writes: <lane>-iOS[-shard<n>]-build.xcresult in .derivedData/Results" \
     is "$(grep -cF -- '-resultBundlePath "$RESULTS/$6-build.xcresult"' "$ROOT/scripts/check.sh") $(grep -c '^RESULTS=".derivedData/Results"$' "$ROOT/scripts/check.sh")" "1 1"
 missing=""
@@ -338,10 +352,10 @@ ios_legs="$(legs_of ios nightly-shards.txt)" watch_legs="$(legs_of watch nightly
 check "WF76 the iOS legs are nightly-shards.txt's, and the watchOS legs nightly-watch-shards.txt's, a red leg cancelling none" \
     is "$([[ "${ios_legs%|*}" == "${ios_legs#*|}" ]] && echo ios) $([[ "${watch_legs%|*}" == "${watch_legs#*|}" ]] && echo watch) \
 $(q nightly '.jobs.test.strategy."fail-fast"')" "ios watch false"
-check "WF75 a leg's deadline is 2 min before its step's timeout, and its job outlasts the step by the upload's time" \
+check "WF75 a leg's deadline is 2 min before its step's timeout, and its job outlasts the step by the validation and upload time" \
     is "$(q nightly '.jobs.test | (.steps[] | select(.run // "" | test("check.sh"))) as $step
         | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \($step."timeout-minutes") \(."timeout-minutes")
- \($step."timeout-minutes" * 60 - $step.env.LEDGER_XCODEBUILD_DEADLINE)"')" "7800 132 145
+ \($step."timeout-minutes" * 60 - $step.env.LEDGER_XCODEBUILD_DEADLINE)"')" "7800 132 155
  120"
 # main's caches: restored under Check's keys (main-cache.yml saves them there), never saved by the nightly.
 check "WF78 each leg restores main's package checkouts and compiled output under Check's keys, saves neither, and check.sh caches" \
@@ -396,11 +410,11 @@ check "WF49 Check interrupts xcodebuild 1-5 min before its step's timeout, so it
         | . >= 60 and . <= 300')" true
 # docs/ci-cd.md, "Deadline": with every restored cache invalid (#153) a shard's check.sh took up to 4,467 s, 33 s short
 # of the 4,500 s deadline; 5,400 s leaves about 930 s past that, 2 min before the step's end.
-check "WF65 the deadline is 5400 s, 2 min before the step's 92 min, and the job outlasts the step (97 min)" \
+check "WF65 the deadline is 5400 s, 2 min before the step's 92 min, and the job outlasts the step and the cache's validation (107 min)" \
     is "$(q pr '.jobs.check | (.steps[] | select(.run // "" | test("check.sh"))) as $step
         | ($step."timeout-minutes" * 60 - $step.env.LEDGER_XCODEBUILD_DEADLINE) as $interrupt
         | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \($step."timeout-minutes") \(."timeout-minutes") \($interrupt)"')" \
-    "5400 92 97 120"
+    "5400 92 107 120"
 # Seeds on the runner (tasks/chores/2026-10-09-pr-lane-time.md): Check alone cuts the seeded properties, by the
 # plan's own variable under xcodebuild's TEST_RUNNER_ prefix. The plans keep their counts, and the nightly sets none.
 check "WF66 Check runs 40 property seeds, fewer than the PR plan's; no other job, and no nightly step, sets a count" \
