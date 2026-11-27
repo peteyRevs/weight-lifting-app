@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ OF %@ DONE" : {
+      "comment" : "Header of the session list: the exercises fully logged, then all the workout's exercises",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ OF %@ DONE"
+          }
+        }
+      }
+    },
     "%@ first" : {
       "comment" : "The exercise today's session opens with",
       "localizations" : {
@@ -23,6 +34,17 @@
         }
       }
     },
+    "%@ kg moved" : {
+      "comment" : "The total weight lifted in the workout so far, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg moved"
+          }
+        }
+      }
+    },
     "%@ lb" : {
       "comment" : "A weight in pounds",
       "localizations" : {
@@ -30,6 +52,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ lb"
+          }
+        }
+      }
+    },
+    "%@ lb moved" : {
+      "comment" : "The total weight lifted in the workout so far, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb moved"
+          }
+        }
+      }
+    },
+    "%@ of %lld sets logged" : {
+      "comment" : "The sets logged in the workout so far, then all its sets",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld set logged"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld sets logged"
+                }
+              }
+            }
           }
         }
       }
@@ -91,6 +147,17 @@
         }
       }
     },
+    "%lld × %lld @ %@" : {
+      "comment" : "A row of the session list: the exercise's sets, then its reps, then its load, which has no unit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@"
+          }
+        }
+      }
+    },
     "AVG BPM" : {
       "comment" : "Caption under the workout's average heart rate",
       "localizations" : {
@@ -113,6 +180,17 @@
         }
       }
     },
+    "Discard" : {
+      "comment" : "Ends the workout without saving it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
     "Done" : {
       "comment" : "Button that closes the summary",
       "localizations" : {
@@ -131,6 +209,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ELAPSED"
+          }
+        }
+      }
+    },
+    "End workout" : {
+      "comment" : "Button under the session list: asks to end",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End workout"
+          }
+        }
+      }
+    },
+    "End workout?" : {
+      "comment" : "Title of the overlay that ends the workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End workout?"
           }
         }
       }
@@ -164,6 +264,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "KG MOVED"
+          }
+        }
+      }
+    },
+    "Keep lifting" : {
+      "comment" : "Closes the overlay and returns to the list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep lifting"
           }
         }
       }
@@ -362,6 +473,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SETS"
+          }
+        }
+      }
+    },
+    "Save workout" : {
+      "comment" : "Ends the workout and keeps it in history",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save workout"
           }
         }
       }

@@ -43,7 +43,7 @@ struct WatchIdlePresentationTests {
         #expect(WatchSample.plan(empty)?.planLine == "0 exercises · 0 sets · empty day")
     }
 
-    @Test("Volume has thousands separators: idle in the settings' unit, the summary in the workout's")
+    @Test("Volume has thousands separators: idle in the settings' unit, end and summary in the workout's")
     func test_volume_formattedThousands() throws {
         let workout = try WatchSample.loggedLowerA(.pounds(403), reps: 4)
         let pounds = try WatchSample.idle(workout: workout)
@@ -51,10 +51,12 @@ struct WatchIdlePresentationTests {
         let kilograms = try WatchSample.idle(workout: workout, settings: Fixtures.settingsKg)
         #expect(WatchSample.plan(kilograms)?.planLine == "Logged · 15 sets · 10,968 kg")
         let locale = Fixtures.locale
+        #expect(WatchPresentation.end(workout, locale: locale).line == "15 of 15 sets logged · 24,180 lb moved")
         let summary = WatchPresentation.summary(workout, records: [], health: nil, locale: locale)
         #expect(summary.volume == "24,180" && summary.volumeCaption == "LB MOVED")
         var inKilograms = workout
         inKilograms.units = .kg
+        #expect(WatchPresentation.end(inKilograms, locale: locale).line == "15 of 15 sets logged · 10,968 kg moved")
         let kgSummary = WatchPresentation.summary(inKilograms, records: [], health: nil, locale: locale)
         #expect(kgSummary.volume == "10,968" && kgSummary.volumeCaption == "KG MOVED")
     }
