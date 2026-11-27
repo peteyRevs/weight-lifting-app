@@ -52,7 +52,8 @@ nonisolated struct WatchTypeFloorTests {
             static let galleries: [(name: String, view: AnyView)] = [
                 ("WatchPrimaryButton", AnyView(WatchPrimaryButtonGallery())),
                 ("WatchRestRing", AnyView(WatchRestRingGallery())),
-                ("WatchStatBlock", AnyView(WatchStatBlockGallery()))
+                ("WatchStatBlock", AnyView(WatchStatBlockGallery())),
+                ("WatchPill", AnyView(WatchPillGallery()))
             ]
 
             static func render(_ view: some View, _ appearance: WatchAppearance) -> PixelBuffer? {

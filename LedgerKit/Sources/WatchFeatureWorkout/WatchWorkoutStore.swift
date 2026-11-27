@@ -134,6 +134,11 @@ final class WatchWorkoutStore {
         crown.reading.flatMap { reading in crown.weight?.formatted(in: reading.units) }
     }
 
+    /// The crown's weight on the set screen, as `CrownWeight` draws it and VoiceOver reads it.
+    var crownDial: CrownDial? {
+        WatchPresentation.crownDial(crown, locale: locale)
+    }
+
     var rest: WatchRestModel? {
         live.flatMap { WatchPresentation.rest($0, mode: mode, at: now, liveInput) }
     }

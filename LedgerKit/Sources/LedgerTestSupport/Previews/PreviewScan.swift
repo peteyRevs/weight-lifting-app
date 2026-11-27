@@ -9,7 +9,7 @@ public enum PreviewScan {
     public static let registeredModules: Set<String> = [
         "FeatureHistory",
         "FeatureLibrary", "FeatureOnboarding", "FeatureProgram", "FeatureSettings", "FeatureToday", "FeatureWorkout",
-        "LedgerAppKit", "LedgerDesign", "LedgerWatchAppKit"
+        "LedgerAppKit", "LedgerDesign", "LedgerWatchAppKit", "WatchFeatureWorkout"
     ]
 
     /// `LedgerKit/Sources`, found from this file's place in the repository.

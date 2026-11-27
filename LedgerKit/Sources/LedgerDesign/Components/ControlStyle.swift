@@ -26,7 +26,7 @@ nonisolated enum LedgerHitTarget {
     static let minimum: CGFloat = 44
 }
 
-nonisolated extension LedgerFont {
+public nonisolated extension LedgerFont {
     /// The `minimumScaleFactor` for a line of `role` text set at `size` points that may shrink rather
     /// than truncate: at most to half, and never below the role's floor. For the watch roles that floor
     /// is 11 pt (F06 criterion 4), so no shrunk watch text is ever smaller.
@@ -43,9 +43,11 @@ extension View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(LedgerColor.ground)
     }
+}
 
+public extension View {
     /// A watch component gallery as a watch screen shows it: the prototype's 20 px (13 pt) inset, on
-    /// black. The watch has one, dark, appearance.
+    /// black. The watch has one, dark, appearance. Public for the watch feature's own galleries.
     func ledgerWatchPage() -> some View {
         padding(LedgerSpacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -4,7 +4,8 @@ import SwiftUI
 /// watch ring's proportions (`RestRingGeometry.watch`, 130.7 pt at the 46 mm default text size), with
 /// the time left in the countdown numerals. `progress` is the fraction of the rest still to go,
 /// clamped to 0…1. The ring grows and shrinks with its label's text size, so the label always fits;
-/// a label too long for it shrinks, never below the 11 pt watch floor.
+/// a label too long for it shrinks, never below the 11 pt watch floor. With the wrist down (Always-On,
+/// `isLuminanceReduced`) the arc dims to `WatchTokens.accentDimmed`; the track and the time stay as they are.
 ///
 /// VoiceOver reads one element that updates frequently, named by `accessibilitySummary`, the time left
 /// in words ("1 minute 15 seconds left"). It is required: a bare "1:15" can sound like a time
@@ -14,6 +15,7 @@ public struct WatchRestRing: View {
     private let label: String
     private let summary: String
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
     public init(progress: Double, label: String, accessibilitySummary: String) {
         self.progress = progress
@@ -30,7 +32,10 @@ public struct WatchRestRing: View {
             RestRingArc(progress: 1, geometry: geometry)
                 .stroke(LedgerColor.watchTrack, lineWidth: lineWidth)
             RestRingArc(progress: progress, geometry: geometry)
-                .stroke(LedgerColor.accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(
+                    WatchTokens.accent(isLuminanceReduced: isLuminanceReduced),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
             Text(label)
                 .ledgerFont(.watchCountdown)
                 .foregroundStyle(LedgerColor.watchInk)

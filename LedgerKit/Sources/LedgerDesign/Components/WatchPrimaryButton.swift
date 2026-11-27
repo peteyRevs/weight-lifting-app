@@ -1,15 +1,13 @@
 import SwiftUI
 
 /// The watch's orange pill ("Start", "Done set", "Skip"; LedgerWatch): the one accent action on a
-/// watch screen, full width, a white 700 label, at least 44 pt tall (the HIG's default watchOS
-/// control size; its minimum is 28 pt). A long title wraps and the pill grows. Disabled, it turns
-/// grey.
+/// watch screen, `WatchPill`'s `.filled` button. Full width, a white 700 label, at least 44 pt tall (the HIG's default
+/// watchOS control size; its minimum is 28 pt). A long title wraps and the pill grows. Disabled, it turns grey.
 ///
 /// `title` is shown as given and is what VoiceOver reads; features pass copy from their catalog.
 public struct WatchPrimaryButton: View {
     private let title: String
     private let action: () -> Void
-    @Environment(\.isEnabled) private var isEnabled
 
     public init(_ title: String, action: @escaping () -> Void) {
         self.title = title
@@ -17,18 +15,7 @@ public struct WatchPrimaryButton: View {
     }
 
     public var body: some View {
-        Button(action: action) {
-            Text(title)
-                .ledgerFont(.watchButton)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(isEnabled ? LedgerColor.watchInk : LedgerColor.watchInkMuted)
-                .padding(.horizontal, LedgerSpacing.l)
-                .padding(.vertical, LedgerSpacing.m)
-                .frame(maxWidth: .infinity, minHeight: LedgerHitTarget.minimum)
-                .background(isEnabled ? LedgerColor.accent : LedgerColor.watchHairline, in: .ledgerPill)
-                .contentShape(.ledgerPill)
-        }
-        .buttonStyle(LedgerPressStyle())
+        WatchPill(title, style: .filled, action: action)
     }
 }
 
