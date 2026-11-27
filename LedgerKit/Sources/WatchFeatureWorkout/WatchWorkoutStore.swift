@@ -50,6 +50,14 @@ final class WatchWorkoutStore {
     @ObservationIgnored var ahead: WorkoutState?
     /// The session updates heard, for the tests that count emissions.
     @ObservationIgnored private(set) var updatesHeard = 0
+    /// Moved by the rest's task at the rest's end and at the end of "GO" (`WatchWorkoutStore+Rest.swift`). Not
+    /// `private(set)` because that task is the store's extension in its own file.
+    var restEdges = 0
+    /// The shown rest the rest's task (`restTask`) waits on.
+    @ObservationIgnored var followedRest: RestTimer?
+    @ObservationIgnored var restTask: Task<Void, Never>?
+    /// Plays the updates' haptics and the rest's buzz, a turn at a time.
+    @ObservationIgnored let haptic = WatchHapticPlayer()
 
     @ObservationIgnored let appName: String
     @ObservationIgnored @Dependency(\.workoutSession) var session
@@ -60,6 +68,8 @@ final class WatchWorkoutStore {
     @ObservationIgnored @Dependency(\.statsQueries) var stats
     @ObservationIgnored @Dependency(\.deviceID) var device
     @ObservationIgnored @Dependency(\.date) var date
+    @ObservationIgnored @Dependency(\.continuousClock) var clock
+    @ObservationIgnored @Dependency(\.haptics) private var haptics
     @ObservationIgnored @Dependency(\.uuid) var uuid
     @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @Dependency(\.locale) private var locale
@@ -76,7 +86,7 @@ final class WatchWorkoutStore {
     // MARK: What the screens draw
 
     var mode: WatchMode {
-        WatchMode(workout, at: date.now, summaryDismissed: isSummaryDismissed)
+        WatchMode(workout, at: now, summaryDismissed: isSummaryDismissed)
     }
 
     var shownOverlay: WatchOverlay? {
@@ -95,13 +105,13 @@ final class WatchWorkoutStore {
             return nil
         }
         return WatchPresentation.idle(WatchIdleInput(
-            program: program, exercises: exercises, workout: workout, settings: settings, now: date.now,
+            program: program, exercises: exercises, workout: workout, settings: settings, now: now,
             calendar: calendar, locale: locale, appName: appName
         ))
     }
 
     var ready: WatchReadyModel? {
-        live.flatMap { WatchPresentation.ready($0, at: date.now, liveInput) }
+        live.flatMap { WatchPresentation.ready($0, at: now, liveInput) }
     }
 
     /// The crown's number as the set screen prints it, "190", which moves with the crown before anything is sent.
@@ -110,7 +120,7 @@ final class WatchWorkoutStore {
     }
 
     var rest: WatchRestModel? {
-        live.flatMap { WatchPresentation.rest($0, mode: mode, at: date.now, liveInput) }
+        live.flatMap { WatchPresentation.rest($0, mode: mode, at: now, liveInput) }
     }
 
     var list: WatchListModel? {
@@ -134,9 +144,10 @@ final class WatchWorkoutStore {
 // MARK: - Work the root's task runs
 
 extension WatchWorkoutStore {
-    /// Follows the session, the live connection, the program, the settings and the exercises, and applies the taps,
-    /// for as long as the root's task runs.
+    /// Follows the session, the live connection, the program, the settings and the exercises, applies the taps, and
+    /// plays the haptics, for as long as the root's task runs.
     func run() async {
+        defer { stopFollowingRest() }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.followSession() }
             group.addTask { await self.followConnection() }
@@ -153,17 +164,20 @@ extension WatchWorkoutStore {
                 }
             }
             group.addTask { await self.pump() }
+            group.addTask { await self.haptic.run(haptics: self.haptics, clock: self.clock) }
         }
     }
 
-    /// The session's workout, then every change. A stream that starts again forgets an answer kept from before, and
-    /// the taps wait for its first update.
+    /// The session's workout, then every change, with its haptics (only from the stream, as on the phone, so a change
+    /// is felt once). A stream that starts again forgets an answer kept from before, and the taps wait for its first
+    /// update.
     func followSession() async {
         ahead = nil
         hasHeardSession = false
         defer { hasHeardSession = false }
         for await update in await session.updates() {
             show(update.state)
+            haptic.enqueue(update.haptics)
             if !hasHeardSession {
                 hasHeardSession = true
                 wake?.yield()
@@ -214,6 +228,7 @@ extension WatchWorkoutStore {
             overlay = nil
         }
         crown.follow(live.flatMap(Self.crownReading))
+        followRest()
     }
 
     /// What the crown reads in `state`: the set screen's set while it has one to log.
