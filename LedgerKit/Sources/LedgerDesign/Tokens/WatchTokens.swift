@@ -12,6 +12,10 @@ public nonisolated enum WatchTokens {
     public static let heartDot: CGFloat = 8 / 1.5
     /// The gaps between the heart dot, the number and "BPM": 7 px.
     public static let heartGap: CGFloat = 7 / 1.5
+    /// The gap between the set screen's rows, and between the lines inside the rest ring: 3 px.
+    public static let rowGap: CGFloat = 3 / 1.5
+    /// The set screen's round reps buttons, "−" and "+": 44 px.
+    public static let stepButton: CGFloat = 44 / 1.5
     /// The accent while the wrist is down (Always-On, `isLuminanceReduced`): orange at 60 % (R1 §5.5).
     public static let accentDimmed = LedgerColor.accent.opacity(0.6)
 

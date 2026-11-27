@@ -36,6 +36,10 @@ final class WatchWorkoutStore {
     /// "Done" on the summary (a local flag, F18 criterion 11).
     var isSummaryDismissed = false
     var crown = CrownWeightModel()
+    /// Whether the set screen has asked for Health (spec §9's one-time "Allow Health in iPhone Settings"): set by
+    /// the first "Done set" while Health is denied, so the line stays until the lifter has seen it and moved on, and
+    /// is not shown again while the app runs.
+    var hasAskedForHealth = false
     /// What the watch's Health session last said (`WatchHealthSession.states()`); without one, no session. Set only
     /// by `followHealth()` (`WatchWorkoutStore+Health.swift`), hence not `private(set)`.
     var healthState = WatchHealth()
@@ -107,7 +111,8 @@ final class WatchWorkoutStore {
 
     var liveInput: WatchLiveInput {
         WatchLiveInput(
-            heartRate: heartRate, health: health, connection: connection, hasHeardPhone: hasHeardPhone, locale: locale
+            heartRate: heartRate, health: health, connection: connection, hasHeardPhone: hasHeardPhone, locale: locale,
+            offersHealthLine: !hasAskedForHealth
         )
     }
 

@@ -181,6 +181,17 @@
         }
       }
     },
+    "+30s" : {
+      "comment" : "Button on the rest screen: 30 seconds more rest",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+30s"
+          }
+        }
+      }
+    },
     "AVG BPM" : {
       "comment" : "Caption under the workout's average heart rate",
       "localizations" : {
@@ -188,6 +199,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "AVG BPM"
+          }
+        }
+      }
+    },
+    "Add 30 seconds" : {
+      "comment" : "Spoken name of the rest screen's +30s button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add 30 seconds"
           }
         }
       }
@@ -214,6 +236,17 @@
         }
       }
     },
+    "Decrease reps" : {
+      "comment" : "Spoken name of the set screen's minus button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decrease reps"
+          }
+        }
+      }
+    },
     "Discard" : {
       "comment" : "Ends the workout without saving it",
       "localizations" : {
@@ -236,6 +269,17 @@
         }
       }
     },
+    "Done set" : {
+      "comment" : "Button on the set screen: logs the set as it reads",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done set"
+          }
+        }
+      }
+    },
     "ELAPSED" : {
       "comment" : "Caption under the workout's time on the summary",
       "localizations" : {
@@ -243,6 +287,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ELAPSED"
+          }
+        }
+      }
+    },
+    "Elapsed time" : {
+      "comment" : "Spoken name of the workout's running time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elapsed time"
           }
         }
       }
@@ -287,6 +342,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Heart rate"
+          }
+        }
+      }
+    },
+    "Increase reps" : {
+      "comment" : "Spoken name of the set screen's plus button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Increase reps"
           }
         }
       }
@@ -478,6 +544,17 @@
         }
       }
     },
+    "REPS" : {
+      "comment" : "Caption after the reps of the set to log",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REPS"
+          }
+        }
+      }
+    },
     "REST" : {
       "comment" : "Title of the rest screen while the countdown runs",
       "localizations" : {
@@ -511,6 +588,28 @@
         }
       }
     },
+    "Rest over" : {
+      "comment" : "Spoken reading of the rest ring at zero",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest over"
+          }
+        }
+      }
+    },
+    "Rest, %@ remaining" : {
+      "comment" : "Spoken reading of the rest ring: the time left, in words",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest, %@ remaining"
+          }
+        }
+      }
+    },
     "SET %lld OF %lld" : {
       "comment" : "Eyebrow of the set to log: its place, counted from 1, then the exercise's number of sets",
       "localizations" : {
@@ -540,6 +639,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Save workout"
+          }
+        }
+      }
+    },
+    "Skip" : {
+      "comment" : "Button on the rest screen: ends the rest now",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip"
           }
         }
       }

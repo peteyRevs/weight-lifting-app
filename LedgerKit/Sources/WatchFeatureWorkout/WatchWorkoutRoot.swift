@@ -6,8 +6,8 @@ import SwiftUI
 /// app's display name, for "Open %@ on iPhone", the composition's Health session, and, in Debug builds, what a long
 /// press on the title does.
 ///
-/// The screen before a workout is drawn here; set ready, the rest screen and the summary are stubs until F18 S5b and
-/// S6 (`WatchStubScreen`), and the overlays come with S6.
+/// The screen before a workout, set ready and the rest screen (with its "GO") are drawn here; the summary is a stub
+/// until F18 S6 (`WatchStubScreen`), and the overlays come with S6.
 public struct WatchWorkoutRoot: View {
     @State private var store: WatchWorkoutStore
     private let onTitleLongPress: () -> Void
@@ -40,9 +40,9 @@ public struct WatchWorkoutRoot: View {
         case let .idle(model):
             WatchIdleScreen(model: model, send: store.send, onTitleLongPress: onTitleLongPress)
         case let .ready(model):
-            WatchStubScreen(lines: [model.setLabel, model.exerciseName])
+            WatchReadyScreen(model: model, dial: store.crownDial, send: store.send)
         case let .rest(model):
-            WatchStubScreen(lines: [model.title, model.clock])
+            WatchRestScreen(model: model, send: store.send)
         case let .summary(model):
             WatchStubScreen(lines: [model.title], pill: (model.done, .dismissSummary), send: store.send)
         }

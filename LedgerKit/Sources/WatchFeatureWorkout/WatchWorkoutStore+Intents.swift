@@ -76,6 +76,7 @@ extension WatchWorkoutStore {
         guard let reading = crown.reading else {
             return
         }
+        hasAskedForHealth = hasAskedForHealth || health == .denied
         if crown.isRotating, let commit = crown.rotationEnded() {
             enqueue(.commitWeight(commit))
         }

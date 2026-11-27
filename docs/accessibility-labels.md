@@ -42,10 +42,13 @@ Previews and galleries are not counted. `IconPillButton`'s own definition is not
 | A set row's check, a drop set logged | `LedgerDesign/Components/SetRow.swift` | `Button(action: onCheck) { SetRowCheck(state: state) }` | `WorkoutPresentation+Card.swift` | `WorkoutCopy.undoDropSet` | `Undo drop set` | `WorkoutPresentationCardTests` |
 | A set row's check, a superset row not logged ("A2") | `LedgerDesign/Components/SetRow.swift` | `Button(action: onCheck) { SetRowCheck(state: state) }` | `WorkoutPresentation+Card.swift` | `WorkoutCopy.logRow` | `Log set \(label)` | `WorkoutAccessibilityTrees+Block` |
 | A set row's check, a superset row logged | `LedgerDesign/Components/SetRow.swift` | `Button(action: onCheck) { SetRowCheck(state: state) }` | `WorkoutPresentation+Card.swift` | `WorkoutCopy.undoRow` | `Undo set \(label)` | `WorkoutAccessibilityTrees+Block` |
+| The watch's set-ready "−", fewer reps | `WatchFeatureWorkout/Components/WatchStepButton.swift` | `LedgerIconView(icon, sizedAs: .watchTitle)` | `WatchReadyScreen.swift` | `WatchWorkoutCopy.decreaseReps` | `Decrease reps` | `WatchLiveScreenTests` |
+| The watch's set-ready "+", more reps | `WatchFeatureWorkout/Components/WatchStepButton.swift` | `LedgerIconView(icon, sizedAs: .watchTitle)` | `WatchReadyScreen.swift` | `WatchWorkoutCopy.increaseReps` | `Increase reps` | `WatchLiveScreenTests` |
 
 "Undo drop set" is pinned by `WorkoutPresentationCardTests`, which holds the label the card hands the set row: no
-hosted tree draws a logged drop set. How the set row reads any check label it is given is pinned once, by
-`AccessibilityTreeSetRowTables`.
+hosted tree draws a logged drop set. The watch's "−" and "+" are pinned by `WatchLiveScreenTests`, which holds the
+labels the set screen hands them: a watch test cannot host an accessibility tree. How the set row reads any check
+label it is given is pinned once, by `AccessibilityTreeSetRowTables`.
 
 ## Buttons folded into one adjustable element
 
@@ -64,4 +67,5 @@ swipe up or down takes a step. The buttons' own labels are never read.
 These draw their words, so VoiceOver reads what is drawn:
 - the cover header's "Minimize" and "Finish";
 - the rest panel's "+30s" and "Skip rest";
+- the watch's "Done set", its exercise name (with its "›") and its rest screen's "+30s" and "Skip";
 - the picker's rows, which draw "+" or a check beside the exercise's name.

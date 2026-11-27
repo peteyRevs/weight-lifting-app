@@ -83,6 +83,12 @@
         case idleRestDay = "Idle — rest day"
         case idleNoProgram = "Idle — no program"
         case idleLogged = "Idle — logged"
+        case readyLb = "Ready — lb"
+        case readyKg = "Ready — kg"
+        case readySuperset = "Ready — superset"
+        case readyHealthDenied = "Ready — Health denied"
+        case rest = "Rest"
+        case restGo = "Rest — GO"
 
         @ViewBuilder var content: some View {
             switch self {
@@ -93,6 +99,12 @@
             case .idleRestDay: IdleSample.restDay.screen
             case .idleNoProgram: IdleSample.noProgram.screen
             case .idleLogged: IdleSample.logged.screen
+            case .readyLb: LiveSample.ready.screen
+            case .readyKg: LiveSample.readyKg.screen
+            case .readySuperset: LiveSample.superset.screen
+            case .readyHealthDenied: LiveSample.healthDenied.screen
+            case .rest: LiveSample.rest.screen
+            case .restGo: LiveSample.restOver.screen
             }
         }
     }

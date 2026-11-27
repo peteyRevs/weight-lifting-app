@@ -7,20 +7,42 @@ import SwiftUI
 /// a label too long for it shrinks, never below the 11 pt watch floor. With the wrist down (Always-On,
 /// `isLuminanceReduced`) the arc dims to `WatchTokens.accentDimmed`; the track and the time stay as they are.
 ///
-/// VoiceOver reads one element that updates frequently, named by `accessibilitySummary`, the time left
+/// The label is a `Text`, so that a screen can hand it a live countdown (`Text(timerInterval:)`), which ticks
+/// with no view update and keeps ticking with the wrist down. Under it, inside the track, the ring draws its
+/// `footer` (the rest screen's heart rate and next set), each line its own VoiceOver element, in the narrower chord
+/// the track leaves there.
+///
+/// VoiceOver reads the time as one element that updates frequently, named by `accessibilitySummary`, the time left
 /// in words ("1 minute 15 seconds left"). It is required: a bare "1:15" can sound like a time
 /// of day, so the ring never reads its label.
-public struct WatchRestRing: View {
+public struct WatchRestRing<Footer: View>: View {
     private let progress: Double
-    private let label: String
+    private let label: Text
     private let summary: String
+    private let footer: Footer?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
-    public init(progress: Double, label: String, accessibilitySummary: String) {
+    public init(
+        progress: Double,
+        label: Text,
+        accessibilitySummary: String,
+        @ViewBuilder footer: () -> Footer
+    ) {
+        self.init(progress: progress, label: label, summary: accessibilitySummary, footer: footer())
+    }
+
+    /// Without a footer (nil), the time alone is inside the ring.
+    private init(progress: Double, label: Text, summary: String, footer: Footer?) {
         self.progress = progress
         self.label = label
-        summary = accessibilitySummary
+        self.summary = summary
+        self.footer = footer
+    }
+
+    /// The footer's width, as a share of the inside of the track: the chord the ring leaves under the time.
+    static var footerShare: CGFloat {
+        0.75
     }
 
     public var body: some View {
@@ -36,17 +58,28 @@ public struct WatchRestRing: View {
                     WatchTokens.accent(isLuminanceReduced: isLuminanceReduced),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
-            Text(label)
-                .ledgerFont(.watchCountdown)
-                .foregroundStyle(LedgerColor.watchInk)
-                .lineLimit(1)
-                .minimumScaleFactor(LedgerFont.shrinkLimit(.watchCountdown, size: size))
-                .frame(maxWidth: (2 * geometry.radius - geometry.lineWidth) * scale) // inside the track
+            VStack(spacing: LedgerSpacing.xs) {
+                label
+                    .ledgerFont(.watchCountdown)
+                    .foregroundStyle(LedgerColor.watchInk)
+                    .lineLimit(1)
+                    .minimumScaleFactor(LedgerFont.shrinkLimit(.watchCountdown, size: size))
+                    .accessibilityLabel(Text(verbatim: summary))
+                    .accessibilityAddTraits(.updatesFrequently)
+                if let footer {
+                    footer.frame(maxWidth: Self.footerShare * (2 * geometry.radius - geometry.lineWidth) * scale)
+                }
+            }
+            .frame(maxWidth: (2 * geometry.radius - geometry.lineWidth) * scale) // inside the track
         }
         .frame(width: geometry.diameter * scale, height: geometry.diameter * scale)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim: summary))
-        .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+public extension WatchRestRing where Footer == EmptyView {
+    /// The ring with `label` alone inside it.
+    init(progress: Double, label: String, accessibilitySummary: String) {
+        self.init(progress: progress, label: Text(verbatim: label), summary: accessibilitySummary, footer: nil)
     }
 }
 
