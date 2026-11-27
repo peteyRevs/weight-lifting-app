@@ -263,3 +263,25 @@ extension WatchWorkoutStoreTests {
         task.cancel()
     }
 }
+
+extension WatchWorkoutStoreTests {
+    @Test("Today's session logged before the store ran is \"Logged earlier today\" with no Start; a rest day never is")
+    func todayLogged_noStart() async throws {
+        let scene = try Scene()
+        let (store, task) = await scene.running()
+        #expect(Self.plan(store)?.start == "Start")
+        var earlier = try Scene.lowerA([(0, 0)])
+        earlier.startedAt = Fixtures.now.addingTimeInterval(-3600)
+        earlier.endedAt = Fixtures.now.addingTimeInterval(-600)
+        earlier.phase = .finished
+        try await scene.stores.workouts.materialize(earlier, slotUpdates: [])
+        await observed("logged earlier today") { Self.plan(store)?.planLine == "Logged earlier today" }
+        #expect(Self.plan(store)?.start == nil)
+        let program = try #require(store.program)
+        let thursday = Fixtures.now.addingTimeInterval(86400)
+        #expect(!WatchPresentation.isLogged(
+            today: program, in: [earlier], settings: Fixtures.settingsLb, now: thursday, calendar: Fixtures.calendar
+        ))
+        task.cancel()
+    }
+}

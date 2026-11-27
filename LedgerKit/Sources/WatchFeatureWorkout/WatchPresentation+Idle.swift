@@ -11,7 +11,7 @@ nonisolated struct WatchIdleInput: Sendable {
     /// its sets and volume.
     var workout: WorkoutState?
     /// Whether the watch's history holds a finished workout of today's session that started today: "Logged earlier
-    /// today", for a workout this session did not see end.
+    /// today", for a workout this session did not see end (`isLogged(today:in:)`).
     var isTodayLogged = false
     var settings: Settings
     var now: Date
@@ -79,6 +79,26 @@ nonisolated extension WatchPresentation {
             start: hasPlan ? WatchWorkoutCopy.start : nil,
             next: hasPlan ? nil : nextSessionLine(program, weeks: weeks, weekIndex: weekIndex, input)
         ))
+    }
+
+    /// Whether `history` holds a finished workout of today's session of `program` that started today: the store's
+    /// `isTodayLogged`. False on a rest day.
+    static func isLogged(
+        today program: Program,
+        in history: [WorkoutState],
+        settings: Settings,
+        now: Date,
+        calendar: Calendar
+    ) -> Bool {
+        let weeks = WeekCalendar(startDate: program.startDate, weekStart: settings.weekStart, calendar: calendar)
+        guard let day = weeks.scheduledDay(on: now, in: program) else {
+            return false
+        }
+        let source = WorkoutSource(programID: program.id, weekIndex: weeks.weekIndex(for: now), dayTemplateID: day)
+        return history.contains { workout in
+            workout.phase == .finished && workout.source == source
+                && CivilDate(workout.startedAt, in: calendar) == CivilDate(now, in: calendar)
+        }
     }
 
     /// "Logged · 18 sets · 24,180 lb" for the session's finished workout of `source` that started today (the

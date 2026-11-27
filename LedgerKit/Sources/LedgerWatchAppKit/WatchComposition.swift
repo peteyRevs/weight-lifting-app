@@ -6,6 +6,7 @@ import LedgerHealth
 import LedgerPersistence
 import LedgerSync
 import SwiftUI
+import WatchFeatureWorkout
 
 /// The watch app's composition root (architecture §4, §13): its own database, the one place live values are bound
 /// to the dependency keys. `App.init` calls `launch()`, which opens the database synchronously; the root view
@@ -32,7 +33,13 @@ public final class WatchComposition {
     private(set) var session: LocalWorkoutSessionActor?
     /// Mirroring and WatchConnectivity as one transport, when the environment has both channels.
     private(set) var transport: CompositeTransport?
-    /// Runs the transport, the health events' broadcast and the phone-start rule, for the app's life.
+    /// The health store's events for every reader, made when the database opens so that each reader subscribes
+    /// before it runs and none misses an event of the launch (a start from the phone, a recovery; F18 criterion 13).
+    private(set) var healthEvents: HealthEventBroadcast?
+    /// The watch's HealthKit session, following the host's workout (F18 S3), for the workout screen to read.
+    public private(set) var health: WatchHealthSession?
+    /// Runs the transport, the health events' broadcast, the Health session and the phone-start rule, for the app's
+    /// life.
     private var liveSync: Task<Void, Never>?
     private var isCompanionActive = false
 
@@ -49,6 +56,13 @@ public final class WatchComposition {
             device: stores.deviceID,
             now: environment.now
         )
+        if let session, let healthStore = environment.healthStore {
+            healthEvents = HealthEventBroadcast(healthStore.events)
+            health = WatchHealthSession(
+                health: healthStore, workouts: session, programs: stores.programs,
+                logger: environment.logger.category("health")
+            )
+        }
         if let healthStore = environment.healthStore, let watchConnectivity = environment.watchConnectivity {
             transport = CompositeTransport(
                 mirroring: MirroringTransport(channel: healthStore.remoteChannel, clock: environment.syncClock),
@@ -118,22 +132,31 @@ public final class WatchComposition {
         }
     }
 
-    /// Connects the host to the phone, once (F17 S7b), before WatchConnectivity is activated: runs the transport, a
-    /// `HealthEventBroadcast` over the health store's events (their one reader; F18's screen subscribes too), and
-    /// the host's answer to each start the phone asks for (`followPhoneStartRequests`), which adopts the phone's
-    /// workout or, after 5 s, calls `startOwnWorkout`. Without a transport, nothing.
+    /// Connects the host to the phone, once (F17 S7b), before WatchConnectivity is activated: runs the transport,
+    /// `healthEvents` (the health store's events' one reader), the Health session (F18 S3), and the host's answer
+    /// to each start the phone asks for (`followPhoneStartRequests`), which adopts the phone's workout or, after
+    /// 5 s, starts the watch's own (`startOwnWorkout`, else today's day: `WatchTodayStart`). Both readers subscribe
+    /// before the broadcast runs. Without a transport, nothing.
     func connectLiveSync() async {
-        guard liveSync == nil, let session, let transport, let healthStore = environment.healthStore else {
+        guard liveSync == nil, let session, let transport, let broadcast = healthEvents, let health,
+              let stores
+        else {
             return
         }
-        let broadcast = HealthEventBroadcast(healthStore.events)
         let phoneStarts = await broadcast.subscribe()
+        let healthSessionEvents = await broadcast.subscribe()
         let clock = environment.syncClock
-        let startOwn = environment.startOwnWorkout
+        let today = WatchTodayStart(
+            session: session, programs: stores.programs, exercises: stores.exercises, stats: stores.stats,
+            settings: stores.settings, device: stores.deviceID, calendar: environment.calendar,
+            now: environment.now, newID: environment.newID, logger: environment.logger.category("watch.workout")
+        )
+        let startOwn = environment.startOwnWorkout ?? { await today.startOwnWorkout() }
         liveSync = Task {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await transport.run() }
                 group.addTask { await broadcast.run() }
+                group.addTask { await health.run(events: healthSessionEvents) }
                 group.addTask { await session.followPhoneStartRequests(phoneStarts, clock: clock, startOwn: startOwn) }
             }
         }
@@ -202,9 +225,10 @@ extension WatchComposition {
         /// The live transports', the host's and the phone-start rule's timers.
         var syncClock: any Clock<Duration> = ContinuousClock()
         /// What starts the watch's own workout when the phone asked for one and its workout did not arrive within
-        /// 5 s (F17 criterion 8). The seam for F18/F19: the cached day (F19) started from the workout screen (F18).
-        /// Until then it only logs.
-        var startOwnWorkout: @Sendable () async -> Void = {}
+        /// 5 s (F17 criterion 8); nil starts today's day of the watch's program (`WatchTodayStart`), as the app does.
+        var startOwnWorkout: (@Sendable () async -> Void)?
+        /// The calendar today's day is scheduled in.
+        var calendar: Calendar = .autoupdatingCurrent
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -235,10 +259,7 @@ extension WatchComposition {
                 preparesDependencies: true,
                 processStart: ProcessStart.date(),
                 healthStore: liveHealthStore,
-                watchConnectivity: liveChannel,
-                startOwnWorkout: {
-                    launchLogger.log.notice("The watch would start its own workout here (F18/F19); nothing started")
-                }
+                watchConnectivity: liveChannel
             )
         }
     }

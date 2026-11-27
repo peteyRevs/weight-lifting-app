@@ -73,6 +73,28 @@ struct LiveSyncWiringTests {
         #expect(await starts.next() != nil)
     }
 
+    @Test("F18 S3: the Health session runs with the live sync, so a workout the host starts starts the session")
+    func healthSession_followsTheHost() async throws {
+        let harness = Harness()
+        defer { harness.remove() }
+        let health = FakeHealthStore(authorization: .authorized)
+        let composition = harness.composition(healthStore: health, watchConnectivity: FakeLiveWorkoutTransport())
+        composition.boot()
+        // A reader subscribed before the broadcast runs hears the launch's every event.
+        let events = try #require(await composition.healthEvents?.subscribe())
+        await composition.resume(in: .active)
+        let session = try #require(composition.session)
+        let started = try EventBuilders.seedSession()
+        try await session.start(started)
+        var heard = events.makeAsyncIterator()
+        while let event = await heard.next(), event != .running(since: started.startedAt) {}
+        #expect(await health.activeSession?.workoutID == started.id)
+        try await session.discard(endedAt: started.startedAt.addingTimeInterval(60))
+        while let event = await heard.next(), event != .ended(Fixtures.now) {}
+        #expect(await health.discarded)
+        #expect(await health.activeSession == nil)
+    }
+
     @Test("Without a WatchConnectivity channel the host is still built and bound, and nothing is connected")
     func noChannel_hostOnly() async {
         let harness = Harness()
