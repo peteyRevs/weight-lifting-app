@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import LedgerDependencies
 import LedgerDomain
 import LedgerTestSupport
 import Testing
@@ -17,23 +18,48 @@ struct WatchStoreScene {
     let haptics: ClockedHaptics
     /// The session when it is the fake, to drive changes made elsewhere and to read what it was asked.
     let fake: FakeWorkoutSessionClient?
+    /// HealthKit, when the scene runs the watch's Health session over it (F18 S3); its `events` are the session's.
+    let health: FakeHealthStore?
+    /// What the Health session runs over: `health`, or a stand-in in front of it (`GatedHealthStore`).
+    let healthStore: (any HealthStore)?
 
-    init(live: WorkoutState? = nil, session: (any WorkoutSessionClient)? = nil) throws {
+    init(
+        live: WorkoutState? = nil,
+        session: (any WorkoutSessionClient)? = nil,
+        health: FakeHealthStore? = nil,
+        healthStore: (any HealthStore)? = nil
+    ) throws {
         stores = try InMemoryStores(seed: .preview())
         fake = session == nil ? FakeWorkoutSessionClient(live: live) : nil
         self.session = session ?? fake ?? FakeWorkoutSessionClient()
+        self.health = health
+        self.healthStore = healthStore ?? health
         haptics = ClockedHaptics(clock: clock)
     }
 
-    /// A store running as the root's task runs it, once the session, the program and the settings have spoken. A
+    /// Today's start over the scene's stores and session, at `now`.
+    func today(at now: Date = Fixtures.now) -> WatchTodayStart {
+        WatchTodayStart(
+            session: session, programs: stores.programs, exercises: stores.exercises, stats: stores.stats,
+            settings: stores.settings, device: Fixtures.deviceID, calendar: Fixtures.calendar,
+            now: { now }, newID: { Fixtures.uuid(4242) }, logger: .disabled
+        )
+    }
+
+    /// A store running as the root's task runs it, once the session, the program and the settings have spoken, with
+    /// the watch's Health session beside it when the scene has `health`. A
     /// `timed` one sleeps on `clock`, and its date is `Fixtures.now` plus the clock's time; otherwise the date stands
     /// still and the clock's waits end at once (`withTestDependencies`).
     func running(timed: Bool = false) async -> (WatchWorkoutStore, Task<Void, Never>) {
+        let healthSession = healthStore.map {
+            WatchHealthSession(health: $0, workouts: session, programs: stores.programs, logger: .disabled)
+        }
         let store = withTestDependencies {
             $0.exerciseRepository = stores.exercises
             $0.programRepository = stores.programs
             $0.settingsRepository = stores.settings
             $0.statsQueries = stores.stats
+            $0.workoutRepository = stores.workouts
             $0.workoutSession = session
             $0.liveConnection = connection
             $0.deviceID = Fixtures.deviceID
@@ -43,9 +69,16 @@ struct WatchStoreScene {
                 $0.date = DateGenerator { [clock] in Fixtures.now.addingTimeInterval(clock.elapsed / .seconds(1)) }
             }
         } operation: {
-            WatchWorkoutStore(appName: "Ledger")
+            WatchWorkoutStore(appName: "Ledger", health: healthSession)
         }
-        let task = Task { await store.run() }
+        let task = Task { [healthSession, healthStore] in
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await store.run() }
+                if let healthSession, let healthStore {
+                    group.addTask { await healthSession.run(events: healthStore.events) }
+                }
+            }
+        }
         await observed("the store heard its sources") { store.hasHeardSession && store.idle != nil }
         return (store, task)
     }

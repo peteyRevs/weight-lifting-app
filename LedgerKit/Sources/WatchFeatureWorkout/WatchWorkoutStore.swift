@@ -25,6 +25,8 @@ final class WatchWorkoutStore {
     private(set) var hasHeardProgram = false
     private(set) var settings: Settings?
     private(set) var exercises: [ExerciseID: Exercise] = [:]
+    /// The newest workouts in the watch's history, for "Logged earlier today".
+    private(set) var recent: [WorkoutState] = []
     /// The live connection as last heard (F17 criterion 12), and whether any state but `solo` was heard, as the phone's
     /// `hasHeardTheWatch`: from then on `solo` means the iPhone is away, not absent. Never set back.
     private(set) var connection: LiveConnectionState?
@@ -34,11 +36,11 @@ final class WatchWorkoutStore {
     /// "Done" on the summary (a local flag, F18 criterion 11).
     var isSummaryDismissed = false
     var crown = CrownWeightModel()
-    /// What the Health session (F18 S3) fills: the heart rate, the sharing status, and the summary's AVG BPM; and the
-    /// summary's records, which a later slice reads. Until then "—" and no record.
-    var heartRate: HeartRateSample?
-    var health = HealthAuthorization.notDetermined
-    var healthRecord: HealthWorkoutRecord?
+    /// What the watch's Health session last said (`WatchHealthSession.states()`); without one, no session. Set only
+    /// by `followHealth()` (`WatchWorkoutStore+Health.swift`), hence not `private(set)`.
+    var healthState = WatchHealth()
+    /// The records the finished workout on screen set, judged against the bests before it (decision #27); none
+    /// until the read answers. Set by `show(_:)` and `followRecords(_:)`.
     var records: [PersonalRecord] = []
 
     /// The taps waiting for the pump, oldest first; the one being applied stays at the front until it is done.
@@ -58,12 +60,16 @@ final class WatchWorkoutStore {
     @ObservationIgnored var restTask: Task<Void, Never>?
     /// Plays the updates' haptics and the rest's buzz, a turn at a time.
     @ObservationIgnored let haptic = WatchHapticPlayer()
+    /// Each finished workout shown, for `followRecords()` to judge.
+    @ObservationIgnored var finishedShown: AsyncStream<WorkoutState>.Continuation?
 
     @ObservationIgnored let appName: String
+    @ObservationIgnored let healthSession: WatchHealthSession?
     @ObservationIgnored @Dependency(\.workoutSession) var session
     @ObservationIgnored @Dependency(\.liveConnection) private var liveConnection
     @ObservationIgnored @Dependency(\.programRepository) var programs
     @ObservationIgnored @Dependency(\.exerciseRepository) var exerciseRepository
+    @ObservationIgnored @Dependency(\.workoutRepository) private var workoutRepository
     @ObservationIgnored @Dependency(\.settingsRepository) var settingsRepository
     @ObservationIgnored @Dependency(\.statsQueries) var stats
     @ObservationIgnored @Dependency(\.deviceID) var device
@@ -78,10 +84,16 @@ final class WatchWorkoutStore {
         injectedLogger.category("watch.workout")
     }
 
-    /// - Parameter appName: the app's display name (`CFBundleDisplayName`), for "Open %@ on iPhone".
-    init(appName: String) {
+    /// - Parameters:
+    ///   - appName: the app's display name (`CFBundleDisplayName`), for "Open %@ on iPhone".
+    ///   - health: the watch's Health session, which the composition runs; nil shows none.
+    init(appName: String, health: WatchHealthSession? = nil) {
         self.appName = appName
+        healthSession = health
     }
+
+    /// How many of the newest workouts "Logged earlier today" looks through: more than a day ever holds.
+    static let recentLimit = 8
 
     // MARK: What the screens draw
 
@@ -104,9 +116,12 @@ final class WatchWorkoutStore {
         guard hasHeardProgram, let settings else {
             return nil
         }
+        let isTodayLogged = program.map { program in
+            WatchPresentation.isLogged(today: program, in: recent, settings: settings, now: now, calendar: calendar)
+        } ?? false
         return WatchPresentation.idle(WatchIdleInput(
-            program: program, exercises: exercises, workout: workout, settings: settings, now: now,
-            calendar: calendar, locale: locale, appName: appName
+            program: program, exercises: exercises, workout: workout, isTodayLogged: isTodayLogged,
+            settings: settings, now: now, calendar: calendar, locale: locale, appName: appName
         ))
     }
 
@@ -144,13 +159,18 @@ final class WatchWorkoutStore {
 // MARK: - Work the root's task runs
 
 extension WatchWorkoutStore {
-    /// Follows the session, the live connection, the program, the settings and the exercises, applies the taps, and
-    /// plays the haptics, for as long as the root's task runs.
+    /// Follows the session, the live connection, the program, the settings, the exercises, the newest history and the
+    /// Health session, judges each finished workout's records, applies the taps, and plays the haptics, for as long
+    /// as the root's task runs.
     func run() async {
         defer { stopFollowingRest() }
+        let (finished, sink) = AsyncStream.makeStream(of: WorkoutState.self, bufferingPolicy: .bufferingNewest(1))
+        finishedShown = sink
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.followSession() }
             group.addTask { await self.followConnection() }
+            group.addTask { await self.followHealth() }
+            group.addTask { await self.followRecords(finished) }
             group.addTask {
                 await self.follow(self.programs.observeActive()) { store, program in
                     store.program = program
@@ -158,6 +178,9 @@ extension WatchWorkoutStore {
                 }
             }
             group.addTask { await self.follow(self.settingsRepository.observe()) { $0.settings = $1 } }
+            group.addTask {
+                await self.follow(self.workoutRepository.observeRecent(limit: Self.recentLimit)) { $0.recent = $1 }
+            }
             group.addTask {
                 await self.follow(self.exerciseRepository.observeAll()) { store, all in
                     store.exercises = Dictionary(all.map { ($0.id, $0) }) { first, _ in first }
@@ -217,6 +240,10 @@ extension WatchWorkoutStore {
         if next?.id != workout?.id {
             overlay = nil
             isSummaryDismissed = false
+            records = []
+        }
+        if let next, next.phase == .finished, workout?.phase != .finished || next.id != workout?.id {
+            finishedShown?.yield(next)
         }
         workout = next
         ahead = ahead == next ? nil : ahead

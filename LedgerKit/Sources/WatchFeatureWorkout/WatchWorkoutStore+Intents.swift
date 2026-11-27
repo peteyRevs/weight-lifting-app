@@ -143,27 +143,18 @@ extension WatchWorkoutStore {
         }
     }
 
-    /// "Start": today's session of the active program, through `StartWorkoutUseCase`. A workout that is live by the
-    /// time it runs (the phone's start won) is the one the stream shows, and nothing is started over it.
+    /// "Start": today's session of the active program (`WatchTodayStart`). A workout that is live by the time it
+    /// runs (the phone's start won) is the one the stream shows, and nothing is started over it.
     private func start() async throws {
-        guard let program, let settings, workout?.phase != .live else {
+        guard workout?.phase != .live else {
             return
         }
-        let now = date.now
-        let weeks = WeekCalendar(startDate: program.startDate, weekStart: settings.weekStart, calendar: calendar)
-        guard let day = weeks.scheduledDay(on: now, in: program) else {
-            return
-        }
-        let source = WorkoutSource(programID: program.id, weekIndex: weeks.weekIndex(for: now), dayTemplateID: day)
-        let useCase = StartWorkoutUseCase(
+        let today = WatchTodayStart(
             session: session, programs: programs, exercises: exerciseRepository, stats: stats,
-            settings: settingsRepository, device: device, now: { [date] in date.now }, newID: { [uuid] in uuid() }
+            settings: settingsRepository, device: device, calendar: calendar, now: { [date] in date.now },
+            newID: { [uuid] in uuid() }, logger: logger
         )
-        do {
-            _ = try await useCase.start(source)
-        } catch WorkoutSessionError.workoutInProgress {
-            // Another device's start won: its workout is the one the stream shows.
-        }
+        try await today.start()
     }
 
     /// What `command` sends on `state`, as the phone's `WorkoutEditPlan` plans it: nothing for a set gone or logged (a
