@@ -36,7 +36,7 @@ struct WatchHealthSessionTests {
         #expect(await health.activeSession == Session(workoutID: id, start: Fixtures.now))
         #expect(store.health == .authorized && store.ready?.healthLine == nil)
         await health.simulateHeartRate([Self.beat(131), Self.beat(138)])
-        await observed("the heart rate") { store.ready?.heartRate == "138" }
+        await observed("the heart rate") { store.ready?.heartRate.value == "138" }
         store.send(.logSet)
         await Scene.settled(store)
         store.send(.openEnd)
@@ -75,7 +75,7 @@ struct WatchHealthSessionTests {
         await observed("the heart rate") { store.heartRate != nil }
         await health.simulateAnotherWorkoutSessionStarted()
         await observed("the takeover") { store.isHealthTakenOver }
-        #expect(store.heartRate == nil && store.ready?.heartRate == "—")
+        #expect(store.heartRate == nil && store.ready?.heartRate.value == "—")
         store.send(.logSet)
         await observed("a set logged after the takeover") { store.workout?.doneSets == 1 }
         #expect(store.isHealthTakenOver && store.healthState.running == nil)
@@ -100,7 +100,7 @@ struct WatchHealthSessionTests {
         let (store, task) = await scene.running()
         await observed("denied") { store.health == .denied }
         let ready = try #require(store.ready)
-        #expect(ready.heartRate == "—" && ready.healthLine == "Allow Health in iPhone Settings")
+        #expect(ready.heartRate.value == "—" && ready.healthLine == "Allow Health in iPhone Settings")
         await health.simulateHeartRate([Self.beat(99)])
         store.send(.logSet)
         await observed("the set logged") { store.workout?.doneSets == 1 }
@@ -128,7 +128,7 @@ struct WatchHealthSessionTests {
         }
         #expect(await health.activeSession == kept, "the session is the one the system kept")
         await health.simulateHeartRate([Self.beat(101)])
-        await observed("its heart rate") { store.ready?.heartRate == "101" }
+        await observed("its heart rate") { store.ready?.heartRate.value == "101" }
         task.cancel()
     }
 

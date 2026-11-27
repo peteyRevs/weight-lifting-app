@@ -21,11 +21,14 @@
                 // F12 S1 (ruling R5): moved from FeatureProgram.
                 "FilterChipRow", "SearchField",
                 // F14 S1 (A5): Settings' units.
-                "SegmentedChoice"
+                "SegmentedChoice",
+                // F18 S4: the watch's outlined and filled pill.
+                "WatchPill"
             ]
             /// Every token type in `LedgerDesign/Tokens`.
             static let tokenTypes = [
-                "LedgerColor", "LedgerFont", "LedgerSpacing", "LedgerRadius", "LedgerHairline", "LedgerMotion"
+                "LedgerColor", "LedgerFont", "LedgerSpacing", "LedgerRadius", "LedgerHairline", "LedgerMotion",
+                "WatchTokens"
             ]
             /// Every token, as its page names it.
             static let tokens: [String] = [
@@ -36,7 +39,8 @@
                 "xs · 4", "s · 8", "m · 12", "l · 16", "xl · 24", "xxl · 32", "screen · 26",
                 "row · 16", "card · 26", "sheet · 28", "pill · 999", "width · 1", "snappy", "buzz",
                 "buzzCycle · 0.38 s", "buzzRepeats · 3", "boldTextWeightStep · 100",
-                "arrow", "check", "chevron", "swap", "minus", "plus"
+                "arrow", "check", "chevron", "swap", "minus", "plus",
+                "setDot · 6", "setDotGap · 2.7", "heartDot · 5.3", "heartGap · 4.7", "accentDimmed"
             ] + LedgerFont.Role.allCases.map(\.rawValue)
 
             @Test("Every component and token type has its own named section, once")

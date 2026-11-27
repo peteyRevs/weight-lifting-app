@@ -31,6 +31,7 @@
         case watchPrimaryButton = "WatchPrimaryButton"
         case watchRestRing = "WatchRestRing"
         case watchStatBlock = "WatchStatBlock"
+        case watchPill = "WatchPill"
         case designGallery = "DesignGallery"
         case debugMenu = "DebugMenu"
         case diagnosticsPage = "DiagnosticsPage"
@@ -72,6 +73,7 @@
             case .watchPrimaryButton: WatchPrimaryButtonGallery().ledgerWatchPage()
             case .watchRestRing: WatchRestRingGallery().ledgerWatchPage()
             case .watchStatBlock: WatchStatBlockGallery().ledgerWatchPage()
+            case .watchPill: WatchPillGallery().ledgerWatchPage()
             case .designGallery: DesignGallery()
             case .debugMenu:
                 DebugMenu(actions: [DebugMenu.Action("Start sample workout", identifier: "debug.menu.sample") {}]) {
@@ -213,6 +215,10 @@
 
     #Preview("WatchStatBlock") {
         DesignPreview.watchStatBlock.content
+    }
+
+    #Preview("WatchPill") {
+        DesignPreview.watchPill.content
     }
 
     #Preview("DesignGallery") {

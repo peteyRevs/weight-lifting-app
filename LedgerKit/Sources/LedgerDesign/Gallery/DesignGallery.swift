@@ -86,7 +86,10 @@
                 GallerySection("FilterChipRow · SearchField") { FilterChipRowGallery() },
                 GallerySection("SegmentedChoice") { SegmentedChoiceGallery() },
                 // The receipt (F10 S7b) after them, for the same reason.
-                GallerySection("ReceiptLayout") { ReceiptLayoutGallery() }
+                GallerySection("ReceiptLayout") { ReceiptLayoutGallery() },
+                // The watch's pill and measures (F18 S4) after them, for the same reason.
+                GallerySection("WatchPill") { WatchPillGallery().galleryWatchScreen() },
+                GallerySection("WatchTokens") { WatchTokenPage().galleryWatchScreen() }
             ]
         }
     }

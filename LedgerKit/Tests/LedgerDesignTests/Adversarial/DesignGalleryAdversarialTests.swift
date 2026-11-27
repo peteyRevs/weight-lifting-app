@@ -49,7 +49,13 @@
                 ("LedgerMotion.snappy", LedgerMotion.snappy),
                 ("LedgerMotion.buzzCycle", LedgerMotion.buzzCycle),
                 ("LedgerMotion.buzzRepeats", LedgerMotion.buzzRepeats),
-                ("LedgerFont.boldTextWeightStep", LedgerFont.boldTextWeightStep)
+                ("LedgerFont.boldTextWeightStep", LedgerFont.boldTextWeightStep),
+                // F18 S4.
+                ("WatchTokens.setDot", WatchTokens.setDot),
+                ("WatchTokens.setDotGap", WatchTokens.setDotGap),
+                ("WatchTokens.heartDot", WatchTokens.heartDot),
+                ("WatchTokens.heartGap", WatchTokens.heartGap),
+                ("WatchTokens.accentDimmed", WatchTokens.accentDimmed)
             ]
 
             /// An element names `name` when it reads the name alone or the name then " · " and its value,
@@ -86,7 +92,8 @@
                 "SetRowSteppers",
                 "SheetChrome", "StatTile", "StatTileRow", "WatchPrimaryButton", "WatchRestRing", "WatchStatBlock",
                 "WeekStrip",
-                "StepperField", "LedgerToggleStyle", "WrapLayout"
+                "StepperField", "LedgerToggleStyle", "WrapLayout",
+                "WatchPill" // F18 S4
             ]
 
             @Test("Every public view in Components/ is named by a gallery heading")

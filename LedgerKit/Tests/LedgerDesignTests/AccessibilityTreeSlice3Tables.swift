@@ -145,7 +145,14 @@
             ) { WatchStatBlockGallery() },
             TreeCase("WatchStatBlock named by the feature", [.text("12 of 15 sets")]) {
                 WatchStatBlock("12/15", caption: "Sets", accessibilitySummary: "12 of 15 sets")
-            }
+            },
+            TreeCase(
+                "WatchPill gallery: buttons, the rest pair, a line with no action, a disabled one",
+                [
+                    .button("Start"), .button("End workout"), .button("+30s"), .button("Skip"),
+                    .text("Next: Friday · UB"), .button("Discard", .notEnabled)
+                ]
+            ) { WatchPillGallery() }
         ]
 
         /// `WeekStripGallery`: one element per day, Monday to Sunday.

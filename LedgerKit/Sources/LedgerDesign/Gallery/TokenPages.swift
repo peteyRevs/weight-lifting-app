@@ -160,4 +160,33 @@
             }
         }
     }
+
+    /// The watch's own measures, each with its value in points, and its dimmed accent as a swatch.
+    struct WatchTokenPage: View {
+        static let sizes: [(name: String, points: CGFloat)] = [
+            ("setDot", WatchTokens.setDot), ("setDotGap", WatchTokens.setDotGap),
+            ("heartDot", WatchTokens.heartDot), ("heartGap", WatchTokens.heartGap)
+        ]
+        /// "2.7": the sizes are thirds of a point.
+        static func points(_ value: CGFloat) -> String {
+            Double(value).formatted(.number.precision(.fractionLength(0 ... 1)))
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: LedgerSpacing.s) {
+                ForEach(Self.sizes, id: \.name) { size in
+                    HStack(spacing: LedgerSpacing.m) {
+                        Circle().fill(LedgerColor.watchInk).frame(width: size.points, height: size.points)
+                        Text(verbatim: "\(size.name) · \(Self.points(size.points))")
+                            .ledgerFont(.caption)
+                            .foregroundStyle(LedgerColor.watchInk)
+                    }
+                }
+                HStack(spacing: LedgerSpacing.m) {
+                    Rectangle().fill(WatchTokens.accentDimmed).frame(width: LedgerSpacing.xxl, height: LedgerSpacing.xl)
+                    Text(verbatim: "accentDimmed").ledgerFont(.caption).foregroundStyle(LedgerColor.watchInk)
+                }
+            }
+        }
+    }
 #endif

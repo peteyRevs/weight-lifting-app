@@ -35,6 +35,37 @@ import Testing
             }
         }
 
+        /// F18 S4, on a trimmed matrix (orchestrator ruling: 20 new references at most): the 46 mm default, the
+        /// design's own size, and 42 mm at AX3, the narrowest screen at the largest text. 49 mm and 42 mm at its
+        /// default size are left to the screens' snapshots (F18 S5).
+        @Suite("WatchPillSnapshots", .tags(.design, .snapshot))
+        struct WatchPillSnapshotTests {
+            nonisolated static let trimmed = [
+                WatchAppearance(.mm46, WatchSize.mm46.dynamicTypeSize), WatchAppearance(.mm42, .accessibility3)
+            ]
+
+            @Test("WatchPill matches its references", arguments: trimmed)
+            func watchPill_watchSize_matchesReference(_ appearance: WatchAppearance) {
+                assertWatchSnapshot(of: WatchPillGallery().ledgerWatchPage(), appearance)
+            }
+
+            /// Always-On (`isLuminanceReduced`, R1 §5.5): the ring at full, half and empty and the orange pill, each
+            /// in the dimmed accent; the track, the times and the white label as they are.
+            @Test("The ring and the pill with the wrist down match their reference (46 mm)")
+            func alwaysOn_ringAndPill_matchesReference() {
+                let appearance = WatchAppearance(.mm46, WatchSize.mm46.dynamicTypeSize)
+                let sheet = VStack(spacing: LedgerSpacing.l) {
+                    WatchRestRingGallery()
+                    WatchPill("Skip") {}
+                }
+                assertWatchSnapshot(
+                    of: sheet.ledgerWatchPage().environment(\.isLuminanceReduced, true),
+                    appearance,
+                    named: "alwaysOn-\(appearance)"
+                )
+            }
+        }
+
         /// The watch components with Bold Text (they follow it: one weight step up) at 46 mm. There is
         /// no Increase Contrast image: the watch palette has one appearance and does not step up.
         @Suite("WatchComponentSheetSnapshots", .tags(.design, .snapshot))

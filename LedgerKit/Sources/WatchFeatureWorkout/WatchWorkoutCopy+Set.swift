@@ -43,6 +43,36 @@ nonisolated extension WatchWorkoutCopy {
         String(localized: "—", bundle: .module, comment: "Stands for the heart rate when there is none to show")
     }
 
+    /// What VoiceOver calls the crown's weight, before its value ("185 pounds").
+    static var weightLabel: String {
+        String(localized: "Weight", bundle: .module, comment: "Spoken name of the weight the crown changes")
+    }
+
+    /// "BPM", after the heart rate.
+    static var bpm: String {
+        String(localized: "BPM", bundle: .module, comment: "Unit after the heart rate: beats per minute")
+    }
+
+    /// What VoiceOver calls the heart-rate line, before its value.
+    static var heartRateLabel: String {
+        String(localized: "Heart rate", bundle: .module, comment: "Spoken name of the heart-rate line")
+    }
+
+    /// "142 beats per minute", spoken.
+    static func spokenHeartRate(_ bpm: Int, locale: Locale) -> String {
+        String(
+            localized: "\(bpm) beats per minute",
+            bundle: .module,
+            locale: locale.forCountedText,
+            comment: "Spoken value of the heart-rate line"
+        )
+    }
+
+    /// Spoken for the heart rate when there is none to show: no sample yet, or Health is not allowed.
+    static var noHeartRateSpoken: String {
+        String(localized: "No reading", bundle: .module, comment: "Spoken value of the heart-rate line without one")
+    }
+
     static var allowHealth: String {
         String(
             localized: "Allow Health in iPhone Settings",

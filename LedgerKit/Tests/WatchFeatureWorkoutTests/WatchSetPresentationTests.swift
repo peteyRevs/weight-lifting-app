@@ -24,7 +24,7 @@ struct WatchSetPresentationTests {
         #expect(ready.weight == "185" && ready.weightValue == 185 && ready.unit == "LB" && ready.step == 5)
         #expect(ready.reps == "× 5" && ready.repsValue == 5 && ready.target == "RPE 8")
         #expect(ready.dots == [false, false, false, false, false])
-        #expect(ready.heartRate == "142" && ready.healthLine == nil && ready.connection == nil)
+        #expect(ready.heartRate.value == "142" && ready.healthLine == nil && ready.connection == nil)
     }
 
     @Test("A superset's rows are labelled by their member's letter, in round order")
@@ -89,10 +89,10 @@ struct WatchSetPresentationTests {
     @Test("Heart rate: the sample's number; a dash with none yet, and with Health denied, which also asks once")
     func ready_heartRate() throws {
         let state = try WatchSample.session()
-        #expect(try Self.ready(state).heartRate == "—")
+        #expect(try Self.ready(state).heartRate.value == "—")
         let denied = try Self.ready(state, WatchSample.live(heartRate: 150, health: .denied))
-        #expect(denied.heartRate == "—" && denied.healthLine == "Allow Health in iPhone Settings")
-        #expect(try Self.ready(state, WatchSample.live(heartRate: 98, health: .notDetermined)).heartRate == "98")
+        #expect(denied.heartRate.value == "—" && denied.healthLine == "Allow Health in iPhone Settings")
+        #expect(try Self.ready(state, WatchSample.live(heartRate: 98, health: .notDetermined)).heartRate.value == "98")
     }
 
     @Test("Rest: m:ss left, the ring 553 − 553 × remaining/total, the next set; GO at zero; +30s rescales the ring")

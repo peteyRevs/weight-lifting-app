@@ -101,6 +101,29 @@
         }
       }
     },
+    "%lld beats per minute" : {
+      "comment" : "Spoken value of the heart-rate line",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld beat per minute"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld beats per minute"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld exercises" : {
       "comment" : "The number of exercises of today's session",
       "localizations" : {
@@ -180,6 +203,17 @@
         }
       }
     },
+    "BPM" : {
+      "comment" : "Unit after the heart rate: beats per minute",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BPM"
+          }
+        }
+      }
+    },
     "Discard" : {
       "comment" : "Ends the workout without saving it",
       "localizations" : {
@@ -242,6 +276,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GO"
+          }
+        }
+      }
+    },
+    "Heart rate" : {
+      "comment" : "Spoken name of the heart-rate line",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heart rate"
           }
         }
       }
@@ -400,6 +445,17 @@
         }
       }
     },
+    "No reading" : {
+      "comment" : "Spoken value of the heart-rate line without one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No reading"
+          }
+        }
+      }
+    },
     "Nothing scheduled today." : {
       "comment" : "Line under the title on a rest day",
       "localizations" : {
@@ -528,6 +584,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "WORKOUT DONE"
+          }
+        }
+      }
+    },
+    "Weight" : {
+      "comment" : "Spoken name of the weight the crown changes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weight"
           }
         }
       }
