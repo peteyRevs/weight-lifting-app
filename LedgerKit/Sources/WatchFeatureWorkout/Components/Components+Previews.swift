@@ -91,6 +91,8 @@
         case restGo = "Rest — GO"
         case takeover = "Ready — taken over"
         case list = "List"
+        case endLogged = "End — logged"
+        case endEmpty = "End — nothing logged"
         case summaryRecords = "Summary — records"
         case summaryKg = "Summary — kg"
         case summaryNoRecords = "Summary — no records"
@@ -112,6 +114,8 @@
             case .restGo: LiveSample.restOver.screen
             case .takeover: OverlaySample.takeover
             case .list: OverlaySample.list
+            case .endLogged: EndSample.logged.screen
+            case .endEmpty: EndSample.empty.screen
             case .summaryRecords: SummarySample.records.screen
             case .summaryKg: SummarySample.recordsKg.screen
             case .summaryNoRecords: SummarySample.noRecords.screen

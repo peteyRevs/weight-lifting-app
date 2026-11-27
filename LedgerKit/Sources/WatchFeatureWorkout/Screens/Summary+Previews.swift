@@ -59,18 +59,22 @@
         }
     }
 
-    /// The session list and the takeover banner, over Lower A of week 5 with its squat done and the next exercise's
-    /// first set logged, at `Fixtures.now`.
+    /// The session list, the end overlay's workout and the takeover banner, over Lower A of week 5 with its squat
+    /// done and the next exercise's first set logged, at `Fixtures.now`.
     nonisolated enum OverlaySample {
-        static var listModel: WatchListModel? {
+        static var workout: WorkoutState? {
             (try? LiveSample.ready.workout()).map { state in
                 var state = state
                 for set in state.exercises[0].sets.indices {
                     state.exercises[0].sets[set].doneAt = LiveSample.loggedAt
                 }
                 state.exercises[1].sets[0].doneAt = LiveSample.loggedAt
-                return WatchPresentation.list(state, locale: Fixtures.locale)
+                return state
             }
+        }
+
+        static var listModel: WatchListModel? {
+            workout.map { WatchPresentation.list($0, locale: Fixtures.locale) }
         }
 
         @MainActor @ViewBuilder static var list: some View {
@@ -82,6 +86,39 @@
         /// Set ready with "Apple Workout took over · logging continues" above it.
         @MainActor static var takeover: some View {
             LiveSample.ready.screen.watchBanner(WatchWorkoutCopy.healthTakenOver)
+        }
+    }
+
+    /// The end overlay over the list's workout, with sets logged ("Save workout"), and over the same workout before
+    /// its first set ("Discard").
+    nonisolated enum EndSample: CaseIterable {
+        case logged, empty
+
+        var model: WatchEndModel? {
+            let state = switch self {
+            case .logged: OverlaySample.workout
+            case .empty: try? LiveSample.ready.workout().clearingLoggedSets()
+            }
+            return state.map { WatchPresentation.end($0, locale: Fixtures.locale) }
+        }
+
+        /// The overlay in this state; its taps go nowhere.
+        @MainActor @ViewBuilder var screen: some View {
+            if let model {
+                WatchEndOverlay(model: model, send: { _ in })
+            }
+        }
+    }
+
+    private extension WorkoutState {
+        nonisolated func clearingLoggedSets() -> WorkoutState {
+            var state = self
+            for exercise in state.exercises.indices {
+                for set in state.exercises[exercise].sets.indices {
+                    state.exercises[exercise].sets[set].doneAt = nil
+                }
+            }
+            return state
         }
     }
 
@@ -99,6 +136,14 @@
 
     #Preview("List") {
         WatchWorkoutPreview.list.content
+    }
+
+    #Preview("End — logged") {
+        WatchWorkoutPreview.endLogged.content
+    }
+
+    #Preview("End — nothing logged") {
+        WatchWorkoutPreview.endEmpty.content
     }
 
     #Preview("Ready — taken over") {

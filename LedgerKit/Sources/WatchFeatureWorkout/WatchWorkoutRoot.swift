@@ -6,9 +6,8 @@ import SwiftUI
 /// app's display name, for "Open %@ on iPhone", the composition's Health session, and, in Debug builds, what a long
 /// press on the title does.
 ///
-/// The session list stands in the live screen's place while it is open, as the prototype draws it; the end overlay
-/// comes with F18 S6b, and until then the live screen shows under it. While another app's workout holds Health's
-/// session, its banner stands above the screen (spec §9).
+/// The session list and the end overlay stand in the live screen's place while one is open, as the prototype draws
+/// them. While another app's workout holds Health's session, its banner stands above the screen (spec §9).
 public struct WatchWorkoutRoot: View {
     @State private var store: WatchWorkoutStore
     private let onTitleLongPress: () -> Void
@@ -47,6 +46,8 @@ public struct WatchWorkoutRoot: View {
             WatchRestScreen(model: model, send: store.send)
         case let .list(model):
             WatchListOverlay(model: model, send: store.send)
+        case let .end(model):
+            WatchEndOverlay(model: model, send: store.send)
         case let .summary(model):
             WatchSummaryScreen(model: model, send: store.send)
         }
@@ -54,8 +55,8 @@ public struct WatchWorkoutRoot: View {
 }
 
 extension WatchWorkoutRoot {
-    /// The screen the root shows: the open session list, or its mode's, drawn from that mode's model. The rest and
-    /// "GO" share the rest screen.
+    /// The screen the root shows: the open session list or end overlay, or its mode's, drawn from that mode's model.
+    /// The rest and "GO" share the rest screen.
     enum Screen: Equatable {
         /// The store has not heard what it needs for the mode yet: the black ground alone.
         case waiting
@@ -63,12 +64,18 @@ extension WatchWorkoutRoot {
         case ready(WatchReadyModel)
         case rest(WatchRestModel)
         case list(WatchListModel)
+        case end(WatchEndModel)
         case summary(WatchSummaryModel)
     }
 
     static func screen(of store: WatchWorkoutStore) -> Screen {
-        if store.shownOverlay == .list, let list = store.list {
-            return .list(list)
+        let overlay: Screen? = switch store.shownOverlay {
+        case .list: store.list.map(Screen.list)
+        case .end: store.end.map(Screen.end)
+        case nil: nil
+        }
+        if let overlay {
+            return overlay
         }
         let screen: Screen? = switch store.mode {
         case .idle: store.idle.map(Screen.idle)

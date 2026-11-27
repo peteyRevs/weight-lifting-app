@@ -9,8 +9,8 @@ nonisolated enum WatchAction: Equatable, Sendable {
     case crownRotated(Double), crownRested, logSet, extendRest, skipRest
     /// The exercise's name, the list's back and a row; "End workout" and the end overlay's buttons; summary's "Done".
     case openList, closeList, selectExercise(Int), openEnd, keepLifting, save, dismissSummary
-    /// "Discard". When it is offered once sets are logged is the product owner's to rule on, and F18 S6 gates it
-    /// there: this store sends it whenever it is asked.
+    /// "Discard". The end overlay offers it only while no set is logged (`WatchEndModel.offersDiscard`); this store
+    /// sends it whenever it is asked.
     case discard
 }
 

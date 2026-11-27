@@ -23,6 +23,7 @@ struct WatchWorkoutRootTests {
         case .ready: "ready"
         case .rest: "rest"
         case .list: "list"
+        case .end: "end"
         case .summary: "summary"
         }
     }

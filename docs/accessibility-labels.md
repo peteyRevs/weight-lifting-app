@@ -69,5 +69,6 @@ These draw their words, so VoiceOver reads what is drawn:
 - the cover header's "Minimize" and "Finish";
 - the rest panel's "+30s" and "Skip rest";
 - the watch's "Done set", its exercise name (with its "›") and its rest screen's "+30s" and "Skip";
-- the watch's session-list rows (with their "✓") and "End workout", and its summary's "Done";
+- the watch's session-list rows (with their "✓") and "End workout", its end overlay's "Save workout", "Discard"
+  and "Keep lifting", and its summary's "Done";
 - the picker's rows, which draw "+" or a check beside the exercise's name.
