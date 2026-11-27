@@ -22,14 +22,20 @@ struct WatchStoreScene {
     let health: FakeHealthStore?
     /// What the Health session runs over: `health`, or a stand-in in front of it (`GatedHealthStore`).
     let healthStore: (any HealthStore)?
+    /// The app's display name the store is handed.
+    let appName: String
 
+    /// `seed` defaults to the previews' (`InMemoryStores.Seed.preview()`): the catalog, the seed program, its history.
     init(
         live: WorkoutState? = nil,
         session: (any WorkoutSessionClient)? = nil,
         health: FakeHealthStore? = nil,
-        healthStore: (any HealthStore)? = nil
+        healthStore: (any HealthStore)? = nil,
+        seed: InMemoryStores.Seed? = nil,
+        appName: String = "Ledger"
     ) throws {
-        stores = try InMemoryStores(seed: .preview())
+        stores = try InMemoryStores(seed: seed ?? .preview())
+        self.appName = appName
         fake = session == nil ? FakeWorkoutSessionClient(live: live) : nil
         self.session = session ?? fake ?? FakeWorkoutSessionClient()
         self.health = health
@@ -69,7 +75,7 @@ struct WatchStoreScene {
                 $0.date = DateGenerator { [clock] in Fixtures.now.addingTimeInterval(clock.elapsed / .seconds(1)) }
             }
         } operation: {
-            WatchWorkoutStore(appName: "Ledger", health: healthSession)
+            WatchWorkoutStore(appName: appName, health: healthSession)
         }
         let task = Task { [healthSession, healthStore] in
             await withTaskGroup(of: Void.self) { group in

@@ -8,9 +8,8 @@ import Testing
 /// with the keys the watch build extracted.
 @Suite("WatchAppCopy")
 struct WatchAppCopyTests {
-    @Test("The placeholder's title and product decision #29's screen read as the iPhone's do, and name no product")
+    @Test("Product decision #29's screen reads as the iPhone's does, and names no product")
     func texts_readAsTheIPhonesDo() {
-        #expect(WatchAppCopy.today == "Today")
         #expect(WatchAppCopy.databaseUnavailableTitle == "Can't open your data right now")
         #expect(
             WatchAppCopy.databaseUnavailableBody
@@ -22,7 +21,7 @@ struct WatchAppCopyTests {
     func builtBundle_resolvesEveryKey() throws {
         let catalog = try StringCatalog(module: "LedgerWatchAppKit")
         let bundle = try #require(StringCatalog.resourceBundle(ofModule: "LedgerWatchAppKit"))
-        #expect(catalog.keys.count == 3)
+        #expect(catalog.keys.count == 2)
         #expect(catalog.unresolvedKeys(in: bundle) == [])
     }
 }

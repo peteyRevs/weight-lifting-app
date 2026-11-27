@@ -5,11 +5,6 @@ import Foundation
 /// user-facing literal or a localized lookup; the views are handed these `String`s. A translator's comment is
 /// written here, and the catalog's copy of it matches.
 nonisolated enum WatchAppCopy {
-    /// The title of the watch's Today screen; the placeholder shows it alone until F18 replaces the screen.
-    static var today: String {
-        String(localized: "Today", bundle: .module, comment: "Title of the watch's Today screen")
-    }
-
     /// The title of product decision #29's screen: the database could not be opened.
     static var databaseUnavailableTitle: String {
         String(
