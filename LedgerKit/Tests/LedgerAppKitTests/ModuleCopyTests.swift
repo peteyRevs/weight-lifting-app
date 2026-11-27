@@ -90,7 +90,11 @@ nonisolated struct ModuleCopyTests {
         ),
         "LedgerWatchAppKit": CopyAudit.Exemptions(
             // The UI-test launch argument (twice) and the temporary database's path: read by the launch, never drawn.
-            literals: ["WatchComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"]],
+            // The two Info.plist keys the app's name is read from (F18 S5a), for "Open %@ on iPhone".
+            literals: [
+                "WatchComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"],
+                "WatchRoot.swift": ["CFBundleDisplayName", "CFBundleName"]
+            ],
             // The Debug menu's Diagnostics sections.
             debugOnly: ["WatchComposition+Diagnostics.swift"]
         )

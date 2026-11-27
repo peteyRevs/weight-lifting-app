@@ -1,9 +1,12 @@
+import Foundation
 import LedgerDesign
 import SwiftUI
+import WatchFeatureWorkout
 
-/// The watch's root (F07): it renders the composition's state, Today once the database is open (a placeholder until
-/// F18) or product decision #29's screen, and runs the launch's asynchronous part, then its retries on each return
-/// to the foreground. Its first appearance ends launch-to-first-frame (#30).
+/// The watch's root (F07): it renders the composition's state, the workout once the database is open (F18's
+/// `WatchWorkoutRoot`, which opens on the screen before a workout) or product decision #29's screen, and runs the
+/// launch's asynchronous part, then its retries on each return to the foreground. Its first appearance ends
+/// launch-to-first-frame (#30). In Debug builds a long press on the screen's title opens the debug menu.
 public struct WatchRoot: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var isDebugMenuShown = false
@@ -24,7 +27,7 @@ public struct WatchRoot: View {
     @ViewBuilder private var content: some View {
         switch composition.state {
         case .ready:
-            TodayPlaceholder { isDebugMenuShown = true }
+            WatchWorkoutRoot(appName: Bundle.main.appName, health: composition.health) { isDebugMenuShown = true }
             #if DEBUG
                 .sheet(isPresented: $isDebugMenuShown) {
                     DebugMenu { await composition.diagnostics() }
@@ -45,5 +48,15 @@ struct DatabaseUnavailableView: View {
             EmptyState(WatchAppCopy.databaseUnavailableTitle, body: WatchAppCopy.databaseUnavailableBody)
         }
         .background(LedgerColor.watchGround)
+    }
+}
+
+extension Bundle {
+    /// The app's name as the watch's words write it ("Open %@ on iPhone"): `CFBundleDisplayName`, else
+    /// `CFBundleName`, a blank one counting as absent, as the iPhone's About line reads it; no source names the
+    /// product (product decisions › Naming).
+    var appName: String {
+        let names = ["CFBundleDisplayName", "CFBundleName"].compactMap { object(forInfoDictionaryKey: $0) as? String }
+        return names.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? ""
     }
 }

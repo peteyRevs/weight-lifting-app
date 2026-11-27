@@ -1,5 +1,7 @@
 #if DEBUG
+    import Foundation
     import SwiftUI
+    import WatchFeatureWorkout
 
     /// Every preview in LedgerWatchAppKit, one case each (F07 criterion 8): each `#Preview` below shows its case's
     /// content, its tests (`PreviewTests`) render every case and fail on a `#Preview` that is not
@@ -10,7 +12,7 @@
 
         @ViewBuilder var content: some View {
             switch self {
-            case .today: TodayPlaceholder()
+            case .today: WatchWorkoutRoot(appName: Bundle.main.appName, health: nil)
             case .databaseUnavailable: DatabaseUnavailableView()
             }
         }

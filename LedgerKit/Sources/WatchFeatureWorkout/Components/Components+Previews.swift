@@ -79,12 +79,20 @@
         case crownWeight = "CrownWeight"
         case setDots = "SetDots"
         case heartRateLine = "HeartRateLine"
+        case idlePlan = "Idle — plan"
+        case idleRestDay = "Idle — rest day"
+        case idleNoProgram = "Idle — no program"
+        case idleLogged = "Idle — logged"
 
         @ViewBuilder var content: some View {
             switch self {
             case .crownWeight: CrownWeightGallery().ledgerWatchPage()
             case .setDots: SetDotsGallery().ledgerWatchPage()
             case .heartRateLine: HeartRateLineGallery().ledgerWatchPage()
+            case .idlePlan: IdleSample.plan.screen
+            case .idleRestDay: IdleSample.restDay.screen
+            case .idleNoProgram: IdleSample.noProgram.screen
+            case .idleLogged: IdleSample.logged.screen
             }
         }
     }

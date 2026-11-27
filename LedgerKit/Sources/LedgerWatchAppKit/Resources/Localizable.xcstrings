@@ -12,17 +12,6 @@
         }
       }
     },
-    "Today" : {
-      "comment" : "Title of the watch's Today screen",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Today"
-          }
-        }
-      }
-    },
     "Your workouts are still on this watch. The app tries again when you come back to it." : {
       "comment" : "Under the title shown when the database cannot be opened, on the watch",
       "localizations" : {
