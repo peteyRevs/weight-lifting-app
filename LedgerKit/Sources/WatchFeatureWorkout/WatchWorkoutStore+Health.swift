@@ -18,9 +18,14 @@ extension WatchWorkoutStore {
     }
 
     /// Whether another app's workout took the live workout's session over: "Apple Workout took over · logging
-    /// continues" (spec §9), which F18 S6 draws.
+    /// continues" (spec §9), the root's banner.
     var isHealthTakenOver: Bool {
         live.map { $0.id == healthState.takenOver } ?? false
+    }
+
+    /// The banner over the live workout's screens: the takeover's line while it holds, else none.
+    var banner: String? {
+        isHealthTakenOver ? WatchWorkoutCopy.healthTakenOver : nil
     }
 
     /// The Health session's state, for as long as the root's task runs.

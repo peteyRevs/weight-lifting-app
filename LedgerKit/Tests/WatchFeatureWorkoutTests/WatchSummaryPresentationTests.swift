@@ -52,4 +52,29 @@ struct WatchSummaryPresentationTests {
         let summary = WatchPresentation.summary(workout, records: records, health: nil, locale: Self.locale)
         #expect(summary.records == "2" && summary.hasRecords)
     }
+
+    @Test("VoiceOver reads each tile as one phrase, in pounds and in kilograms, with and without Health and records")
+    func summary_spokenPhrases() throws {
+        var workout = try WatchSample.loggedLowerA(.pounds(185), reps: 5, sets: 12)
+        workout.endedAt = workout.startedAt.addingTimeInterval(45 * 60 + 30)
+        let id = try #require(UUID(uuidString: "00000000-0000-0000-0000-00000000F18C"))
+        let health = HealthWorkoutRecord(
+            healthKitUUID: id, start: workout.startedAt, end: Fixtures.now,
+            avgHeartRate: 138, maxHeartRate: nil, activeEnergyKcal: nil
+        )
+        let record = PersonalRecord(
+            exerciseID: workout.exercises[0].exerciseID, kind: .weightAtReps(.pounds(185), Reps(clamping: 5)),
+            previous: nil, achievedAt: workout.startedAt, workoutID: workout.id
+        )
+        let spoken = WatchPresentation.summary(workout, records: [record], health: health, locale: Self.locale).spoken
+        #expect(spoken.elapsed == "45 minutes, 30 seconds elapsed" && spoken.sets == "12 of 15 sets logged")
+        #expect(spoken.volume == "11,100 pounds moved")
+        #expect(spoken.averageHeartRate == "Average heart rate, 138 beats per minute")
+        #expect(spoken.records == "1 new personal record")
+        let bare = WatchPresentation.summary(workout, records: [], health: nil, locale: Self.locale).spoken
+        #expect(bare.averageHeartRate == "No average heart rate" && bare.records == "0 new personal records")
+        workout.units = .kg
+        let kg = WatchPresentation.summary(workout, records: [], health: nil, locale: Self.locale)
+        #expect(kg.volumeCaption == "KG MOVED" && kg.spoken.volume.hasSuffix(" kilograms moved"))
+    }
 }

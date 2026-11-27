@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import WatchFeatureWorkout
 
-/// F18 S5a: the root shows the screen of the store's mode (criterion 1's idle, the summary's stub), "Start" on
+/// F18 S5a: the root shows the screen of the store's mode (criterion 1's idle, criterion 11's summary), "Start" on
 /// the screen before a workout sends the store's start, and the no-program line names the app it was handed
 /// (criterion 16). A watch test cannot host a view or tap it, so the root's screen is read from the store
 /// (`WatchWorkoutRoot.screen(of:)`) and drawn, and a tap is the action the screen hands its pill.
@@ -22,6 +22,7 @@ struct WatchWorkoutRootTests {
         case .idle: "idle"
         case .ready: "ready"
         case .rest: "rest"
+        case .list: "list"
         case .summary: "summary"
         }
     }
@@ -52,7 +53,7 @@ struct WatchWorkoutRootTests {
         await observed("summary") { Self.shown(store) == "summary" }
         #expect(Self.draws(store))
         let summary = try #require(store.summary)
-        WatchStubScreen(lines: [summary.title], pill: (summary.done, .dismissSummary), send: store.send).tap()
+        WatchSummaryScreen(model: summary, send: store.send).done()
         #expect(Self.shown(store) == "idle" && WatchWorkoutRootTests.plan(store)?.start == nil, "the day is logged")
         task.cancel()
     }
