@@ -44,7 +44,8 @@ final class Harness {
         healthStore: (any HealthStore)? = nil,
         watchConnectivity: (any LiveWorkoutTransport)? = nil,
         syncClock: any Clock<Duration> = ContinuousClock(),
-        startOwnWorkout: @escaping @Sendable () async -> Void = {}
+        startOwnWorkout: @escaping @Sendable () async -> Void = {},
+        uiTest: WatchUITest.Launch = WatchUITest.Launch()
     ) -> WatchComposition {
         WatchComposition(
             WatchComposition.Environment(
@@ -59,7 +60,8 @@ final class Harness {
                 healthStore: healthStore,
                 watchConnectivity: watchConnectivity,
                 syncClock: syncClock,
-                startOwnWorkout: startOwnWorkout
+                startOwnWorkout: startOwnWorkout,
+                uiTest: uiTest
             )
         )
     }

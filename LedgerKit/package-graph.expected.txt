@@ -31,7 +31,7 @@ library LedgerSnapshotTesting: LedgerTestSupport, SnapshotTesting
 library LedgerSync: LedgerDomain
 test LedgerSyncTests: LedgerFakes, LedgerSnapshotTesting, LedgerSync, LedgerTestSupport
 library LedgerTestSupport: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes, LedgerHealth, LedgerPersistence, LedgerSync
-library LedgerWatchAppKit: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerHealth, LedgerPersistence, LedgerSync, WatchFeatureWorkout
+library LedgerWatchAppKit: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes, LedgerHealth, LedgerPersistence, LedgerSync, WatchFeatureWorkout
 test LedgerWatchAppKitTests: LedgerSnapshotTesting, LedgerTestSupport, LedgerWatchAppKit
 library WatchFeatureWorkout: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
 test WatchFeatureWorkoutTests: LedgerSnapshotTesting, LedgerTestSupport, WatchFeatureWorkout

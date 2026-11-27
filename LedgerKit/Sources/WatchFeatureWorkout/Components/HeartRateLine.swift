@@ -29,5 +29,6 @@ struct HeartRateLine: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: model.label))
         .accessibilityValue(Text(verbatim: model.spokenValue))
+        .accessibilityAddTraits(.isStaticText)
     }
 }

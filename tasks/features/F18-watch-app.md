@@ -84,10 +84,18 @@ No new persisted types. Presentation derivations (pure, unit-tested, in `WatchPr
 
 ## Definition of Done
 Inherits `docs/engineering-standards.md` §12, plus:
-- [ ] Every screen file ≤ 150 lines with `#Preview` per state (idle plan / rest day / no program; ready lb / kg / superset; rest / go; list; end; summary with and without PRs).
-- [ ] Snapshot set at three case sizes committed; reviewer design-fidelity check against the prototype (risk R6).
-- [ ] `WKApplicationDelegate` used (no `WKExtension`), R1 D9.
-- [ ] Strings in `Localizable.xcstrings`; eyebrows ≤ 6 per screen (decision #17).
+- [x] Every screen file ≤ 150 lines with `#Preview` per state (idle plan / rest day / no program; ready lb / kg / superset; rest / go; list; end; summary with and without PRs).
+- [ ] Snapshot set at three case sizes committed; reviewer design-fidelity check against the prototype (risk R6). 42 and 46 mm are committed (the matrix trimmed by the orchestrator's ruling 1); 49 mm is a follow-up, and F20 row F18-l checks the three sizes by hand until then.
+- [x] `WKApplicationDelegate` used (no `WKExtension`), R1 D9.
+- [x] Strings in `Localizable.xcstrings`; eyebrows ≤ 6 per screen (decision #17).
+- [x] Always-On: `WKSupportsAlwaysOnDisplay` in `LedgerWatch-Info.plist` (`HealthInfoPlistTests`), and every screen reads `isLuminanceReduced` (S7).
+- [x] UI tests (S7, nightly): `WatchFlows` (start → reps → two sets with rests skipped → list → end → save → summary → idle; no program; an empty workout discarded) and `WatchAudit` (`performAccessibilityAudit()` on every screen at the default and the largest text size, nothing excused), over the Debug seams `-LEDGER_UITEST_PROGRAM seed`, `-LEDGER_UITEST_NOW` and the scripted `FakeHealthStore` (`WatchUITest`).
+- [ ] Device-only checks, in F20 "Inputs from F18": crown detents (F18-a), the buzz at zero with the wrist down (F18-b), Reduce Motion (F18-c), Always-On after 15 s (F18-d), criterion 13's launches by a workout configuration (F18-e) and by recovery (F18-f), Apple Workout's takeover (F18-g), Health denied (F18-h), the live heart rate (F18-i), the double start's winner (F18-j), VoiceOver (F18-k), the 41/42/49 mm layout (F18-l), and frontmost and battery (F18-m). Pete runs them on iPhone 17 + Apple Watch Series 9.
+
+**Follow-ups (not in F18):**
+- The 49 mm snapshots (above).
+- Dedicated type roles for the watch: some screens borrow a role of another's size (the summary's elapsed time is `.watchCountdown`); the typography scale gets a role per use.
+- A banner for a refused change: a tap the session refuses (`WorkoutSessionError`) is logged, and the watch shows nothing yet (S2a's gap).
 
 ---
 _Filled in by agents during delivery:_

@@ -4,9 +4,14 @@ import SwiftUI
 /// by the wall clock; a preview or a snapshot fixes it at a moment, so what it draws is the same on every run. The
 /// countdown and the elapsed time are `Text(timerInterval:)`, which tick with no view update (and with the wrist down);
 /// the ring is read again by a `TimelineView`, once a second, and once a minute with the wrist down (criterion 12).
+///
+/// A UI test that moves the app's clock (`-LEDGER_UITEST_NOW`) moves this one by the same `offset`, so the times drawn
+/// by the wall clock read as the moved clock's ("0:42", never "1776:00:42").
 nonisolated struct WatchTimeline: Equatable, Sendable {
     /// The moment time stands still at; nil in the app, where it runs.
     var pausedAt: Date?
+    /// The seconds the app's clock runs ahead of the wall clock: 0 but in a UI test that moved it.
+    var offset: TimeInterval = 0
 
     static let live = WatchTimeline(pausedAt: nil)
 
@@ -14,9 +19,9 @@ nonisolated struct WatchTimeline: Equatable, Sendable {
         WatchTimeline(pausedAt: moment)
     }
 
-    /// The moment a `TimelineView` draws at: its own, unless time stands still.
+    /// The moment a `TimelineView` draws at: its own on the app's clock, unless time stands still.
     func moment(_ date: Date) -> Date {
-        pausedAt ?? date
+        pausedAt ?? date.addingTimeInterval(offset)
     }
 
     /// Counts from `start` up ("24:22"), or down to `end` ("1:15"), by the wall clock. A moment that is not a finite
@@ -28,7 +33,8 @@ nonisolated struct WatchTimeline: Equatable, Sendable {
         guard isCountable, !(countsDown && pausedAt != nil) else {
             return Text(verbatim: fallback)
         }
-        return Text(timerInterval: start ... end, pauseTime: pausedAt, countsDown: countsDown)
+        let wallClock = start.addingTimeInterval(-offset) ... end.addingTimeInterval(-offset)
+        return Text(timerInterval: wallClock, pauseTime: pausedAt, countsDown: countsDown)
     }
 }
 

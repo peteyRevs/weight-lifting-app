@@ -8,6 +8,8 @@
 	<string>com.petearevalo.Ledger</string>
 	<key>WKRunsIndependentlyOfCompanionApp</key>
 	<true/>
+	<key>WKSupportsAlwaysOnDisplay</key>
+	<true/>
 	<key>WKBackgroundModes</key>
 	<array>
 		<string>workout-processing</string>

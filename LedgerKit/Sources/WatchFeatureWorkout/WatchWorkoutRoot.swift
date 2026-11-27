@@ -10,13 +10,20 @@ import SwiftUI
 /// them. While another app's workout holds Health's session, its banner stands above the screen (spec §9).
 public struct WatchWorkoutRoot: View {
     @State private var store: WatchWorkoutStore
+    private var clockOffset: TimeInterval = 0
     private let onTitleLongPress: () -> Void
 
     /// - Parameters:
     ///   - appName: the app's display name (`CFBundleDisplayName`), never a literal (product decisions › Naming).
     ///   - health: the watch's Health session, which the composition runs; nil shows none.
-    public init(appName: String, health: WatchHealthSession?, onTitleLongPress: @escaping () -> Void = {}) {
+    ///   - clockOffset: the seconds a UI test moved the app's clock by (`-LEDGER_UITEST_NOW`), which the
+    ///     screens' timers follow; 0 in the app.
+    public init(
+        appName: String, health: WatchHealthSession?, clockOffset: TimeInterval = 0,
+        onTitleLongPress: @escaping () -> Void = {}
+    ) {
         self.init(store: WatchWorkoutStore(appName: appName, health: health), onTitleLongPress: onTitleLongPress)
+        self.clockOffset = clockOffset
     }
 
     /// For the tests, which keep the store to drive it. `@State` keeps the first store it is given: a store does no
@@ -31,6 +38,7 @@ public struct WatchWorkoutRoot: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .watchBanner(store.banner)
             .background(LedgerColor.watchGround)
+            .transformEnvironment(\.watchTimeline) { [clockOffset] in $0.offset = clockOffset }
             .task { await store.run() }
     }
 

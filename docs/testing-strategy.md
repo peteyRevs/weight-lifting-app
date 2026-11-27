@@ -389,6 +389,15 @@ only with `waitForExistence` or a predicate, never a sleep.
 - `LaunchPerformance.test_launchToFirstFrame` (`XCTApplicationLaunchMetric`, nightly; reports, never gates:
   decision #30).
 
+**The suites, watch** (`LedgerWatchUITests`, the same rules; shared steps in `WatchSteps`)
+- `Smoke` (PR lane): the app launches on a fresh database to "No program on watch". `DebugMenu` (nightly).
+- `WatchFlows` (nightly, F18): a whole workout from "Start" to the summary and back, a watch with no program, and an
+  empty workout discarded. `WatchAudit` (nightly): `performAccessibilityAudit()` on every watch screen at the default
+  and the largest text size, with nothing excused.
+- Their Debug seams (`WatchUITest`, beside `-LEDGER_UITEST`): `-LEDGER_UITEST_PROGRAM seed` and `-LEDGER_UITEST_NOW`
+  (UTC only, "2026-09-14T12:00:00Z"), as on the iPhone, and a `FakeHealthStore`, authorized, whose heart rate a script
+  reads (128 BPM every 2 s), so no Health sheet shows. The moved clock moves the screens' timers too.
+
 **The audits.** `performAccessibilityAudit(for: .all)` runs on every iPhone screen of product-spec §2.2:
 - the tab roots (`TabsAdversarial`), onboarding (`OnboardingAdversarial+Audit`), Today (`TodayAuditAdversarial`)
   and the Library root (`LibraryAuditAdversarial`), each with its own exclusions;

@@ -25,8 +25,10 @@ struct WatchListOverlay: View {
             header
             ForEach(model.rows, id: \.exerciseIndex) { row in
                 WatchListRow(row: row, accent: accent) { select(row.exerciseIndex) }
+                    .accessibilityIdentifier("workout.list.row.\(row.exerciseIndex)")
             }
             WatchPill(model.endWorkout, style: .outlined, action: openEnd)
+                .accessibilityIdentifier("workout.list.end")
                 .padding(.top, LedgerSpacing.xs)
         }
         .padding(.horizontal, LedgerSpacing.s)
@@ -49,6 +51,7 @@ struct WatchListOverlay: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(verbatim: WatchWorkoutCopy.closeList))
+            .accessibilityIdentifier("workout.list.close")
             Text(verbatim: model.header)
                 .ledgerFont(.watchLabel)
                 .foregroundStyle(LedgerColor.watchInkSecondary)

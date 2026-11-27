@@ -79,22 +79,28 @@ private struct WatchReadyPage: View {
                 SetDots(dots: model.dots, accessibilitySummary: model.dotsSummary)
                     .padding(.bottom, LedgerSpacing.xs)
             }
-            WatchRepsLine(model: model)
+            WatchRepsLine(model: model).accessibilityIdentifier("workout.ready.reps")
             HStack(spacing: LedgerSpacing.xs) {
-                HeartRateLine(model: model.heartRate)
+                HeartRateLine(model: model.heartRate).accessibilityIdentifier("workout.ready.heartRate")
                 Spacer(minLength: 0)
                 WatchStepButton(icon: .minus, label: WatchWorkoutCopy.decreaseReps, action: screen.decreaseReps)
                     .disabled(!screen.canDecreaseReps)
+                    .accessibilityIdentifier("workout.ready.reps.decrease")
                 WatchStepButton(icon: .plus, label: WatchWorkoutCopy.increaseReps, action: screen.increaseReps)
+                    .accessibilityIdentifier("workout.ready.reps.increase")
             }
             model.healthLine.map(line)
             Spacer(minLength: LedgerSpacing.xs)
-            WatchPill(WatchWorkoutCopy.doneSet, action: screen.logSet)
+            WatchPill(WatchWorkoutCopy.doneSet, action: screen.logSet).accessibilityIdentifier("workout.ready.doneSet")
         }
         .padding(.horizontal, LedgerSpacing.m)
         .padding(.vertical, LedgerSpacing.s)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+
+    /// How far the name's tap area reaches above and below its line, which the layout does not see: the line alone is
+    /// smaller than the 44 px (29 pt) the watch's other targets take (the audit's "Hit area is too small").
+    private static let nameReach: CGFloat = LedgerSpacing.xs * 2
 
     /// The exercise's name and "›": a tap opens the session list.
     private var name: some View {
@@ -107,8 +113,12 @@ private struct WatchReadyPage: View {
                 LedgerIconView(.chevron, sizedAs: .watchTitle)
                     .foregroundStyle(LedgerColor.watchInkMuted)
             }
+            .padding(.vertical, Self.nameReach)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.vertical, -Self.nameReach)
+        .accessibilityIdentifier("workout.ready.exercise")
     }
 
     /// The weight the crown turns, or, with no set left to change, the shown set's weight, still.

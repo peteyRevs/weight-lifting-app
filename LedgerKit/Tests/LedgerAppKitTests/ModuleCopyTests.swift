@@ -93,6 +93,12 @@ nonisolated struct ModuleCopyTests {
             // The two Info.plist keys the app's name is read from (F18 S5a), for "Open %@ on iPhone".
             literals: [
                 "WatchComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"],
+                // A UI test's watch (F18 S7): the launch arguments, the one program value, and what stops a launch
+                // whose values cannot be read. Read by the launch or by the test's author, never drawn.
+                "WatchUITest.swift": [
+                    "-LEDGER_UITEST", "-LEDGER_UITEST_PROGRAM", "-LEDGER_UITEST_NOW", "seed",
+                    " takes 2026-09-14T12:00:00Z,  takes : "
+                ],
                 "WatchRoot.swift": ["CFBundleDisplayName", "CFBundleName"]
             ],
             // The Debug menu's Diagnostics sections.

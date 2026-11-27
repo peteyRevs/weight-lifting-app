@@ -152,4 +152,17 @@ struct WatchLiveScreenTests {
         let never = Date(timeIntervalSinceReferenceDate: .nan)
         #expect(WatchTimeline.live.timer(from: never, countsDown: false, fallback: "0:00") == Text(verbatim: "0:00"))
     }
+
+    @Test("A UI test's moved clock moves the screens' time: the timeline's moment, and the timers' wall-clock span")
+    func timeline_followsAMovedClock() {
+        let moved = WatchTimeline(pausedAt: nil, offset: 600)
+        #expect(moved.moment(Fixtures.now) == Fixtures.now.addingTimeInterval(600))
+        let start = Fixtures.now, end = Fixtures.now.addingTimeInterval(90)
+        let expected = Text(
+            timerInterval: start.addingTimeInterval(-600) ... end.addingTimeInterval(-600),
+            countsDown: true
+        )
+        #expect(moved.timer(from: start, to: end, countsDown: true, fallback: "1:30") == expected)
+        #expect(WatchTimeline.live.offset == 0)
+    }
 }

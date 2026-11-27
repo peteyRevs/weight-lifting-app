@@ -71,6 +71,7 @@ private struct WatchRestPage: View {
                 .ledgerFont(.watchLabel)
                 .foregroundStyle(WatchTokens.accent(isLuminanceReduced: isLuminanceReduced))
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("workout.rest.title")
             model.connection.map { line in
                 Text(verbatim: line)
                     .ledgerFont(.watchTitle)
@@ -90,7 +91,8 @@ private struct WatchRestPage: View {
             HStack(spacing: LedgerSpacing.s) {
                 WatchPill(WatchWorkoutCopy.extendRest, style: .outlined, action: screen.extend)
                     .accessibilityLabel(Text(verbatim: WatchWorkoutCopy.extendRestLabel))
-                WatchPill(WatchWorkoutCopy.skipRest, action: screen.skip)
+                    .accessibilityIdentifier("workout.rest.extend")
+                WatchPill(WatchWorkoutCopy.skipRest, action: screen.skip).accessibilityIdentifier("workout.rest.skip")
             }
         }
         .padding(.horizontal, LedgerSpacing.m)
@@ -115,6 +117,7 @@ private struct WatchRestPage: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: model.heartRateLine.label))
             .accessibilityValue(Text(verbatim: model.heartRateLine.spokenValue))
+            .accessibilityAddTraits(.isStaticText)
             Text(verbatim: model.next)
                 .ledgerFont(.watchTitle)
                 .foregroundStyle(LedgerColor.watchInkSecondary)

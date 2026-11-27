@@ -91,9 +91,9 @@ struct WatchIdlePage: View {
             Spacer(minLength: LedgerSpacing.m)
             if let pill = content.pill {
                 if pill.isStart, let start {
-                    WatchPill(pill.title, action: start)
+                    WatchPill(pill.title, action: start).accessibilityIdentifier("today.start")
                 } else {
-                    WatchPill(pill.title, style: .outlined)
+                    WatchPill(pill.title, style: .outlined).accessibilityIdentifier("today.line")
                 }
             }
         }

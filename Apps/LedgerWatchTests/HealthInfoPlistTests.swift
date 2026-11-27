@@ -23,4 +23,11 @@ struct HealthInfoPlistTests {
         let modes = Self.info["WKBackgroundModes"] as? [String] ?? []
         #expect(Set(modes) == ["workout-processing", "audio"])
     }
+
+    /// F18 (R1 §5.5): the app stays on screen with the wrist down, dimmed (`isLuminanceReduced`), rather than give way
+    /// to the clock face.
+    @Test("Always-On is supported")
+    func alwaysOnDisplay_isSupported() {
+        #expect(Self.info["WKSupportsAlwaysOnDisplay"] as? Bool == true)
+    }
 }

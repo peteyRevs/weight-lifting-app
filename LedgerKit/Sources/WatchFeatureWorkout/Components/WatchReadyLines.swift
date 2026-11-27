@@ -14,6 +14,7 @@ struct WatchReadyHeader: View {
                 .ledgerFont(.watchLabel)
                 .foregroundStyle(WatchTokens.accent(isLuminanceReduced: isLuminanceReduced))
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("workout.ready.setLabel")
             Spacer(minLength: 0)
             timeline.timer(from: model.startedAt, countsDown: false, fallback: model.elapsed)
                 .ledgerFont(.watchCaption)
