@@ -80,6 +80,9 @@ public actor WatchHealthSession {
         let authorization = await health.authorization()
         change { $0.authorization = authorization }
         await withTaskGroup(of: Void.self) { group in
+            // One update at a time, each awaited to its end: a start, an end or a discard is never under way while
+            // the next update is taken, so an end heard during a start is followed after the start has handed the
+            // session to its workout (the reentrancy the actor would otherwise allow).
             group.addTask {
                 for await update in updates {
                     await self.follow(update.state)

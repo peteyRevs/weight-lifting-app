@@ -205,3 +205,33 @@ extension WatchHealthSessionTests {
         #expect(try await scene.session.current() == nil)
     }
 }
+
+/// An end heard while the session is still starting (review finding, F18 S3): the start completes first, then the end
+/// is followed, so the session never outlives its workout.
+extension WatchHealthSessionTests {
+    @Test(
+        "A workout that ends while its session is starting has its session ended (saved) or discarded",
+        arguments: [WorkoutPhase.finished, .discarded]
+    )
+    func endDuringStart_isFollowed(phase: WorkoutPhase) async throws {
+        var workout = try Scene.lowerA([(0, 0)])
+        let session = ScriptedSession()
+        await session.publish(workout)
+        let health = FakeHealthStore(authorization: .authorized)
+        let gated = GatedHealthStore(health)
+        let scene = try Scene(session: session, healthStore: gated)
+        let (store, task) = await scene.running()
+        var calls = gated.calls.makeAsyncIterator()
+        #expect(await calls.next() == .startEntered)
+        workout.phase = phase
+        workout.endedAt = Fixtures.now.addingTimeInterval(1800)
+        await session.publish(workout)
+        await gated.open()
+        #expect(await calls.next() == (phase == .finished ? .ended : .discarded))
+        #expect(await health.activeSession == nil)
+        #expect(await health.saved.count == (phase == .finished ? 1 : 0))
+        #expect(await health.discarded == (phase == .discarded))
+        await observed("no session") { store.healthState.running == nil }
+        task.cancel()
+    }
+}

@@ -20,16 +20,20 @@ struct WatchStoreScene {
     let fake: FakeWorkoutSessionClient?
     /// HealthKit, when the scene runs the watch's Health session over it (F18 S3); its `events` are the session's.
     let health: FakeHealthStore?
+    /// What the Health session runs over: `health`, or a stand-in in front of it (`GatedHealthStore`).
+    let healthStore: (any HealthStore)?
 
     init(
         live: WorkoutState? = nil,
         session: (any WorkoutSessionClient)? = nil,
-        health: FakeHealthStore? = nil
+        health: FakeHealthStore? = nil,
+        healthStore: (any HealthStore)? = nil
     ) throws {
         stores = try InMemoryStores(seed: .preview())
         fake = session == nil ? FakeWorkoutSessionClient(live: live) : nil
         self.session = session ?? fake ?? FakeWorkoutSessionClient()
         self.health = health
+        self.healthStore = healthStore ?? health
         haptics = ClockedHaptics(clock: clock)
     }
 
@@ -47,7 +51,7 @@ struct WatchStoreScene {
     /// `timed` one sleeps on `clock`, and its date is `Fixtures.now` plus the clock's time; otherwise the date stands
     /// still and the clock's waits end at once (`withTestDependencies`).
     func running(timed: Bool = false) async -> (WatchWorkoutStore, Task<Void, Never>) {
-        let healthSession = health.map {
+        let healthSession = healthStore.map {
             WatchHealthSession(health: $0, workouts: session, programs: stores.programs, logger: .disabled)
         }
         let store = withTestDependencies {
@@ -67,11 +71,11 @@ struct WatchStoreScene {
         } operation: {
             WatchWorkoutStore(appName: "Ledger", health: healthSession)
         }
-        let task = Task { [healthSession, health] in
+        let task = Task { [healthSession, healthStore] in
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await store.run() }
-                if let healthSession, let health {
-                    group.addTask { await healthSession.run(events: health.events) }
+                if let healthSession, let healthStore {
+                    group.addTask { await healthSession.run(events: healthStore.events) }
                 }
             }
         }
