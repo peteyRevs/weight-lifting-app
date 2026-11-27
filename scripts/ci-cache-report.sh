@@ -3,7 +3,8 @@
 # cache"). Reads the build result bundle check.sh wrote and prints:
 #   - Xcode's "N hits / M cacheable tasks (P%)" note (the CompilationCacheMetrics section);
 #   - ValidateCAS's outcome and time: "validated successfully", "validation skipped" or "recovered from
-#     invalid data" (llvm-cas --validate-if-needed; the last means the restored cache was dropped);
+#     invalid data" (llvm-cas --validate-if-needed; the last means the restored cache was dropped), and a
+#     warning when that recovery came at 115 s or more: llvm-cas's 120 s cap, not corruption (#161);
 #   - with a second argument, the cache directory's size, the size of the entry a save would take.
 # On GitHub Actions each line is a ::notice annotation, so the run's summary shows it.
 #
@@ -40,11 +41,17 @@ report() {
         ($ran | map(select(.commandInvocationDetails.commandDetails | startswith("ValidateCAS ")))
             | if length == 0 then "ValidateCAS did not run (no cache restored, or this boot already validated it)"
               else map("ValidateCAS: \(output | if . == "" then "no output" else . end), \(.duration // 0 | floor) s")
-                  | join("; ") end)' <<<"$log" 2>&1)"; then
+                  | join("; ") end),
+        ($ran | map(select((.commandInvocationDetails.commandDetails | startswith("ValidateCAS "))
+                and (output | test("recovered")) and (.duration // 0) >= 115))
+            | .[] | "warning: ValidateCAS recovered after \(.duration | floor) s, at or past the 120 s llvm-cas gives its"
+                + " out-of-process check: a timeout, not a corrupt cache, yet the cache was dropped (#161)")' <<<"$log" 2>&1)"; then
         say warning "the build log in $bundle is not the JSON expected: ${lines%%$'\n'*}"
         return
     fi
-    while IFS= read -r line; do say notice "$line"; done <<<"$lines"
+    while IFS= read -r line; do
+        if [[ "$line" == "warning: "* ]]; then say warning "${line#warning: }"; else say notice "$line"; fi
+    done <<<"$lines"
     if [[ -n "$cas" ]]; then
         if [[ -d "$cas" ]] && size="$(du -sh "$cas" 2>/dev/null)"; then
             say notice "${size%%[[:space:]]*} in $cas"

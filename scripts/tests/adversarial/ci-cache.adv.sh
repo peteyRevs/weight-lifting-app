@@ -2,8 +2,9 @@
 # #153's two CI scripts around the compilation cache, against build logs and process tables that lie:
 #   scripts/ci-cache-report.sh  reports the hit rate and ValidateCAS's outcome, and never fails the job;
 #   scripts/ci-cas-idle.sh      waits, bounded, for the cache's writers by exact name, and says idle=true
-#                               only when none is left (the save step reads it), never killing anything.
-# xcrun (xcresulttool get log) and pgrep are faked, so this runs anywhere.
+#                               only when none is left (the save step reads it), never killing anything;
+# and #161's scripts/ci-cas-validate.sh, which validates a restored cache in-process before the build, and
+# never fails the job. xcrun (xcresulttool get log, --find), llvm-cas and pgrep are faked, so this runs anywhere.
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
 
@@ -14,9 +15,14 @@ mkdir -p "$T/bin"
 
 # Fake xcrun: `xcresulttool get log --type build --compact --path <bundle>` prints <bundle>/log.json; a bundle
 # without one fails as xcresulttool does for a test bundle ("No build log available").
+# `xcrun --find llvm-cas` prints $FAKE_LLVM_CAS, or fails as xcrun does when that is empty.
 cat >"$T/bin/xcrun" <<'SH'
 #!/bin/sh
 printf '%s\n' "$*" >>"${XCRUN_LOG:-/dev/null}"
+if [ "$1" = --find ]; then
+    [ -n "${FAKE_LLVM_CAS:-}" ] || { echo "xcrun: error: unable to find utility \"$2\", not a developer tool or in PATH" >&2; exit 72; }
+    echo "$FAKE_LLVM_CAS"; exit 0
+fi
 while [ $# -gt 0 ]; do [ "$1" = --path ] && { bundle="$2"; break; }; shift; done
 [ -f "$bundle/log.json" ] || { echo "Error: No build log available" >&2; exit 1; }
 cat "$bundle/log.json"
@@ -65,7 +71,8 @@ report "$T/cold.xcresult"
 expect_exit "C01 #153's cold build: reported, and exit 0" 0 "$code" "$out"
 check "C01b ... the hit rate and ValidateCAS's outcome with its time, one line each" \
     is "$out" "compilation cache: 0 hits / 765 cacheable tasks (0%)
-compilation cache: ValidateCAS: recovered from invalid data, 150 s"
+compilation cache: ValidateCAS: recovered from invalid data, 150 s
+compilation cache: warning: ValidateCAS recovered after 150 s, at or past the 120 s llvm-cas gives its out-of-process check: a timeout, not a corrupt cache, yet the cache was dropped (#161)"
 check "C01c ... read as the build log, compact, from the bundle named" \
     is "$(tail -1 "$T/xcrun.log")" "xcresulttool get log --type build --compact --path $T/cold.xcresult"
 
@@ -112,7 +119,59 @@ check "C09 paths with spaces, and the cache directory's size as du gives it" \
     "compilation cache: 1 hits / 2 cacheable tasks (50%)|SIZE in $T/a cache"
 report "$T/cold.xcresult" "$T/no-cache"
 check "C09b ... and a missing cache directory is named, still exit 0" \
-    is "$code|$(sed -n 3p <<<"$out")" "0|compilation cache: no cache directory at $T/no-cache"
+    is "$code|$(tail -1 <<<"$out")" "0|compilation cache: no cache directory at $T/no-cache"
+
+# #161: a recovery at llvm-cas's 120 s cap is a timeout; one well under it is real invalid data.
+for case in "114.99 0" "115 1" "119.6 1"; do
+    bundle "t$case.xcresult" "$(section "$validate_cmd" $'recovered from invalid data\n' "${case% *}")"
+    GITHUB_ACTIONS=true report "$T/t$case.xcresult"
+    check "C10 a recovery after ${case% *} s: ${case#* } timeout warning(s), exit 0" \
+        is "$code|$(grep -c '^::warning title=Compilation cache::ValidateCAS recovered after .* (#161)$' <<<"$out")" "0|${case#* }"
+done
+bundle "skipped.xcresult" "$(section "$validate_cmd" $'validation skipped\n' 130)"
+report "$T/skipped.xcresult"
+check "C10b ... and a slow ValidateCAS that recovered nothing warns of nothing" is "$(grep -c warning <<<"$out")" 0
+
+# ---- ci-cas-validate.sh -------------------------------------------------------------------------------------
+# Fake llvm-cas: logs its arguments, prints $FAKE_CAS_OUT and exits $FAKE_CAS_STATUS (default 0).
+VALIDATE="$ROOT/scripts/ci-cas-validate.sh"
+cat >"$T/bin/llvm-cas" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >>"${CAS_LOG:-/dev/null}"
+[ -z "${FAKE_CAS_OUT:-}" ] || printf '%s\n' "$FAKE_CAS_OUT"
+exit "${FAKE_CAS_STATUS:-0}"
+SH
+chmod +x "$T/bin/llvm-cas"
+export CAS_LOG="$T/cas.log"
+mkdir -p "$T/restored/builtin"
+validate() { : >"$CAS_LOG"; out="$(FAKE_LLVM_CAS="${FAKE_LLVM_CAS-$T/bin/llvm-cas}" "$VALIDATE" "$@" 2>&1)"; code=$?; }
+
+FAKE_CAS_OUT="validated successfully" GITHUB_ACTIONS=true validate "$T/restored/builtin"
+check "V01 validated: a notice with the outcome and its time, exit 0" \
+    is "$code|$out" "0|::notice title=Compilation cache::pre-validation: validated successfully, 0 s"
+check "V01b ... running llvm-cas in-process, on the CAS named, with Xcode's own flags" \
+    is "$(cat "$CAS_LOG")" "--cas $T/restored/builtin --validate-if-needed --check-hash --allow-recovery --in-process"
+FAKE_CAS_OUT="validation skipped" validate "$T/restored/builtin"
+check "V02 skipped (already validated this boot): a notice, exit 0" \
+    is "$code|$out" "0|compilation cache: pre-validation: validation skipped, 0 s"
+FAKE_CAS_OUT="recovered from invalid data" GITHUB_ACTIONS=true validate "$T/restored/builtin"
+check "V03 recovered: a warning that the cache was dropped and the build is cold, exit 0" \
+    is "$code|$out" "0|::warning title=Compilation cache::pre-validation: recovered from invalid data, 0 s: the restored cache was invalid and is dropped, so this build is cold"
+validate "$T/never-restored/builtin"
+check "V04 no cache directory: says so, exit 0, and never runs llvm-cas (it would create one)" \
+    is "$code|$out|$(wc -l <"$CAS_LOG" | tr -d ' ')|$([[ -e "$T/never-restored" ]] && echo created)" \
+    "0|compilation cache: no compilation cache at $T/never-restored/builtin, nothing to validate|0|"
+FAKE_CAS_OUT="llvm-cas: validate-if-needed: bad data for digest 'AB': data record span passed the end of the data pool" \
+    FAKE_CAS_STATUS=1 GITHUB_ACTIONS=true validate "$T/restored/builtin"
+check "V05 llvm-cas failing: a warning quoting it, exit 0" \
+    is "$code|$out" "0|::warning title=Compilation cache::llvm-cas could not validate $T/restored/builtin (exit 1, 0 s): llvm-cas: validate-if-needed: bad data for digest 'AB': data record span passed the end of the data pool; Xcode validates it itself"
+FAKE_LLVM_CAS="" validate "$T/restored/builtin"
+check "V06 no llvm-cas in the Xcode: a warning, exit 0" \
+    is "$code|${out%%(*}|$(wc -l <"$CAS_LOG" | tr -d ' ')" "0|compilation cache: warning: no llvm-cas in the selected Xcode |0"
+mkdir -p "$T/cwd/.derivedData/CompilationCache.noindex/builtin"
+: >"$CAS_LOG" && (cd "$T/cwd" && FAKE_LLVM_CAS="$T/bin/llvm-cas" FAKE_CAS_OUT="validated successfully" "$VALIDATE" >/dev/null)
+check "V07 no argument: the CAS check.sh's builds use, under .derivedData" \
+    is "$(cut -d' ' -f1-2 "$CAS_LOG")" "--cas .derivedData/CompilationCache.noindex/builtin"
 
 # ---- ci-cas-idle.sh --------------------------------------------------------------------------------------------
 # idle [<seconds>]: runs it, stopped (exit 143) by a 20 s watchdog should a wait ever be unbounded.
@@ -162,7 +221,7 @@ done
 mkdir -p "$T/nopgrep" && ln -s "$(command -v sleep)" "$T/nopgrep/sleep"
 : >"$T/out" && out="$(PATH="$T/nopgrep" GITHUB_OUTPUT="$T/out" "$BASH" "$IDLE" 2>&1)"; code=$?
 check "I07 no pgrep at all: idle=false, exit 0" is "$code|$(cat "$T/out")" "0|idle=false"
-check "I08 it kills nothing: neither script runs kill, pkill or killall" \
-    is "$(grep -nE '(^|[^[:alnum:]_-])(kill|pkill|killall)([^[:alnum:]_-]|$)' "$IDLE" "$REPORT" | grep -v '^[^:]*:[0-9]*: *#' || true)" ""
+check "I08 it kills nothing: no script runs kill, pkill or killall" \
+    is "$(grep -nE '(^|[^[:alnum:]_-])(kill|pkill|killall)([^[:alnum:]_-]|$)' "$IDLE" "$REPORT" "$VALIDATE" | grep -v '^[^:]*:[0-9]*: *#' || true)" ""
 
 finish

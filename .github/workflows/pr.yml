@@ -92,7 +92,7 @@ jobs:
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 97 # the step's 92, plus checkout, Xcode, mise, both caches and the uploads
+    timeout-minutes: 107 # check.sh's 92, the cache validation's 10, checkout, Xcode, mise, caches, uploads
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -114,8 +114,9 @@ jobs:
       # mtimes cannot fool it and a changed file always compiles. That makes restore-keys safe here, unlike
       # for the package checkouts: a run starts from its PR's newest cache, or main's. The keys still carry
       # the Xcode and both lockfiles, so a toolchain or package bump starts a new cache. Xcode validates the
-      # cache once per boot (ValidateCAS), so a runner validates what it restored, and drops a corrupt one:
-      # then the build is cold (#153; the report step below says which happened).
+      # cache once per boot (ValidateCAS) in a child process it kills after 120 s, then drops the cache as
+      # invalid, so a slow runner built cold (#161). The step after this one validates it first, without
+      # that cap; ci-cas-idle.sh still keeps a save from tarring it mid-write (#153).
       # A run may read only its PR's caches and main's. Only main-cache.yml saves on main (a PR run
       # cannot), building what this job builds on each push to main, under these keys. So a PR's first run starts
       # from main's newest cache, and its later pushes and re-runs from its own (docs/ci-cd.md,
@@ -128,6 +129,14 @@ jobs:
           key: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ github.sha }}
           # The key without the commit: the newest cache this run may read, its PR's first, then main's.
           restore-keys: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
+      # In-process, so no 120 s cap; once it passes, Xcode's ValidateCAS prints "validation skipped" (#161).
+      # A restored cache only. Never fails the job: at worst Xcode validates the cache itself, as before.
+      - name: Validate the restored compilation cache
+        id: cas-validate
+        if: steps.compilation-cache.outputs.cache-matched-key != ''
+        timeout-minutes: 10
+        continue-on-error: true
+        run: scripts/ci-cas-validate.sh .derivedData/CompilationCache.noindex/builtin
       # iOS only (Pete, 2026-09-30): F32's first run here reached the deadline below in the watchOS tests,
       # after a cold 684 s iOS build. watchOS stays in the full local gate, green before every merge
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
