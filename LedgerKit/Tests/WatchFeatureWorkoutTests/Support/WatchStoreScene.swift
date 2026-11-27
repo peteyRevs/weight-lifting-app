@@ -1,16 +1,20 @@
+import Dependencies
 import Foundation
 import LedgerDomain
 import LedgerTestSupport
 import Testing
 @testable import WatchFeatureWorkout
 
-/// A watch store under test: the seeded in-memory stores, a session and a scripted live connection, bound inside
-/// `withTestDependencies` (the date fixed at `Fixtures.now`, the Wednesday of week 5: Lower A).
+/// A watch store under test: the seeded in-memory stores, a session, a scripted live connection and haptics that
+/// record when they played, bound inside `withTestDependencies` (the date fixed at `Fixtures.now`, the Wednesday of
+/// week 5: Lower A). A `timed` scene moves the date with `clock`, which only the test moves.
 @MainActor
 struct WatchStoreScene {
     let stores: InMemoryStores
     let session: any WorkoutSessionClient
     let connection = FakeLiveConnection(.solo, scripted: true)
+    let clock = RestCoverClock()
+    let haptics: ClockedHaptics
     /// The session when it is the fake, to drive changes made elsewhere and to read what it was asked.
     let fake: FakeWorkoutSessionClient?
 
@@ -18,10 +22,13 @@ struct WatchStoreScene {
         stores = try InMemoryStores(seed: .preview())
         fake = session == nil ? FakeWorkoutSessionClient(live: live) : nil
         self.session = session ?? fake ?? FakeWorkoutSessionClient()
+        haptics = ClockedHaptics(clock: clock)
     }
 
-    /// A store running as the root's task runs it, once the session, the program and the settings have spoken.
-    func running() async -> (WatchWorkoutStore, Task<Void, Never>) {
+    /// A store running as the root's task runs it, once the session, the program and the settings have spoken. A
+    /// `timed` one sleeps on `clock`, and its date is `Fixtures.now` plus the clock's time; otherwise the date stands
+    /// still and the clock's waits end at once (`withTestDependencies`).
+    func running(timed: Bool = false) async -> (WatchWorkoutStore, Task<Void, Never>) {
         let store = withTestDependencies {
             $0.exerciseRepository = stores.exercises
             $0.programRepository = stores.programs
@@ -30,12 +37,32 @@ struct WatchStoreScene {
             $0.workoutSession = session
             $0.liveConnection = connection
             $0.deviceID = Fixtures.deviceID
+            $0.haptics = haptics
+            if timed {
+                $0.continuousClock = clock
+                $0.date = DateGenerator { [clock] in Fixtures.now.addingTimeInterval(clock.elapsed / .seconds(1)) }
+            }
         } operation: {
             WatchWorkoutStore(appName: "Ledger")
         }
         let task = Task { await store.run() }
         await observed("the store heard its sources") { store.hasHeardSession && store.idle != nil }
         return (store, task)
+    }
+
+    /// Saves the settings with the buzz at rest zero on or off, before the store runs.
+    func buzz(_ isOn: Bool) async throws {
+        var settings = try await stores.settings.load()
+        settings.watchBuzz = isOn
+        try await stores.settings.save(settings)
+    }
+
+    /// Waits until `condition`, on what the tasks asleep on `clock` do, holds (`RestCoverClock.wait(within:until:)`).
+    func clockWait(_ what: String, sourceLocation: SourceLocation = #_sourceLocation, _ condition: () -> Bool) async {
+        let outcome = await clock.wait(until: condition)
+        if outcome != .held {
+            Issue.record("the wait ended (\(outcome)) before: \(what)", sourceLocation: sourceLocation)
+        }
     }
 
     static func settled(_ store: WatchWorkoutStore) async {
@@ -97,9 +124,9 @@ actor ScriptedSession: WorkoutSessionClient {
         self.winner = winner
     }
 
-    func publish(_ next: WorkoutState?) {
+    func publish(_ next: WorkoutState?, haptics: [Haptic] = []) {
         state = next
-        readers.forEach { $0.yield(WorkoutSessionUpdate(state: next)) }
+        readers.forEach { $0.yield(WorkoutSessionUpdate(state: next, haptics: haptics)) }
     }
 
     func updates() -> AsyncStream<WorkoutSessionUpdate> {
@@ -130,5 +157,21 @@ actor ScriptedSession: WorkoutSessionClient {
 
     func discard(endedAt _: Date) throws {
         throw WorkoutSessionError.noLiveWorkout
+    }
+}
+
+/// The haptics client of a store under test: what it was asked to play, and when on the scene's clock.
+actor ClockedHaptics: HapticsClient {
+    let clock: RestCoverClock
+    private(set) var played: [Haptic] = []
+    private(set) var times: [Duration] = []
+
+    init(clock: RestCoverClock) {
+        self.clock = clock
+    }
+
+    func play(_ haptic: Haptic) {
+        played.append(haptic)
+        times.append(clock.elapsed)
     }
 }

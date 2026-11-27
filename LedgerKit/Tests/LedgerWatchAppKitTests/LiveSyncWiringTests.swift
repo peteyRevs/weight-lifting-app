@@ -84,3 +84,31 @@ struct LiveSyncWiringTests {
         #expect(composition.transport == nil)
     }
 }
+
+extension LiveSyncWiringTests {
+    /// F18 S2b, as the phone's composition binds its own (F10 S6): `withDependencies` starts from the live values, as
+    /// the app does, so a composition that left the key unbound would hand back the stub and fail this test.
+    @Test("With the database open the composition binds the watch's haptics; before that it binds nothing")
+    func boot_bindsTheWatchHaptics() async {
+        let harness = Harness()
+        defer { harness.remove() }
+        func bound(by composition: WatchComposition) -> any HapticsClient {
+            withDependencies {
+                $0.context = .live
+                composition.bind(&$0)
+            } operation: {
+                @Dependency(\.haptics) var haptics
+                return haptics
+            }
+        }
+        let composition = harness.composition()
+        #expect(!(bound(by: composition) is WatchHaptics))
+        composition.boot()
+        let haptics = bound(by: composition)
+        #expect(haptics is WatchHaptics)
+        // Each haptic is played, or passed over, without a trap, on a simulator that has no Taptic Engine.
+        for haptic in Haptic.allCases {
+            await haptics.play(haptic)
+        }
+    }
+}

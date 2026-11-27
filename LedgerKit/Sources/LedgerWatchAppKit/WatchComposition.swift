@@ -151,9 +151,9 @@ public final class WatchComposition {
         environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
     }
 
-    /// Binds the six stores, this device's id, the health store (F16 S3a), the live workout's host and the live
-    /// connection (F17 S7b); binds nothing until the database is open. The logger and the other device keys keep
-    /// their live values (stubs until F18–F23).
+    /// Binds the six stores, this device's id, the health store (F16 S3a), the live workout's host and the haptics its
+    /// screen plays (F18), and the live connection (F17 S7b); binds nothing until the database is open. The logger and
+    /// the other device keys keep their live values (stubs until F19–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
@@ -162,6 +162,7 @@ public final class WatchComposition {
             }
             if let session {
                 values.workoutSession = session
+                values.haptics = WatchHaptics()
             }
             if let transport {
                 values.liveConnection = transport
