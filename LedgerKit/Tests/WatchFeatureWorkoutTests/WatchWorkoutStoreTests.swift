@@ -211,7 +211,8 @@ extension WatchWorkoutStoreTests {
         #expect(plan.planLine.hasPrefix("Logged · 1 set") && plan.start == nil)
         again.cancel()
 
-        let discarding = try Scene(live: Scene.lowerA([(0, 0)]))
+        // The watch discards only a workout with nothing logged (WatchEndModel.offersDiscard).
+        let discarding = try Scene(live: Scene.lowerA())
         let (other, otherTask) = await discarding.running()
         other.send(.openEnd)
         other.send(.discard)

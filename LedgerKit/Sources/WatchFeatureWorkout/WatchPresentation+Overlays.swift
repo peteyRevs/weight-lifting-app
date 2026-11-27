@@ -43,11 +43,18 @@ nonisolated struct WatchEndModel: Equatable, Sendable {
     /// it only then: a grey pill on the wrist is a target that does nothing.
     let canSave: Bool
 
-    /// Whether the overlay offers "Discard": only while no set is logged, so that a tap on the wrist never throws
-    /// logged sets away (orchestrator ruling 7, F18 S6b). **Pending Pete:** whether a workout with logged sets may be
+    /// Whether the overlay offers "Discard" (`offersDiscard(loggedSetCount:)`).
+    var offersDiscard: Bool {
+        Self.offersDiscard(loggedSetCount: loggedSetCount)
+    }
+
+    /// Whether the watch may discard a workout with `loggedSetCount` sets logged: only while none is, so that the
+    /// watch never throws logged sets away (orchestrator ruling 7, F18 S6b). The overlay offers "Discard" by it, and
+    /// the store's pump asks it again of the newest workout when the discard's turn comes, so a set logged elsewhere
+    /// after the overlay was drawn still refuses it. **Pending Pete:** whether a workout with logged sets may be
     /// discarded from the watch, perhaps behind a second confirm, is the product owner's to rule on; this is the one
     /// place that rule lives. With it, "Save workout" and "Discard" are never offered together.
-    var offersDiscard: Bool {
+    static func offersDiscard(loggedSetCount: Int) -> Bool {
         loggedSetCount == 0
     }
 }

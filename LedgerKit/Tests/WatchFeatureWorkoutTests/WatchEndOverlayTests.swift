@@ -5,9 +5,10 @@ import Testing
 @testable import WatchFeatureWorkout
 
 /// F18 S6b: the end overlay (criterion 10). It offers "Save workout" once a set is logged and "Discard" only while
-/// none is (orchestrator ruling 7, pending Pete); "Save workout" ends at the summary, "Discard" at idle, and "Keep
-/// lifting" goes back to the list; the overlay stands in the live screen's place and stays through a change of mode.
-/// A watch test cannot host a view or tap it, so a tap is the overlay's own action, which its control calls.
+/// none is, and the store discards only a workout still without one when the discard's turn comes (orchestrator
+/// ruling 7, pending Pete). "Save workout" ends at the summary, "Discard" at idle, and "Keep lifting" goes back to the
+/// list; the overlay stands in the live screen's place and stays through a change of mode. A watch test cannot host a
+/// view or tap it, so a tap is the overlay's own action, which its control calls.
 @MainActor
 @Suite("Watch end overlay", .tags(.watch), .timeLimit(.minutes(1)))
 struct WatchEndOverlayTests {
@@ -68,6 +69,36 @@ struct WatchEndOverlayTests {
         discard()
         await observed("idle") { Self.shown(store) == "idle" }
         #expect(store.workout?.phase == .discarded && store.summary == nil && store.shownOverlay == nil)
+        task.cancel()
+    }
+
+    @Test("Discard sent with sets logged is refused: the workout stays live, and the overlay stays up with Save")
+    func discard_withSetsLogged_isRefused() async throws {
+        let (store, task) = try await Self.ending(Scene.lowerA([(0, 0)]))
+        store.send(.discard)
+        await Scene.settled(store)
+        #expect(store.workout?.phase == .live && store.workout?.doneSets == 1)
+        #expect(Self.shown(store) == "end")
+        #expect(try Self.overlay(store).save != nil && Self.overlay(store).discard == nil)
+        task.cancel()
+    }
+
+    @Test("A set logged elsewhere after the overlay offered Discard refuses it: the workout stays live with its set")
+    func discard_raceWithALoggedSet_isRefused() async throws {
+        let scene = try Scene(live: Scene.lowerA())
+        let (store, task) = await scene.running()
+        store.send(.openEnd)
+        let drawn = try Self.overlay(store)
+        let discard = try #require(drawn.discard, "nothing logged: Discard is offered")
+        let set = try #require(store.workout?.exercises[0].sets[0])
+        try await scene.fake?.apply(.setLogged(
+            exerciseIndex: 0, setID: set.id, weight: set.weight, reps: set.reps, doneAt: Fixtures.now
+        ))
+        discard()
+        await Scene.settled(store)
+        await observed("the set heard") { store.workout?.doneSets == 1 }
+        #expect(store.workout?.phase == .live && Self.shown(store) == "end")
+        #expect(try Self.overlay(store).save != nil && Self.overlay(store).discard == nil, "the overlay redraws: Save")
         task.cancel()
     }
 

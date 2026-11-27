@@ -9,8 +9,8 @@ nonisolated enum WatchAction: Equatable, Sendable {
     case crownRotated(Double), crownRested, logSet, extendRest, skipRest
     /// The exercise's name, the list's back and a row; "End workout" and the end overlay's buttons; summary's "Done".
     case openList, closeList, selectExercise(Int), openEnd, keepLifting, save, dismissSummary
-    /// "Discard". The end overlay offers it only while no set is logged (`WatchEndModel.offersDiscard`); this store
-    /// sends it whenever it is asked.
+    /// "Discard". The end overlay offers it only while no set is logged, and the pump discards only a workout that
+    /// still has none when the discard's turn comes (`WatchEndModel.offersDiscard(loggedSetCount:)`).
     case discard
 }
 
@@ -123,7 +123,7 @@ extension WatchWorkoutStore {
             case let .save(endedAt):
                 _ = try await session.finish(endedAt: endedAt)
             case let .discard(endedAt):
-                try await session.discard(endedAt: endedAt)
+                try await discard(endedAt: endedAt)
             default:
                 guard let shown = ahead ?? live else {
                     return true
@@ -142,6 +142,19 @@ extension WatchWorkoutStore {
             logger.log.error("The watch's change was refused: \(String(describing: error), privacy: .public)")
             return false
         }
+    }
+
+    /// "Discard", on the session's newest workout: refused, and the end overlay left up to show "Save workout", once a
+    /// set is logged there, whoever logged it since the overlay was drawn. No workout is nothing to discard.
+    private func discard(endedAt: Date) async throws {
+        guard let newest = try await session.current() else {
+            return
+        }
+        guard WatchEndModel.offersDiscard(loggedSetCount: newest.doneSets) else {
+            logger.log.notice("Discard refused: the workout has \(newest.doneSets, privacy: .public) sets logged")
+            return
+        }
+        try await session.discard(endedAt: endedAt)
     }
 
     /// "Start": today's session of the active program (`WatchTodayStart`). A workout that is live by the time it

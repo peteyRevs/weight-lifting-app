@@ -21,9 +21,10 @@ struct WatchRestOverTests {
         let task: Task<Void, Never>
     }
 
-    /// A store on Lower A with its first set logged, in a 60 s rest whose task is asleep until the rest's end.
-    static func resting(buzz: Bool = true) async throws -> Running {
-        let scene = try Scene(live: Scene.lowerA([(0, 0)]))
+    /// A store on Lower A with its first set logged (or the rows of `logged`), in a 60 s rest whose task is asleep
+    /// until the rest's end.
+    static func resting(buzz: Bool = true, logged: [(Int, Int)] = [(0, 0)]) async throws -> Running {
+        let scene = try Scene(live: Scene.lowerA(logged))
         try await scene.buzz(buzz)
         let (store, task) = await scene.running(timed: true)
         try await scene.fake?.apply(.restStarted(endsAt: rest60.endsAt, total: rest60.total))
@@ -85,7 +86,8 @@ struct WatchRestOverTests {
     @Test("Skip, +30s, Save and Discard each cancel the rest's wait: the rest they leave behind never buzzes")
     func test_buzzTaskCancelledOnSkipExtendFinish() async throws {
         for action in [WatchAction.skipRest, .extendRest, .save, .discard] {
-            let running = try await Self.resting()
+            // The watch discards only a workout with nothing logged (WatchEndModel.offersDiscard).
+            let running = try await Self.resting(logged: action == .discard ? [] : [(0, 0)])
             let scene = running.scene, store = running.store, task = running.task
             let sleeps = scene.clock.sleeps
             switch action {
