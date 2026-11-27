@@ -27,7 +27,8 @@ nonisolated struct WatchReadyModel: Equatable, Sendable {
     let dotsSummary: String
     /// "142 BPM", or "— BPM".
     let heartRate: WatchHeartRateModel
-    /// "Allow Health in iPhone Settings" while Health is denied; the store shows it once.
+    /// "Allow Health in iPhone Settings" while Health is denied, until the first set logged with it on screen
+    /// (`WatchWorkoutStore.hasAskedForHealth`).
     let healthLine: String?
     /// The connection line under the set label (F17 criterion 12), or nil.
     let connection: String?
@@ -70,7 +71,7 @@ nonisolated extension WatchPresentation {
                 locale: input.locale
             ),
             heartRate: heartRateLine(input.heartRate, input.health, locale: input.locale),
-            healthLine: input.health == .denied ? WatchWorkoutCopy.allowHealth : nil,
+            healthLine: input.health == .denied && input.offersHealthLine ? WatchWorkoutCopy.allowHealth : nil,
             connection: connectionLine(input.connection, hasHeardPhone: input.hasHeardPhone)
         )
     }

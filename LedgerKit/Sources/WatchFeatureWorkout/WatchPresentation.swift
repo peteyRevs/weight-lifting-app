@@ -72,11 +72,12 @@ nonisolated enum WatchPresentation {
 
 /// Everything the live screens read beside the workout: the latest heart-rate sample, Health's sharing status, the
 /// live connection as last heard (nil before the first word of it), whether the watch has heard the iPhone reached,
-/// and the locale the words are written in.
+/// the locale the words are written in, and whether the set screen may still ask for Health: the store asks once.
 nonisolated struct WatchLiveInput: Sendable {
     var heartRate: HeartRateSample?
     var health: HealthAuthorization
     var connection: LiveConnectionState?
     var hasHeardPhone: Bool
     var locale: Locale
+    var offersHealthLine = true
 }
