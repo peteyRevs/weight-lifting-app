@@ -186,10 +186,16 @@ idle() {
     kill "$dog" 2>/dev/null; wait "$dog" 2>/dev/null
     out="$(cat "$T/idle.log")" took=$((SECONDS - started))
 }
+# polls: "1 poll" when the last run asked pgrep about each writer once and never said it was waiting, which is
+# "at once" without reading a 1 s clock (issue #170: SECONDS can tick between two lines).
+polls() {
+    local calls; calls=$(wc -l <"$PGREP_LOG" | tr -d ' ')
+    if [[ $calls -eq 7 ]] && ! grep -q '^Waiting' <<<"$out"; then echo "1 poll"; else echo "$calls pgrep calls: $out"; fi
+}
 
 FAKE_RUNNING="" idle 5
 check "I01 nothing running: idle=true at once, in the log and \$GITHUB_OUTPUT, exit 0" \
-    is "$code|$(tail -1 <<<"$out")|$(cat "$T/out")|$took" "0|idle=true|idle=true|0"
+    is "$code|$(tail -1 <<<"$out")|$(cat "$T/out")|$(polls)" "0|idle=true|idle=true|1 poll"
 check "I01b ... asking pgrep for each writer by exact name, never a pattern" \
     is "$(paste -sd , "$PGREP_LOG")" \
     "-x xcodebuild,-x SWBBuildService,-x XCBBuildService,-x swift-driver,-x swift-frontend,-x clang,-x llvm-cas"
@@ -210,7 +216,7 @@ check "I03c ... as a warning annotation on GitHub Actions; a 0 s bound checks on
 
 FAKE_RUNNING="clangd sourcekit-lsp swift-frontend-helper Xcode" idle 2
 check "I04 processes whose names only contain a writer's are not writers: idle=true at once" \
-    is "$(cat "$T/out")|$took" "idle=true|0"
+    is "$(cat "$T/out")|$(polls)" "idle=true|1 poll"
 
 FAKE_PGREP_STATUS=3 idle 2
 check "I05 pgrep failing cannot be read as 'none running': idle=false" is "$code|$(cat "$T/out")" "0|idle=false"
