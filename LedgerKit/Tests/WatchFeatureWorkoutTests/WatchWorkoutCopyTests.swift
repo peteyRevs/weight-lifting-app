@@ -17,7 +17,7 @@ struct WatchWorkoutCopyTests {
     func builtBundle_resolvesEveryKey() throws {
         let catalog = try StringCatalog(module: "WatchFeatureWorkout")
         let bundle = try #require(StringCatalog.resourceBundle(ofModule: "WatchFeatureWorkout"))
-        #expect(catalog.keys.count == 64)
+        #expect(catalog.keys.count == 73)
         #expect(catalog.unresolvedKeys(in: bundle) == [])
     }
 }

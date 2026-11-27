@@ -89,6 +89,11 @@
         case readyHealthDenied = "Ready — Health denied"
         case rest = "Rest"
         case restGo = "Rest — GO"
+        case takeover = "Ready — taken over"
+        case list = "List"
+        case summaryRecords = "Summary — records"
+        case summaryKg = "Summary — kg"
+        case summaryNoRecords = "Summary — no records"
 
         @ViewBuilder var content: some View {
             switch self {
@@ -105,6 +110,11 @@
             case .readyHealthDenied: LiveSample.healthDenied.screen
             case .rest: LiveSample.rest.screen
             case .restGo: LiveSample.restOver.screen
+            case .takeover: OverlaySample.takeover
+            case .list: OverlaySample.list
+            case .summaryRecords: SummarySample.records.screen
+            case .summaryKg: SummarySample.recordsKg.screen
+            case .summaryNoRecords: SummarySample.noRecords.screen
             }
         }
     }

@@ -12,6 +12,17 @@
         }
       }
     },
+    "%@ elapsed" : {
+      "comment" : "Spoken reading of the summary's time: the workout's length, in words",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ elapsed"
+          }
+        }
+      }
+    },
     "%@ first" : {
       "comment" : "The exercise today's session opens with",
       "localizations" : {
@@ -41,6 +52,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ kg moved"
+          }
+        }
+      }
+    },
+    "%@ kilograms moved" : {
+      "comment" : "Spoken reading of the summary's volume, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kilograms moved"
           }
         }
       }
@@ -86,6 +108,17 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%@ pounds moved" : {
+      "comment" : "Spoken reading of the summary's volume, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ pounds moved"
           }
         }
       }
@@ -140,6 +173,29 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld new personal records" : {
+      "comment" : "Spoken reading of the summary's NEW PR: the records the workout set",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new personal record"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new personal records"
                 }
               }
             }
@@ -214,6 +270,17 @@
         }
       }
     },
+    "All sets logged" : {
+      "comment" : "Spoken state of a fully logged list row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All sets logged"
+          }
+        }
+      }
+    },
     "Allow Health in iPhone Settings" : {
       "comment" : "Line on the set screen when the lifter has not let the app read heart rate",
       "localizations" : {
@@ -225,6 +292,40 @@
         }
       }
     },
+    "Apple Workout took over · logging continues" : {
+      "comment" : "Banner while another app's workout holds Health's session; sets still log",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Workout took over · logging continues"
+          }
+        }
+      }
+    },
+    "Average heart rate, %lld beats per minute" : {
+      "comment" : "Spoken reading of the summary's average heart rate, from Health",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Average heart rate, %lld beat per minute"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Average heart rate, %lld beats per minute"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "BPM" : {
       "comment" : "Unit after the heart rate: beats per minute",
       "localizations" : {
@@ -232,6 +333,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "BPM"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "comment" : "Spoken name of the session list's back button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
           }
         }
       }
@@ -496,6 +608,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Next: week %lld"
+          }
+        }
+      }
+    },
+    "No average heart rate" : {
+      "comment" : "Spoken reading of the summary's average heart rate when Health has none",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No average heart rate"
           }
         }
       }

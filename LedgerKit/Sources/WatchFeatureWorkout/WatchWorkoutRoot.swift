@@ -6,8 +6,9 @@ import SwiftUI
 /// app's display name, for "Open %@ on iPhone", the composition's Health session, and, in Debug builds, what a long
 /// press on the title does.
 ///
-/// The screen before a workout, set ready and the rest screen (with its "GO") are drawn here; the summary is a stub
-/// until F18 S6 (`WatchStubScreen`), and the overlays come with S6.
+/// The session list stands in the live screen's place while it is open, as the prototype draws it; the end overlay
+/// comes with F18 S6b, and until then the live screen shows under it. While another app's workout holds Health's
+/// session, its banner stands above the screen (spec §9).
 public struct WatchWorkoutRoot: View {
     @State private var store: WatchWorkoutStore
     private let onTitleLongPress: () -> Void
@@ -29,6 +30,7 @@ public struct WatchWorkoutRoot: View {
     public var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .watchBanner(store.banner)
             .background(LedgerColor.watchGround)
             .task { await store.run() }
     }
@@ -43,24 +45,31 @@ public struct WatchWorkoutRoot: View {
             WatchReadyScreen(model: model, dial: store.crownDial, send: store.send)
         case let .rest(model):
             WatchRestScreen(model: model, send: store.send)
+        case let .list(model):
+            WatchListOverlay(model: model, send: store.send)
         case let .summary(model):
-            WatchStubScreen(lines: [model.title], pill: (model.done, .dismissSummary), send: store.send)
+            WatchSummaryScreen(model: model, send: store.send)
         }
     }
 }
 
 extension WatchWorkoutRoot {
-    /// The screen the root shows: its mode's, drawn from that mode's model. The rest and "GO" share the rest screen.
+    /// The screen the root shows: the open session list, or its mode's, drawn from that mode's model. The rest and
+    /// "GO" share the rest screen.
     enum Screen: Equatable {
         /// The store has not heard what it needs for the mode yet: the black ground alone.
         case waiting
         case idle(WatchIdleModel)
         case ready(WatchReadyModel)
         case rest(WatchRestModel)
+        case list(WatchListModel)
         case summary(WatchSummaryModel)
     }
 
     static func screen(of store: WatchWorkoutStore) -> Screen {
+        if store.shownOverlay == .list, let list = store.list {
+            return .list(list)
+        }
         let screen: Screen? = switch store.mode {
         case .idle: store.idle.map(Screen.idle)
         case .ready: store.ready.map(Screen.ready)
