@@ -25,11 +25,8 @@ nonisolated struct WatchListModel: Equatable, Sendable {
     let endWorkout: String
 }
 
-/// What the end overlay draws (spec §4.3 "Watch — end workout").
-///
-/// It only names the three actions. When "Discard" is offered once sets are logged is the product owner's to rule
-/// on (F18 S6), so the model decides nothing about it and hands the store the fact that ruling will read,
-/// `loggedSetCount`.
+/// What the end overlay draws (spec §4.3 "Watch — end workout"): the title, the line, and which of "Save workout"
+/// and "Discard" it offers, beside "Keep lifting", which it always does.
 nonisolated struct WatchEndModel: Equatable, Sendable {
     /// "End workout?".
     let title: String
@@ -42,8 +39,24 @@ nonisolated struct WatchEndModel: Equatable, Sendable {
     let keepLifting: String
     /// The sets logged so far (`WorkoutState.doneSets`).
     let loggedSetCount: Int
-    /// Whether "Save workout" can end the workout: once a set is logged, as on the phone's sheet.
+    /// Whether "Save workout" can end the workout: once a set is logged, as on the phone's sheet. The overlay draws
+    /// it only then: a grey pill on the wrist is a target that does nothing.
     let canSave: Bool
+
+    /// Whether the overlay offers "Discard" (`offersDiscard(loggedSetCount:)`).
+    var offersDiscard: Bool {
+        Self.offersDiscard(loggedSetCount: loggedSetCount)
+    }
+
+    /// Whether the watch may discard a workout with `loggedSetCount` sets logged: only while none is, so that the
+    /// watch never throws logged sets away (orchestrator ruling 7, F18 S6b). The overlay offers "Discard" by it, and
+    /// the store's pump asks it again of the newest workout when the discard's turn comes, so a set logged elsewhere
+    /// after the overlay was drawn still refuses it. **Pending Pete:** whether a workout with logged sets may be
+    /// discarded from the watch, perhaps behind a second confirm, is the product owner's to rule on; this is the one
+    /// place that rule lives. With it, "Save workout" and "Discard" are never offered together.
+    static func offersDiscard(loggedSetCount: Int) -> Bool {
+        loggedSetCount == 0
+    }
 }
 
 nonisolated extension WatchPresentation {
