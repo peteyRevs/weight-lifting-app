@@ -1,8 +1,85 @@
 import Foundation
 import LedgerDomain
 
-/// The summary's words (spec §4.3 "Watch — summary").
+/// The session list's, the end overlay's and the summary's words (spec §4.3).
 nonisolated extension WatchWorkoutCopy {
+    // MARK: Session list
+
+    /// "2 OF 5 DONE": the exercises with every set logged, then the workout's exercises.
+    static func exercisesDone(_ done: String, of count: String, locale: Locale) -> String {
+        String(
+            localized: "\(done) OF \(count) DONE",
+            bundle: .module,
+            locale: locale,
+            comment: "Header of the session list: the exercises fully logged, then all the workout's exercises"
+        )
+    }
+
+    /// "5 × 5 @ 185": a row's sets, reps and load, which the caller formats in the workout's unit.
+    static func scheme(sets: Int, reps: Int, load: String, locale: Locale) -> String {
+        String(
+            localized: "\(sets) × \(reps) @ \(load)",
+            bundle: .module,
+            locale: locale,
+            comment: "A row of the session list: the exercise's sets, then its reps, then its load, which has no unit"
+        )
+    }
+
+    static var endWorkoutButton: String {
+        String(localized: "End workout", bundle: .module, comment: "Button under the session list: asks to end")
+    }
+
+    // MARK: End workout
+
+    static var endWorkout: String {
+        String(localized: "End workout?", bundle: .module, comment: "Title of the overlay that ends the workout")
+    }
+
+    /// "23 of 25 sets logged": the sets done, as text in the lifter's digits, of the workout's set rows, whose
+    /// number picks the form.
+    static func setsLogged(done: String, of total: Int, locale: Locale) -> String {
+        String(
+            localized: "\(done) of \(total) sets logged",
+            bundle: .module,
+            locale: locale.forCountedText,
+            comment: "The sets logged in the workout so far, then all its sets"
+        )
+    }
+
+    /// "24,180 lb moved": the weight lifted so far, the Domain's text.
+    static func moved(_ volume: String, units: Units, locale: Locale) -> String {
+        switch units {
+        case .lb:
+            String(
+                localized: "\(volume) lb moved",
+                bundle: .module,
+                locale: locale,
+                comment: "The total weight lifted in the workout so far, in pounds"
+            )
+        case .kg:
+            String(
+                localized: "\(volume) kg moved",
+                bundle: .module,
+                locale: locale,
+                comment: "The total weight lifted in the workout so far, in kilograms"
+            )
+        }
+    }
+
+    static var saveWorkout: String {
+        String(localized: "Save workout", bundle: .module, comment: "Ends the workout and keeps it in history")
+    }
+
+    static var discard: String {
+        String(localized: "Discard", bundle: .module, comment: "Ends the workout without saving it")
+    }
+
+    static var keepLifting: String {
+        String(localized: "Keep lifting", bundle: .module, comment: "Closes the overlay and returns to the list")
+    }
+
+    // MARK: Summary
+
     static var workoutDone: String {
         String(localized: "WORKOUT DONE", bundle: .module, comment: "Eyebrow of the summary of a saved workout")
     }
