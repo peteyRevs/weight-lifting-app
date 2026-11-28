@@ -152,7 +152,7 @@ extension WorkoutStartDateAdversarialTests {
         failing.registerMigration("v999_fails") { _ in throw CancellationError() }
         #expect(throws: CancellationError.self) { try failing.migrate(fixture) }
         #expect(try await fixture.read(LedgerDatabase.migrator.appliedIdentifiers) == [
-            "v001_createSchema", "v002_workoutStartedIndex"
+            "v001_createSchema", "v002_workoutStartedIndex", "v003_companionSync"
         ])
         let before = try await fixture.read { try MigrationFixtureAdversarialTests.rows($0) }
         try fixture.close()
