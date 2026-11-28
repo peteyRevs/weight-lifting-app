@@ -87,15 +87,15 @@ extension AuditWorkout {
     static var exclusions: [ScreenExclusion] {
         [
             .eyebrows([
-                "solo card": ["UPPER A — PUSH FOCUS", "REMAINING", "5 LB", "1 REP"],
-                "rest panel": ["UPPER A — PUSH FOCUS", "5 LB", "1 REP"],
-                "superset block": ["UPPER A — PUSH FOCUS", "2.5 LB", "1 REP"],
+                "solo card": ["Upper A — Push focus", "REMAINING", "5 LB", "1 REP"],
+                "rest panel": ["Upper A — Push focus", "5 LB", "1 REP"],
+                "superset block": ["Upper A — Push focus", "2.5 LB", "1 REP"],
                 "receipt": ["TIME", "SETS", "LB MOVED", "LOGGED"]
             ]),
             .shortLines([
-                "solo card": ["UPPER A — PUSH FOCUS", "Barbell Bench Press", "5 × 5 @ 180 lb · RPE 8"],
-                "rest panel": ["UPPER A — PUSH FOCUS", "Barbell Bench Press", "5 × 5 @ 180 lb · RPE 8"],
-                "superset block": ["UPPER A — PUSH FOCUS", "Superset · block 4 of 4"],
+                "solo card": ["Upper A — Push focus", "Barbell Bench Press", "5 × 5 @ 180 lb · RPE 8"],
+                "rest panel": ["Upper A — Push focus", "Barbell Bench Press", "5 × 5 @ 180 lb · RPE 8"],
+                "superset block": ["Upper A — Push focus", "Superset · block 4 of 4"],
                 "receipt": ["Upper A — Push focus", "LB MOVED"]
             ]),
             headerPillsWhole,
