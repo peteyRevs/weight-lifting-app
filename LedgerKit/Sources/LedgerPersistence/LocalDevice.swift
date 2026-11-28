@@ -5,7 +5,7 @@ import LedgerDomain
 /// This install's device (decision B4): the `device` row of this platform's kind. The first launch inserts it
 /// with a new id; every later launch reads it back, so the id lasts as long as the database. A restore from a
 /// backup brings the old row, and its id, with it; a reinstall starts a new database and gets a new id. Rows of
-/// the other kind (the paired device's, once F19 syncs them) are never this device.
+/// the other kind (the paired device's, `recordPeer`) are never this device.
 public enum LocalDevice {
     /// The `device.kind` column's values.
     public enum Kind: String, Sendable, CaseIterable {
@@ -31,6 +31,17 @@ public enum LocalDevice {
         newID: @Sendable () -> UUID
     ) throws -> DeviceID {
         try queue.write { database in try open(in: database, kind: kind, now: now, newID: newID).id }
+    }
+
+    /// Records the paired device (F19: the watch a record came from), so a workout's `origin_device` names a known
+    /// kind. A stored `id` is left as it is: an install's id has one kind, and this device's own row never changes.
+    public static func recordPeer(_ id: DeviceID, kind: Kind, in queue: DatabaseQueue, now: Date) throws {
+        try queue.write { database in
+            try database.execute(
+                sql: "INSERT INTO device (id, kind, name, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
+                arguments: [ColumnCodec.text(id), kind.rawValue, kind.name, ColumnCodec.timestamp(now)]
+            )
+        }
     }
 
     /// `id(in:kind:now:newID:)` inside the caller's write, and whether it inserted the row: true only on a new

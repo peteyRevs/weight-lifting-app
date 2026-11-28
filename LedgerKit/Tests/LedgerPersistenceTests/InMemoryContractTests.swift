@@ -63,6 +63,12 @@ struct InMemoryContractTests {
         let issue = try await clause.check(InMemorySettingsRepository())
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
+
+    @Test("InMemoryCompanionStore keeps the contract clause", arguments: CompanionStoreContract.clauses)
+    func companion_keepsTheContract(_ clause: CompanionStoreContract.Clause) async throws {
+        let issue = try await clause.check(InMemoryCompanionStore())
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
 }
 
 /// The storage clauses (S1 fix round 1: findings F7-1 to F7-4), on the same stores.

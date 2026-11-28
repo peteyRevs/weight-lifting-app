@@ -4,14 +4,17 @@ import GRDB
 import Testing
 
 /// Criterion 1: the schema as `LedgerDatabase` creates it, pinned migration by migration: `Fixtures/schema-v001.sql`
-/// and `schema-v002.sql` are the `sqlite_master` text of every table and index after each one. A merged migration
+/// to `schema-v003.sql` are the `sqlite_master` text of every table and index after each one. A merged migration
 /// is frozen, so a fixture is only ever added, with the migration that changes the schema.
 @Suite("Schema", .tags(.persistence))
 struct SchemaTests {
     /// Every migration, and the fixture of the schema just after it.
-    static let migrations = [("v001_createSchema", "schema-v001"), ("v002_workoutStartedIndex", "schema-v002")]
+    static let migrations = [
+        ("v001_createSchema", "schema-v001"), ("v002_workoutStartedIndex", "schema-v002"),
+        ("v003_companionSync", "schema-v003")
+    ]
 
-    @Test("Each migration leaves the tables and indexes of its committed Fixtures/schema-vNNN.sql", arguments: 0 ..< 2)
+    @Test("Each migration leaves the tables and indexes of its committed Fixtures/schema-vNNN.sql", arguments: 0 ..< 3)
     func eachMigration_matchesCommittedDDL(index: Int) throws {
         let (migration, fixture) = Self.migrations[index]
         let queue = try DatabaseQueue()
@@ -25,7 +28,7 @@ struct SchemaTests {
     @Test("A new database is at the last migration's schema")
     func newDatabase_isAtTheLatestSchema() throws {
         let url = try #require(Bundle.module.url(
-            forResource: "schema-v002",
+            forResource: "schema-v003",
             withExtension: "sql",
             subdirectory: "Fixtures"
         ))

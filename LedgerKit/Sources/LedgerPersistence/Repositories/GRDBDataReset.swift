@@ -29,7 +29,8 @@ public struct GRDBDataReset: DataReset {
     static let erasedTables = [
         "slot_miss", "slot", "day_template", "program_week", "program",
         "logged_set", "personal_record", "workout_health", "workout_exercise", "workout",
-        "workout_event", "exercise", "settings"
+        "workout_event", "exercise", "settings",
+        "finished_log", "companion_state", "companion_last_performance"
     ]
 
     private let queue: DatabaseQueue

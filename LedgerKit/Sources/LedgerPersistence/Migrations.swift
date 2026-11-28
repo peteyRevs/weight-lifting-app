@@ -16,9 +16,44 @@ enum Migrations {
         migrations.registerMigration("v002_workoutStartedIndex") { database in
             try database.execute(sql: "CREATE INDEX idx_workout_started ON workout(started_at DESC, id)")
         }
+        // F19 S3a: new tables only; no row of v002 is read or changed.
+        migrations.registerMigration("v003_companionSync") { database in
+            try database.execute(sql: schemaV003)
+        }
         return migrations
     }
 }
+
+/// Schema v003 (F19 S3a): local-only tables, never synced (`GRDBCompanionStore`). `finished_log` is the watch's
+/// outbox and the phone's archive (Q6/7): `payload` is the record's `CompanionCodec` bytes, whose device and HealthKit
+/// UUID the columns repeat, and the dates are `REAL` seconds since 2001, which the outbox's order and the 14-day sweep
+/// compare. `companion_state` is one 'singleton' row. `companion_last_performance` has no foreign key: a line may name
+/// a custom exercise the watch has not stored yet; `load_e7g` is exact (ADR-007).
+private let schemaV003 = """
+CREATE TABLE finished_log (
+    workout_id TEXT PRIMARY KEY NOT NULL,
+    device_id TEXT NOT NULL,
+    payload BLOB NOT NULL,
+    health_uuid TEXT,
+    created_at REAL NOT NULL,
+    enqueued_at REAL,
+    acked_at REAL
+);
+CREATE TABLE companion_state (
+    id TEXT PRIMARY KEY NOT NULL, -- always 'singleton'
+    context BLOB,
+    program_sha256 BLOB,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE companion_last_performance (
+    exercise_id TEXT PRIMARY KEY NOT NULL,
+    date REAL NOT NULL,
+    sets INTEGER NOT NULL,
+    reps INTEGER NOT NULL,
+    load_e7g INTEGER NOT NULL
+);
+CREATE INDEX idx_finished_log_created ON finished_log(created_at, workout_id);
+"""
 
 /// Schema v001, all of it (F05 slice S1; `Fixtures/schema-v001.sql` pins it).
 ///

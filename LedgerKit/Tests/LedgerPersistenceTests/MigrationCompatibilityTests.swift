@@ -33,9 +33,9 @@ struct MigrationCompatibilityTests {
 
     /// A migration no released version has: additive, as every migration must be (ADR-002). It adds a
     /// column to a synced table, a table with a foreign key to one, and an index.
-    static var migratorWithV003: DatabaseMigrator {
+    static var migratorWithTestOnly: DatabaseMigrator {
         var migrator = LedgerDatabase.migrator
-        migrator.registerMigration("v003_testOnly") { database in
+        migrator.registerMigration("v999_testOnly") { database in
             try database.execute(sql: """
             ALTER TABLE workout ADD COLUMN notes TEXT;
             CREATE TABLE workout_photo (
@@ -98,20 +98,22 @@ struct MigrationCompatibilityTests {
     }
 
     @Test("Criterion 12: migrating the v001 fixture to a later schema keeps every row, and it reads back")
-    func v003_keepsTheData() async throws {
+    func testOnlyMigration_keepsTheData() async throws {
         let directory = TemporaryDirectory()
         defer { try? directory.remove() } // cleanup only: a leftover temporary file fails nothing
         let queue = try DatabaseQueue(path: Self.fixtureCopy(in: directory).path(percentEncoded: false))
-        try Self.migratorWithV003.migrate(queue)
+        try Self.migratorWithTestOnly.migrate(queue)
         let (applied, orphans, notes) = try await queue.read { database in
             try (
-                Self.migratorWithV003.appliedIdentifiers(database),
+                Self.migratorWithTestOnly.appliedIdentifiers(database),
                 Row.fetchAll(database, sql: "PRAGMA foreign_key_check").count,
                 String.fetchAll(database, sql: "SELECT quote(notes) FROM workout")
             )
         }
-        // Through the real v002 (product decision #26's index), then the test-only v003.
-        #expect(applied == ["v001_createSchema", "v002_workoutStartedIndex", "v003_testOnly"])
+        // Through the real v002 (product decision #26's index) and v003 (F19), then the test-only one.
+        #expect(applied == [
+            "v001_createSchema", "v002_workoutStartedIndex", "v003_companionSync", "v999_testOnly"
+        ])
         #expect(orphans == 0)
         #expect(notes == ["NULL", "NULL", "NULL"])
         #expect(try await Self.rowCounts(in: queue) == Self.rowCounts)
@@ -177,7 +179,7 @@ extension MigrationCompatibilityTests {
         #expect(try await events.uncompactedWorkoutIDs() == [PayloadV1.workout])
         #expect(try await events.envelopes(for: PayloadV1.workout).count == 13)
         let applied = try await queue.read { try LedgerDatabase.migrator.appliedIdentifiers($0) }
-        #expect(applied == ["v001_createSchema", "v002_workoutStartedIndex"])
+        #expect(applied == ["v001_createSchema", "v002_workoutStartedIndex", "v003_companionSync"])
     }
 }
 

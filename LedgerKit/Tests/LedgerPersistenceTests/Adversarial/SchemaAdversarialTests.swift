@@ -31,7 +31,7 @@ struct SchemaAdversarialTests {
         #expect(try queue.read(SchemaTests.dump) == before)
         // Every migration once (S3 fix round 3 added v002, product decision #26).
         #expect(try queue.read(LedgerDatabase.migrator.appliedIdentifiers) == [
-            "v001_createSchema", "v002_workoutStartedIndex"
+            "v001_createSchema", "v002_workoutStartedIndex", "v003_companionSync"
         ])
         #expect(try queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM device") } == 1)
         #expect(try queue.read(LedgerDatabase.migrator.hasCompletedMigrations))
@@ -103,7 +103,13 @@ struct SchemaAdversarialTests {
             )
         }
         #expect(uniqueDDL == ["uidx_event_key"])
-        #expect(keys.allSatisfy { $0.hasSuffix(".id") || $0 == "workout_health.workout_id" }, "\(keys)")
+        // The local-only tables keyed by the row they describe: v001's health row and v003's companion rows (F19).
+        let naturalKeys = [
+            "workout_health.workout_id",
+            "finished_log.workout_id",
+            "companion_last_performance.exercise_id"
+        ]
+        #expect(keys.allSatisfy { $0.hasSuffix(".id") || naturalKeys.contains($0) }, "\(keys)")
         #expect(eventKey == ["workout_id", "device_id", "seq"])
         #expect(eventForeignKeys == 0)
     }

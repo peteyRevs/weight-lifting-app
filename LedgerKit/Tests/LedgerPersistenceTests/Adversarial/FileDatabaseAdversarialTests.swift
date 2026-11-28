@@ -94,7 +94,7 @@ struct FileDatabaseAdversarialTests {
         #expect(try await GRDBWorkoutEventStore(reopened).envelopes(for: Contract.workout) == [Contract.skip(1)])
         // Every migration once (S3 fix round 3 added v002, product decision #26).
         let migrations = try await reopened.read(LedgerDatabase.migrator.appliedIdentifiers)
-        #expect(migrations == ["v001_createSchema", "v002_workoutStartedIndex"])
+        #expect(migrations == ["v001_createSchema", "v002_workoutStartedIndex", "v003_companionSync"])
     }
 
     // MARK: Helpers
