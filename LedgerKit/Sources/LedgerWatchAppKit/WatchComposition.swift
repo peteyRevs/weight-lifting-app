@@ -182,8 +182,9 @@ public final class WatchComposition {
     }
 
     /// Binds the six stores, this device's id, the health store (F16 S3a), the live workout's host and the haptics its
-    /// screen plays (F18), the live connection (F17 S7b), and a UI test's moved date (F18 S7); binds nothing until the
-    /// database is open. The logger and the other device keys keep their live values (stubs until F19–F23).
+    /// screen plays (F18), the live connection (F17 S7b), the companion transport (F19) and a UI test's moved date
+    /// (F18 S7); binds nothing until the database is open. The logger and the other device keys keep their live values
+    /// (stubs until F20–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
@@ -197,6 +198,7 @@ public final class WatchComposition {
             if let transport {
                 values.liveConnection = transport
             }
+            bindCompanion(&values)
             bindUITestDate(&values)
         }
     }
@@ -213,6 +215,13 @@ public final class WatchComposition {
 }
 
 extension WatchComposition {
+    /// Binds the environment's companion transport, when it has one (F19).
+    func bindCompanion(_ values: inout DependencyValues) {
+        if let companion = environment.companionTransport {
+            values.companionTransport = companion
+        }
+    }
+
     /// What the launch touches outside itself, so a test runs it on a temporary directory with stand-ins.
     struct Environment {
         var databaseURL: URL
@@ -230,6 +239,8 @@ extension WatchComposition {
         var healthStore: (any HealthStore)?
         /// The live workout's WatchConnectivity channel (the activator's transport); nil connects no live sync.
         var watchConnectivity: (any LiveWorkoutTransport)?
+        /// The companion payloads over WatchConnectivity (the activator's `companion`, F19); nil binds none.
+        var companionTransport: (any CompanionTransport)?
         /// The live transports', the host's and the phone-start rule's timers.
         var syncClock: any Clock<Duration> = ContinuousClock()
         /// What starts the watch's own workout when the phone asked for one and its workout did not arrive within
@@ -245,8 +256,10 @@ extension WatchComposition {
             #if canImport(WatchConnectivity)
                 let activator = CompanionSessionActivator()
                 let liveChannel: (any LiveWorkoutTransport)? = activator.transport
+                let companion: (any CompanionTransport)? = activator.companion
             #else
                 let liveChannel: (any LiveWorkoutTransport)? = nil
+                let companion: (any CompanionTransport)? = nil
             #endif
             let launch = WatchUITest.live(arguments: arguments)
             #if os(watchOS)
@@ -272,6 +285,7 @@ extension WatchComposition {
                 processStart: ProcessStart.date()?.addingTimeInterval(offset),
                 healthStore: liveHealthStore,
                 watchConnectivity: liveChannel,
+                companionTransport: companion,
                 uiTest: launch
             )
         }

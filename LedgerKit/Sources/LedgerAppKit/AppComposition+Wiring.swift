@@ -35,9 +35,9 @@ extension AppComposition {
     }
 
     /// Binds the six stores, this device's id, the live workout's host, the haptics its cover plays and the
-    /// announcements it makes (F10 S6, S7), the health store (F16 S3a) and the live connection (F17 S7b); binds
-    /// nothing until the database is open. The app binds once, process-wide, through `prepareDependencies`; the
-    /// logger and the other device keys keep their live values (stubs until F18–F23).
+    /// announcements it makes (F10 S6, S7), the health store (F16 S3a), the live connection (F17 S7b) and the
+    /// companion transport (F19); binds nothing until the database is open. The app binds once, process-wide, through
+    /// `prepareDependencies`; the logger and the other device keys keep their live values (stubs until F20–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
@@ -46,6 +46,9 @@ extension AppComposition {
             }
             if let transport {
                 values.liveConnection = transport
+            }
+            if let companion = environment.companionTransport {
+                values.companionTransport = companion
             }
         }
         if let session {

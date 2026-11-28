@@ -51,7 +51,8 @@ final class Harness {
         uiTestHistoryWeeks: Int? = nil,
         healthStore: (any HealthStore)? = nil,
         makeHealthStore: ((HealthHooks) -> (any HealthStore)?)? = nil,
-        watchConnectivity: (any LiveWorkoutTransport)? = nil
+        watchConnectivity: (any LiveWorkoutTransport)? = nil,
+        companionTransport: (any CompanionTransport)? = nil
     ) -> AppComposition {
         AppComposition(
             AppComposition.Environment(
@@ -71,7 +72,8 @@ final class Harness {
                 seedsUITestProgram: seedsUITestProgram,
                 uiTestHistoryWeeks: uiTestHistoryWeeks,
                 makeHealthStore: makeHealthStore ?? { _ in healthStore },
-                watchConnectivity: watchConnectivity
+                watchConnectivity: watchConnectivity,
+                companionTransport: companionTransport
             )
         )
     }

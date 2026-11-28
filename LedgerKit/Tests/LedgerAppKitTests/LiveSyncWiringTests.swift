@@ -34,6 +34,20 @@ struct LiveSyncWiringTests {
         return envelopes.map(\.key)
     }
 
+    @Test("F19 S4: once the database is open, companionTransport is the environment's")
+    func bind_companionTransport() {
+        let harness = Harness()
+        defer { harness.remove() }
+        let companion = FakeCompanionTransport()
+        let composition = harness.composition(companionTransport: companion)
+        composition.boot()
+        let bound = withDependencies { composition.bind(&$0) } operation: {
+            @Dependency(\.companionTransport) var transport
+            return transport
+        }
+        #expect(bound as? FakeCompanionTransport === companion)
+    }
+
     @Test("Resuming connects the host: an own envelope reaches the watch, and liveConnection is the transport")
     func resume_connectsTheHost() async throws {
         let harness = Harness()
