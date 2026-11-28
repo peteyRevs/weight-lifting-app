@@ -229,6 +229,8 @@ let package = Package(
                 "WatchFeatureWorkout",
                 "LedgerDomain",
                 "LedgerDependencies",
+                // A UI test's Health store and seed program (`WatchUITest`), in Debug builds only.
+                "LedgerFakes",
                 "LedgerPersistence",
                 "LedgerHealth",
                 "LedgerSync",

@@ -50,6 +50,7 @@ private struct WatchSummaryPage: View {
                 .ledgerFont(.watchLabel)
                 .foregroundStyle(WatchTokens.accent(isLuminanceReduced: isLuminanceReduced))
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("workout.summary.title")
             Spacer(minLength: LedgerSpacing.s)
             WatchSummaryTile(
                 value: model.elapsed, caption: model.elapsedCaption, spoken: model.spoken.elapsed,
@@ -58,6 +59,7 @@ private struct WatchSummaryPage: View {
             Spacer(minLength: LedgerSpacing.s)
             HStack(alignment: .top, spacing: LedgerSpacing.m) {
                 WatchSummaryTile(value: model.sets, caption: model.setsCaption, spoken: model.spoken.sets)
+                    .accessibilityIdentifier("workout.summary.sets")
                 WatchSummaryTile(value: model.volume, caption: model.volumeCaption, spoken: model.spoken.volume)
             }
             Spacer(minLength: LedgerSpacing.s)
@@ -71,7 +73,7 @@ private struct WatchSummaryPage: View {
                 )
             }
             Spacer(minLength: LedgerSpacing.m)
-            WatchPill(model.done, style: .outlined, action: screen.done)
+            WatchPill(model.done, style: .outlined, action: screen.done).accessibilityIdentifier("workout.summary.done")
         }
         .padding(.horizontal, LedgerSpacing.m)
         .padding(.vertical, LedgerSpacing.s)

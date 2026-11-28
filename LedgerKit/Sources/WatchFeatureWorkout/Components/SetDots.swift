@@ -20,6 +20,7 @@ struct SetDots: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: accessibilitySummary))
+        .accessibilityAddTraits(.isStaticText)
     }
 
     @ViewBuilder private func dot(isDone: Bool) -> some View {

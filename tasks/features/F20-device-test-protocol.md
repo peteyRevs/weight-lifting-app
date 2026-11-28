@@ -119,3 +119,30 @@ screen that never heard the watch (a lifter with no watch). So:
 | F17-d | 12 (the line) | During F17-a, with VoiceOver on, move to the line. | VoiceOver reads "Watch not connected — logging continues" once, as text, and does not re-announce it while it stays. Minimize, Finish and every set row still answer. |
 
 Criteria 7 and 13 need the watch's screens (F18) to log a set on the wrist; until then they run with F18's first build.
+
+## Inputs from F18 (2026-11-27)
+
+F18's device halves, run on iPhone 17 + Apple Watch Series 9 with Ledger's watch app frontmost and Console open on the
+watch (subsystem `com.petearevalo.Ledger`, categories `watch.workout` and `health`). Everything else in F18 is proven by
+`WatchFeatureWorkoutTests` and, on the simulator, by `LedgerWatchUITests` (`WatchFlows`, `WatchAudit`; nightly). Paste
+the results into the run's results file; F18's definition of done points at these rows. Until
+F19 the watch's settings are the defaults (pounds, buzz on), so the kg and "buzz off" halves wait for F19's push.
+
+While F17-a runs, the watch's own line ("iPhone not connected — logging continues") shows under the set label and over
+the rest, and goes within 5 s of the reconnect; record it in F17-a's row.
+
+| # | Criterion | Steps | Expected |
+|---|---|---|---|
+| F18-a | 4 | On set-ready for the bench press (step 5 lb), turn the crown slowly up 4 detents, then down 4, then flick it fast. Repeat on a dumbbell exercise. | One haptic detent per step and the numeral moves by the step with each detent, with no visible lag (Instruments, `watch.crown` signpost: under one frame). No clamp buzz on the first turn. When the crown stops, the phone shows the new weight once. |
+| F18-b | 6 | Log a set, lower the wrist and wait for the rest to end. | At zero, one notification tap on the wrist with the wrist down. Raising the wrist then shows "GO", or set-ready once 1.2 s have passed. |
+| F18-c | 15 | Settings › Accessibility › Reduce Motion on; repeat F18-b with the wrist up. | At zero the title reads "GO" and the haptic plays, and the screen does not shake. With Reduce Motion off it shakes three times. |
+| F18-d | 12 (extends 14) | On set-ready, then during a rest, lower the wrist and wait at least 15 s; raise it. | Ledger stays on screen, dimmed (not the clock face): the orange dims, the set dots are outlined, the heart rate is hidden in its place, and nothing shifts. The rest countdown keeps ticking; the elapsed time updates at least once a minute. Raised, the screen is full again with no jump. |
+| F18-e | 13 (extends 1) | With the watch app not running, start a workout on the phone. | The watch app launches by itself (`handle(_ workoutConfiguration:)`) and shows set-ready of the phone's workout without a tap. |
+| F18-f | 13 (extends 7) | During a workout started on the watch, log a set, then force-quit the watch app (side button, swipe). Wait for the system to relaunch it, or open it. | `handleActiveWorkoutRecovery()` runs: set-ready of the same workout, the logged set kept, without a tap. The heart rate resumes on the same Health session; Health later holds one workout. |
+| F18-g | spec §9 (extends 8) | During a Ledger workout, start Apple's Workout app (Strength). Return to Ledger and log 2 sets, then save. | The banner "Apple Workout took over · logging continues" shows over every live screen; both sets log; the summary shows; no crash. Health holds Apple's workout and none from Ledger. |
+| F18-h | spec §9 | iPhone: Settings › Health › Data Access › Ledger, turn every category off. Start on the watch; log a set. | No Health sheet on the watch. Set-ready reads "— BPM" with the line "Allow Health in iPhone Settings" under it; after the first "Done set" the line goes and does not come back while the app runs. Logging and saving work; the summary's AVG BPM reads "—". Turn access back on afterwards. |
+| F18-i | 2, 5, 11 (extends 2) | With Health allowed, start on the watch and lift for 5 min. Compare with Apple's Heart Rate app afterwards. | A BPM shows on set-ready within 5 s of the start and moves with effort, also inside the rest ring. Save: the summary's AVG BPM equals Health's average for the workout, ±1. |
+| F18-j | F17 S5b, F18 S3 | With both apps on today's screen, tap "Start" on the phone and on the watch within 1 s of each other. Repeat 3 times. | Each time both devices show one workout, the winner's; the watch shows its set-ready without going through idle. Health holds one workout per run, and the watch shows no error. |
+| F18-k | 14 | VoiceOver on the watch. On set-ready swipe through every element; swipe up and down on the weight; double-tap "Done set"; on the rest, the list, the end overlay and the summary, swipe through. | "Weight, 185 pounds, adjustable"; a swipe up or down changes it by one step; "Decrease reps", "Increase reps" and "Done set" are buttons; the heart rate and the set dots read as text; the ring reads "Rest, 42 seconds remaining" (its seconds); each list row reads its name and scheme, done rows "All sets logged"; each summary tile reads as one phrase. |
+| F18-l | layout (DoD) | Run a workout to the summary on the Series 9, then on the 42 mm and 49 mm (Ultra) simulators, at the default text size and at the largest (Settings › Display & Brightness › Text Size). | Every screen fits, or scrolls whole to its last button; nothing is cut; the 3-digit weight shows whole at the default size and never shrinks below the 11 pt floor. Record a screenshot of set-ready and the rest per size. (The 49 mm snapshots are a follow-up; this row stands in until then.) |
+| F18-m | frontmost, battery | Charge to 100 %. Run a 60-minute workout from the watch: a set every 2–3 min, the wrist down between sets. | On every wrist raise Ledger is frontmost (the running Health session keeps it there; no `WKExtendedRuntimeSession`). Record the battery used in the hour, and the same for an hour of Apple's Workout (Strength) on another day, for comparison. |

@@ -27,7 +27,9 @@ public struct WatchRoot: View {
     @ViewBuilder private var content: some View {
         switch composition.state {
         case .ready:
-            WatchWorkoutRoot(appName: Bundle.main.appName, health: composition.health) { isDebugMenuShown = true }
+            WatchWorkoutRoot(
+                appName: Bundle.main.appName, health: composition.health, clockOffset: composition.clockOffset
+            ) { isDebugMenuShown = true }
             #if DEBUG
                 .sheet(isPresented: $isDebugMenuShown) {
                     DebugMenu { await composition.diagnostics() }

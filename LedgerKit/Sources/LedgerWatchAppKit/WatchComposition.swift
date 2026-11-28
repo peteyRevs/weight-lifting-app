@@ -42,6 +42,8 @@ public final class WatchComposition {
     /// life.
     private var liveSync: Task<Void, Never>?
     private var isCompanionActive = false
+    /// Whether `saveUITestProgramIfAsked()` has saved, or failed for good: it runs once.
+    var isUITestProgramDone = false
 
     init(_ environment: Environment) {
         self.environment = environment
@@ -124,6 +126,7 @@ public final class WatchComposition {
             return
         }
         await database.resume(isForeground: phase == .active)
+        await saveUITestProgramIfAsked()
         await connectLiveSync()
         if !isCompanionActive {
             environment.record(.began(.activateCompanionSession))
@@ -152,12 +155,16 @@ public final class WatchComposition {
             now: environment.now, newID: environment.newID, logger: environment.logger.category("watch.workout")
         )
         let startOwn = environment.startOwnWorkout ?? { await today.startOwnWorkout() }
+        let heartRateScript = uiTestHeartRateScript
         liveSync = Task {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await transport.run() }
                 group.addTask { await broadcast.run() }
                 group.addTask { await health.run(events: healthSessionEvents) }
                 group.addTask { await session.followPhoneStartRequests(phoneStarts, clock: clock, startOwn: startOwn) }
+                if let heartRateScript {
+                    group.addTask(operation: heartRateScript)
+                }
             }
         }
         await session.connect(transport, clock: clock)
@@ -175,8 +182,8 @@ public final class WatchComposition {
     }
 
     /// Binds the six stores, this device's id, the health store (F16 S3a), the live workout's host and the haptics its
-    /// screen plays (F18), and the live connection (F17 S7b); binds nothing until the database is open. The logger and
-    /// the other device keys keep their live values (stubs until F19–F23).
+    /// screen plays (F18), the live connection (F17 S7b), and a UI test's moved date (F18 S7); binds nothing until the
+    /// database is open. The logger and the other device keys keep their live values (stubs until F19–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
@@ -190,6 +197,7 @@ public final class WatchComposition {
             if let transport {
                 values.liveConnection = transport
             }
+            bindUITestDate(&values)
         }
     }
 
@@ -229,6 +237,8 @@ extension WatchComposition {
         var startOwnWorkout: (@Sendable () async -> Void)?
         /// The calendar today's day is scheduled in.
         var calendar: Calendar = .autoupdatingCurrent
+        /// What a UI test's arguments ask for (`WatchUITest`); nothing in the app.
+        var uiTest = WatchUITest.Launch()
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -238,16 +248,18 @@ extension WatchComposition {
             #else
                 let liveChannel: (any LiveWorkoutTransport)? = nil
             #endif
+            let launch = WatchUITest.live(arguments: arguments)
             #if os(watchOS)
-                let liveHealthStore: (any HealthStore)? = LiveHealthStore()
+                let liveHealthStore: (any HealthStore)? = launch.healthStore ?? LiveHealthStore()
             #else
-                let liveHealthStore: (any HealthStore)? = nil
+                let liveHealthStore: (any HealthStore)? = launch.healthStore
             #endif
+            let offset = launch.clockOffset ?? 0
             return Environment(
                 databaseURL: arguments.contains("-LEDGER_UITEST")
                     ? URL.temporaryDirectory.appending(path: "LedgerUITest-\(UUID().uuidString)/ledger.sqlite")
                     : LedgerStores.defaultURL,
-                now: { Date() },
+                now: { Date().addingTimeInterval(offset) },
                 newID: { UUID() },
                 logger: launchLogger,
                 record: { event in launchLogger.log.debug("Launch: \(String(describing: event), privacy: .public)") },
@@ -257,9 +269,10 @@ extension WatchComposition {
                     #endif
                 },
                 preparesDependencies: true,
-                processStart: ProcessStart.date(),
+                processStart: ProcessStart.date()?.addingTimeInterval(offset),
                 healthStore: liveHealthStore,
-                watchConnectivity: liveChannel
+                watchConnectivity: liveChannel,
+                uiTest: launch
             )
         }
     }

@@ -57,6 +57,7 @@ private struct WatchEndPage: View {
                     .ledgerFont(.watchStat)
                     .foregroundStyle(LedgerColor.watchInk)
                     .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("workout.end.title")
                 Text(verbatim: model.line)
                     .ledgerFont(.watchTitle)
                     .foregroundStyle(LedgerColor.watchInkSecondary)
@@ -64,25 +65,32 @@ private struct WatchEndPage: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: LedgerSpacing.m)
-            VStack(spacing: LedgerSpacing.s) {
-                if let save = screen.save {
-                    WatchPill(model.save, action: save)
-                }
-                if let discard = screen.discard {
-                    WatchPill(model.discard, style: .outlined, action: discard)
-                }
-                Button(action: screen.keepLifting) {
-                    Text(verbatim: model.keepLifting)
-                        .ledgerFont(.watchTitle)
-                        .foregroundStyle(LedgerColor.watchInkMuted)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity, minHeight: WatchTokens.stepButton)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
+            buttons
         }
         .padding(LedgerSpacing.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// "Save workout" or "Discard", then "Keep lifting".
+    private var buttons: some View {
+        VStack(spacing: LedgerSpacing.s) {
+            if let save = screen.save {
+                WatchPill(model.save, action: save).accessibilityIdentifier("workout.end.save")
+            }
+            if let discard = screen.discard {
+                WatchPill(model.discard, style: .outlined, action: discard)
+                    .accessibilityIdentifier("workout.end.discard")
+            }
+            Button(action: screen.keepLifting) {
+                Text(verbatim: model.keepLifting)
+                    .ledgerFont(.watchTitle)
+                    .foregroundStyle(LedgerColor.watchInkMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, minHeight: WatchTokens.stepButton)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("workout.end.keepLifting")
+        }
     }
 }
