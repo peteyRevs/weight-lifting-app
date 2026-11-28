@@ -9,6 +9,8 @@ extension AuditExclusionsTests {
     private static var workoutExcused: [ScreenIssue] {
         [
             issue("solo card", dynamicType, "REMAINING"),
+            issue("solo card", dynamicType, "Upper A — Push focus"),
+            issue("solo card", clipped, "Upper A — Push focus"),
             issue("solo card", clipped, "Minimize", type: .button, identifier: minimize),
             issue("rest panel", contrast, "5", frame: under, pinned: panel),
             issue("rest panel", contrast, "+ Add set", type: .button, frame: under, pinned: panel),
@@ -80,8 +82,11 @@ extension AuditExclusionsTests {
             ),
             // An eyebrow and a short line measured on one screen, met on another.
             issue("receipt", clipped, "Barbell Bench Press"),
-            issue("solo card", clipped, "Upper A — Push focus"),
+            issue("finish sheet", clipped, "Upper A — Push focus"),
             issue("receipt", dynamicType, "REMAINING"),
+            // The header's name in the eyebrow's drawn capitals: its label is the name as written.
+            issue("solo card", clipped, "UPPER A — PUSH FOCUS"),
+            issue("solo card", dynamicType, "UPPER A — PUSH FOCUS"),
             issue("solo card", contrast, "5", frame: under),
             issue("rest panel", contrast, "B", type: .other, frame: under, pinned: panel),
             issue("finish sheet", contrast, "Save workout", type: .button),

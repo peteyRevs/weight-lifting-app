@@ -32,7 +32,10 @@ struct WorkoutHeader: View {
             // VoiceOver reads "Minimize", the time, then "Finish" on one line or several, as in the one row.
             .accessibilityElement(children: .contain)
             VStack(alignment: .leading, spacing: LedgerSpacing.s) {
+                // The name as written, never the eyebrow's drawn capitals: `.textCase` reaches the label on some
+                // draws and not others, so one audit saw both (nightly 46089372923).
                 Eyebrow(model.title)
+                    .accessibilityLabel(Text(verbatim: model.title))
                     .accessibilityIdentifier("workout.header.title")
                 ProgressSegments(model.segments, label: model.progressLabel, value: model.progressValue)
                     .accessibilityIdentifier("workout.header.progress")
