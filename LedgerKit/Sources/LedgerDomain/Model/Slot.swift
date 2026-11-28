@@ -128,13 +128,13 @@ public extension Slot {
 
 // MARK: - Codable (re-validates)
 
-extension Slot {
+public extension Slot {
     private enum CodingKeys: String, CodingKey {
         case id, exerciseID, sets, reps, repsHi, rpe, rest, progression, startLoad, step
         case isSupersetWithPrevious, dropSets, misses
     }
 
-    public init(from decoder: any Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         try self.init(
             id: container.decode(SlotID.self, forKey: .id),
@@ -151,5 +151,25 @@ extension Slot {
             dropSets: container.decode(Int.self, forKey: .dropSets),
             misses: container.decode(Set<Int>.self, forKey: .misses)
         )
+    }
+
+    /// The synthesized encoding but for `misses`, written in ascending order: a set's own order changes from one
+    /// launch to the next, and the program file's bytes must not (F19 S5: the phone sends it again only when its
+    /// SHA-256 changes). The order is the only difference, so `init(from:)` reads both.
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(exerciseID, forKey: .exerciseID)
+        try container.encode(sets, forKey: .sets)
+        try container.encode(reps, forKey: .reps)
+        try container.encode(repsHi, forKey: .repsHi)
+        try container.encode(rpe, forKey: .rpe)
+        try container.encode(rest, forKey: .rest)
+        try container.encode(progression, forKey: .progression)
+        try container.encodeIfPresent(startLoad, forKey: .startLoad)
+        try container.encodeIfPresent(step, forKey: .step)
+        try container.encode(isSupersetWithPrevious, forKey: .isSupersetWithPrevious)
+        try container.encode(dropSets, forKey: .dropSets)
+        try container.encode(misses.sorted(), forKey: .misses)
     }
 }
