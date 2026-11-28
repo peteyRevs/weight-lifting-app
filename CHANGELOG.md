@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.23.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.22.0...v0.23.0) (2026-11-28)
+
+
+### Features
+
+* **domain:** companion types, codec and fake transport (F19 S2) ([#177](https://github.com/peteyRevs/weight-lifting-app/issues/177)) ([63bb775](https://github.com/peteyRevs/weight-lifting-app/commit/63bb775fc1b94544d6eda5b4dfa381795a14cc0e))
+* **domain:** the workout reconciler (F19 S1) ([#175](https://github.com/peteyRevs/weight-lifting-app/issues/175)) ([87b1ddc](https://github.com/peteyRevs/weight-lifting-app/commit/87b1ddc6b8aacdf96c38d0abcdb0e653e02527e1))
+* **health:** the HealthStore contract, its values and a scriptable fake (F16 S1) ([#128](https://github.com/peteyRevs/weight-lifting-app/issues/128)) ([411b5ba](https://github.com/peteyRevs/weight-lifting-app/commit/411b5ba2948aff3ab382ee66ea6ecdf688298dad))
+* **health:** the live store's session state machine: start, mirroring and heart rate (F16 S2a) ([#130](https://github.com/peteyRevs/weight-lifting-app/issues/130)) ([902e590](https://github.com/peteyRevs/weight-lifting-app/commit/902e5904efb4878297a7d50ba4b2a04580bb5689))
+* **health:** the phone asks the watch to start, saves a phone-only workout, reads a record (F16 S3b) ([#133](https://github.com/peteyRevs/weight-lifting-app/issues/133)) ([b01cfcc](https://github.com/peteyRevs/weight-lifting-app/commit/b01cfcc730396983e1edb87e069a73a232a474e6))
+* **health:** the phone's mirror receiver, and both apps' health wiring (F16 S3a) ([#132](https://github.com/peteyRevs/weight-lifting-app/issues/132)) ([c859750](https://github.com/peteyRevs/weight-lifting-app/commit/c859750611ceb7f0258b745b3067a67769b26a94))
+* **health:** the watch's HealthKit session, the end of a workout, takeover and recovery (F16 S2b) ([#131](https://github.com/peteyRevs/weight-lifting-app/issues/131)) ([66386d3](https://github.com/peteyRevs/weight-lifting-app/commit/66386d3b1a7bb8f17afa1d5925ffd1b1e4595412))
+* **persistence:** saveHealth/pendingHealth and the last-performance merge (F19 S3b) ([#182](https://github.com/peteyRevs/weight-lifting-app/issues/182)) ([6a0f9fc](https://github.com/peteyRevs/weight-lifting-app/commit/6a0f9fcac7731ac95242bafb68728fb71afa8b35))
+* **persistence:** v003_companionSync tables and CompanionStore (F19 S3a) ([#180](https://github.com/peteyRevs/weight-lifting-app/issues/180)) ([0bdcaea](https://github.com/peteyRevs/weight-lifting-app/commit/0bdcaeaf5825e3f5d5b65f15530f8eea112bcb29))
+* **sync:** live sync wired into both apps, and the liveConnection key (F17 S7b) ([#148](https://github.com/peteyRevs/weight-lifting-app/issues/148)) ([12ca728](https://github.com/peteyRevs/weight-lifting-app/commit/12ca728f3c5529c5a59f7ebaac40c0430d805b09))
+* **sync:** the double start, the earlier start wins and no logged set is lost (F17 S5b) ([#144](https://github.com/peteyRevs/weight-lifting-app/issues/144)) ([73eda4f](https://github.com/peteyRevs/weight-lifting-app/commit/73eda4fa4799556f0d6f88912759029ac3b7eda4))
+* **sync:** the health events broadcast and the watch's 5 s adopt-or-start rule (F17 S5a) ([#142](https://github.com/peteyRevs/weight-lifting-app/issues/142)) ([7522165](https://github.com/peteyRevs/weight-lifting-app/commit/7522165d5826582c46aee1179c41fc66de241c10))
+* **sync:** the host on a live transport, handshake and gap replay (F17 S4a) ([#140](https://github.com/peteyRevs/weight-lifting-app/issues/140)) ([c056dac](https://github.com/peteyRevs/weight-lifting-app/commit/c056dacaa6950c8d6b05e00f271ff8d9e8868678))
+* **sync:** the host takes the peer's envelopes (F17 S3) ([#139](https://github.com/peteyRevs/weight-lifting-app/issues/139)) ([66b7e6e](https://github.com/peteyRevs/weight-lifting-app/commit/66b7e6e52b120cdc447b6a5bd923507cacfdbf1f))
+* **sync:** the live transport contract and a fake network for it (F17 S2) ([#138](https://github.com/peteyRevs/weight-lifting-app/issues/138)) ([c93fd3b](https://github.com/peteyRevs/weight-lifting-app/commit/c93fd3b019aed4b842716bda4db438073532cb1b))
+* **sync:** the live wire format, WireFrame and WireCodec (F17 S1) ([#136](https://github.com/peteyRevs/weight-lifting-app/issues/136)) ([66f3e55](https://github.com/peteyRevs/weight-lifting-app/commit/66f3e55877c74f9a822d43524f077502e046a36e))
+* **sync:** the mirroring and composite transports, watchdog, batching and connection state (F17 S6) ([#145](https://github.com/peteyRevs/weight-lifting-app/issues/145)) ([8bf02c6](https://github.com/peteyRevs/weight-lifting-app/commit/8bf02c676aeabdcaeb2e88517c6e6ed910b98628))
+* **sync:** the WatchConnectivity transport and its one session delegate (F17 S7a) ([#146](https://github.com/peteyRevs/weight-lifting-app/issues/146)) ([38f0d42](https://github.com/peteyRevs/weight-lifting-app/commit/38f0d422bebff0dea245098255323e66a93f0958))
+* **sync:** WCCompanionTransport over the activator's WCSession (F19 S4) ([#184](https://github.com/peteyRevs/weight-lifting-app/issues/184)) ([9989797](https://github.com/peteyRevs/weight-lifting-app/commit/99897979e94d0d87332fe578a00dab41acac1705))
+* **watch:** Always-On, the UI flows and the device checks (F18 S7) ([#173](https://github.com/peteyRevs/weight-lifting-app/issues/173)) ([06e03cc](https://github.com/peteyRevs/weight-lifting-app/commit/06e03cc129f86995728d34c3ace7d52d271282fe))
+* **watch:** presentation derivations for the mode, set and rest screens (F18 S1) ([#158](https://github.com/peteyRevs/weight-lifting-app/issues/158)) ([ea6cb6d](https://github.com/peteyRevs/weight-lifting-app/commit/ea6cb6d956831054026900f1cf5e5d0517604187))
+* **watch:** rest zero, the GO window and haptics (F18 S2b) ([#164](https://github.com/peteyRevs/weight-lifting-app/issues/164)) ([71dcf1a](https://github.com/peteyRevs/weight-lifting-app/commit/71dcf1abf8427cb672e5842bbffede97744363b1))
+* **watch:** the end confirm (F18 S6b) ([#172](https://github.com/peteyRevs/weight-lifting-app/issues/172)) ([1ee2e62](https://github.com/peteyRevs/weight-lifting-app/commit/1ee2e627ba8244343563c6895a5a3ba86b55d0a2))
+* **watch:** the exercise list, the summary and the banners (F18 S6a) ([#169](https://github.com/peteyRevs/weight-lifting-app/issues/169)) ([156b19e](https://github.com/peteyRevs/weight-lifting-app/commit/156b19ebf7b6f49b644dd3713a8dddc97e929141))
+* **watch:** the HealthKit session follows the workout (F18 S3) ([#165](https://github.com/peteyRevs/weight-lifting-app/issues/165)) ([745aacd](https://github.com/peteyRevs/weight-lifting-app/commit/745aacd30da648b7c495fca84d8a878f09bc764d))
+* **watch:** the idle and summary presentation (F18 S1b) ([#159](https://github.com/peteyRevs/weight-lifting-app/issues/159)) ([b057a0c](https://github.com/peteyRevs/weight-lifting-app/commit/b057a0cb80cf73e46758068a66916967c850ec3a))
+* **watch:** the session list and end overlay presentation (F18 S1c) ([#160](https://github.com/peteyRevs/weight-lifting-app/issues/160)) ([fbb194f](https://github.com/peteyRevs/weight-lifting-app/commit/fbb194fab8b215de4264266d5d57b2930562f62c))
+* **watch:** the set-ready and rest screens (F18 S5b) ([#168](https://github.com/peteyRevs/weight-lifting-app/issues/168)) ([437962d](https://github.com/peteyRevs/weight-lifting-app/commit/437962d41ab7e2da4e70db50a7c4d419b71814eb))
+* **watch:** the watch components (F18 S4) ([#166](https://github.com/peteyRevs/weight-lifting-app/issues/166)) ([a8ed5ed](https://github.com/peteyRevs/weight-lifting-app/commit/a8ed5edb343b17f08097f097c4e48a47019d97ee))
+* **watch:** the workout root and the idle screen (F18 S5a) ([#167](https://github.com/peteyRevs/weight-lifting-app/issues/167)) ([b813daf](https://github.com/peteyRevs/weight-lifting-app/commit/b813daf62c198000a4d9f3e5e1cebbff8928b8fe))
+* **watch:** the workout store, intents, overlays and crown (F18 S2a) ([#163](https://github.com/peteyRevs/weight-lifting-app/issues/163)) ([d01bf70](https://github.com/peteyRevs/weight-lifting-app/commit/d01bf70c6d0c6ddca5c5edc5cb2bdb1a15f22c45))
+* **workout:** the watch-not-connected line and the F17 device checklist (F17 S8) ([#149](https://github.com/peteyRevs/weight-lifting-app/issues/149)) ([d1402a0](https://github.com/peteyRevs/weight-lifting-app/commit/d1402a08350013d3d12fe00a06d66fa467ddfacb))
+
+
+### Fixes
+
+* **ci:** the pre-validation's reported time comes from a clock the suite controls ([#178](https://github.com/peteyRevs/weight-lifting-app/issues/178)) ([#179](https://github.com/peteyRevs/weight-lifting-app/issues/179)) ([2dc27e4](https://github.com/peteyRevs/weight-lifting-app/commit/2dc27e413579e14a071a66147bfe50a80ded8ef7))
+* **test:** the phone's health wiring tests build only for iOS, so check.sh --fast builds on the Mac again ([#137](https://github.com/peteyRevs/weight-lifting-app/issues/137)) ([cc1a0dd](https://github.com/peteyRevs/weight-lifting-app/commit/cc1a0ddaaa7b19a739623a8707de14fe8ad003b7))
+* **workout:** the header's name keeps its case for VoiceOver and the audit ([#176](https://github.com/peteyRevs/weight-lifting-app/issues/176)) ([e60b547](https://github.com/peteyRevs/weight-lifting-app/commit/e60b5477e04de7d6451aa2e05e136d0a90826d9d))
+
 ## [0.22.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.21.1...v0.22.0) (2026-11-21)
 
 
