@@ -22,6 +22,10 @@ say() { # <notice|warning> <message>
     fi
 }
 
+# now: the clock in whole seconds, bash's SECONDS; CI_CAS_CLOCK names a command that prints it instead, the
+# adversarial suite's seam so a reported time is exact rather than a 1 s tick that may fall mid-run (#178).
+now() { if [[ -n "${CI_CAS_CLOCK:-}" ]]; then "$CI_CAS_CLOCK"; else echo "$SECONDS"; fi; }
+
 validate() {
     local cas="${1:-.derivedData/CompilationCache.noindex/builtin}" tool out status started took
     # llvm-cas creates a CAS that is missing, so a missing one is never handed to it.
@@ -30,9 +34,9 @@ validate() {
         say warning "no llvm-cas in the selected Xcode (${tool%%$'\n'*}); Xcode validates $cas itself"
         return
     fi
-    started=$SECONDS
+    started=$(now)
     out="$("$tool" --cas "$cas" --validate-if-needed --check-hash --allow-recovery --in-process 2>&1)"
-    status=$? took=$((SECONDS - started))
+    status=$? took=$(($(now) - started))
     out="${out%%$'\n'*}"
     if [[ $status -ne 0 ]]; then
         say warning "llvm-cas could not validate $cas (exit $status, $took s): ${out:-no output}; Xcode validates it itself"

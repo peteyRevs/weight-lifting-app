@@ -133,38 +133,46 @@ report "$T/skipped.xcresult"
 check "C10b ... and a slow ValidateCAS that recovered nothing warns of nothing" is "$(grep -c warning <<<"$out")" 0
 
 # ---- ci-cas-validate.sh -------------------------------------------------------------------------------------
-# Fake llvm-cas: logs its arguments, prints $FAKE_CAS_OUT and exits $FAKE_CAS_STATUS (default 0).
+# Fake llvm-cas: logs its arguments, moves the fake clock on by $FAKE_CAS_TAKES seconds (default 0), prints
+# $FAKE_CAS_OUT and exits $FAKE_CAS_STATUS (default 0). The fake clock (the script's CI_CAS_CLOCK seam) prints
+# $CAS_CLOCK's seconds, so a reported time is exact, never bash's 1 s SECONDS ticking mid-run (#178).
 VALIDATE="$ROOT/scripts/ci-cas-validate.sh"
 cat >"$T/bin/llvm-cas" <<'SH'
 #!/bin/sh
 printf '%s\n' "$*" >>"${CAS_LOG:-/dev/null}"
+[ -z "${FAKE_CAS_TAKES:-}" ] || echo $(($(cat "$CAS_CLOCK") + FAKE_CAS_TAKES)) >"$CAS_CLOCK"
 [ -z "${FAKE_CAS_OUT:-}" ] || printf '%s\n' "$FAKE_CAS_OUT"
 exit "${FAKE_CAS_STATUS:-0}"
 SH
-chmod +x "$T/bin/llvm-cas"
-export CAS_LOG="$T/cas.log"
+printf '#!/bin/sh\ncat "$CAS_CLOCK"\n' >"$T/bin/cas-clock"
+chmod +x "$T/bin/llvm-cas" "$T/bin/cas-clock"
+export CAS_LOG="$T/cas.log" CAS_CLOCK="$T/cas.clock" CI_CAS_CLOCK="$T/bin/cas-clock"
+echo 1000 >"$CAS_CLOCK"
 mkdir -p "$T/restored/builtin"
 validate() { : >"$CAS_LOG"; out="$(FAKE_LLVM_CAS="${FAKE_LLVM_CAS-$T/bin/llvm-cas}" "$VALIDATE" "$@" 2>&1)"; code=$?; }
 
-FAKE_CAS_OUT="validated successfully" GITHUB_ACTIONS=true validate "$T/restored/builtin"
+FAKE_CAS_OUT="validated successfully" FAKE_CAS_TAKES=31 GITHUB_ACTIONS=true validate "$T/restored/builtin"
 check "V01 validated: a notice with the outcome and its time, exit 0" \
-    is "$code|$out" "0|::notice title=Compilation cache::pre-validation: validated successfully, 0 s"
+    is "$code|$out" "0|::notice title=Compilation cache::pre-validation: validated successfully, 31 s"
 check "V01b ... running llvm-cas in-process, on the CAS named, with Xcode's own flags" \
     is "$(cat "$CAS_LOG")" "--cas $T/restored/builtin --validate-if-needed --check-hash --allow-recovery --in-process"
-FAKE_CAS_OUT="validation skipped" validate "$T/restored/builtin"
+FAKE_CAS_OUT="validated successfully" CI_CAS_CLOCK="" validate "$T/restored/builtin"
+check "V01c ... and without the seam, bash's own clock gives the time in whole seconds" \
+    grep -Eqx 'compilation cache: pre-validation: validated successfully, [0-9]+ s' <<<"$out"
+FAKE_CAS_OUT="validation skipped" FAKE_CAS_TAKES=0 validate "$T/restored/builtin"
 check "V02 skipped (already validated this boot): a notice, exit 0" \
     is "$code|$out" "0|compilation cache: pre-validation: validation skipped, 0 s"
-FAKE_CAS_OUT="recovered from invalid data" GITHUB_ACTIONS=true validate "$T/restored/builtin"
+FAKE_CAS_OUT="recovered from invalid data" FAKE_CAS_TAKES=184 GITHUB_ACTIONS=true validate "$T/restored/builtin"
 check "V03 recovered: a warning that the cache was dropped and the build is cold, exit 0" \
-    is "$code|$out" "0|::warning title=Compilation cache::pre-validation: recovered from invalid data, 0 s: the restored cache was invalid and is dropped, so this build is cold"
+    is "$code|$out" "0|::warning title=Compilation cache::pre-validation: recovered from invalid data, 184 s: the restored cache was invalid and is dropped, so this build is cold"
 validate "$T/never-restored/builtin"
 check "V04 no cache directory: says so, exit 0, and never runs llvm-cas (it would create one)" \
     is "$code|$out|$(wc -l <"$CAS_LOG" | tr -d ' ')|$([[ -e "$T/never-restored" ]] && echo created)" \
     "0|compilation cache: no compilation cache at $T/never-restored/builtin, nothing to validate|0|"
 FAKE_CAS_OUT="llvm-cas: validate-if-needed: bad data for digest 'AB': data record span passed the end of the data pool" \
-    FAKE_CAS_STATUS=1 GITHUB_ACTIONS=true validate "$T/restored/builtin"
+    FAKE_CAS_STATUS=1 FAKE_CAS_TAKES=2 GITHUB_ACTIONS=true validate "$T/restored/builtin"
 check "V05 llvm-cas failing: a warning quoting it, exit 0" \
-    is "$code|$out" "0|::warning title=Compilation cache::llvm-cas could not validate $T/restored/builtin (exit 1, 0 s): llvm-cas: validate-if-needed: bad data for digest 'AB': data record span passed the end of the data pool; Xcode validates it itself"
+    is "$code|$out" "0|::warning title=Compilation cache::llvm-cas could not validate $T/restored/builtin (exit 1, 2 s): llvm-cas: validate-if-needed: bad data for digest 'AB': data record span passed the end of the data pool; Xcode validates it itself"
 FAKE_LLVM_CAS="" validate "$T/restored/builtin"
 check "V06 no llvm-cas in the Xcode: a warning, exit 0" \
     is "$code|${out%%(*}|$(wc -l <"$CAS_LOG" | tr -d ' ')" "0|compilation cache: warning: no llvm-cas in the selected Xcode |0"
