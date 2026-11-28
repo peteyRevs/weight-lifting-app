@@ -14,14 +14,17 @@
         let history: ObservedState<InMemoryHistory>
         private let programs: InMemoryProgramRepository
         private let events: InMemoryWorkoutEventStore?
+        private let companion: InMemoryCompanionStore?
 
         /// Holding `workouts`, each materialised in order (one that would fail is left out); slot and program
         /// updates go to `programs`. With `events` (as `InMemoryStores` gives it), a save can drop the workout's
-        /// log in the same step; without, this repository holds no log, and says so.
+        /// log in the same step; without, this repository holds no log, and says so. With `companion`, the
+        /// finished logs `pendingHealth()` reads; without, no workout is pending.
         public init(
             programs: InMemoryProgramRepository = InMemoryProgramRepository(),
             workouts: [WorkoutState] = [],
-            events: InMemoryWorkoutEventStore? = nil
+            events: InMemoryWorkoutEventStore? = nil,
+            companion: InMemoryCompanionStore? = nil
         ) {
             var initial = InMemoryHistory()
             for workout in workouts where workout.phase == .finished && workout.endedAt != nil {
@@ -33,6 +36,7 @@
             history = ObservedState(initial)
             self.programs = programs
             self.events = events
+            self.companion = companion
         }
 
         /// Returns whether the log went with the save: only when asked, and only when an event store is linked,
@@ -144,6 +148,35 @@
         /// The live workout `id` with its records now, then after every write that changes either (F13 S2).
         public func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
             history.observe { $0.recorded(id) }
+        }
+    }
+
+    /// `WorkoutHealthRepository` beside the history, under its lock (F19 S3b). The pending list reads the companion
+    /// store's logs first, then the history: two locks one after the other, never one inside the other.
+    extension InMemoryWorkoutRepository: WorkoutHealthRepository {
+        public func saveHealth(_ health: WorkoutHealth, of workout: WorkoutID) async throws {
+            try history.write { current throws(RepositoryError) in
+                guard let entry = current.entries[workout], !entry.isDeleted else {
+                    throw .missingRow("workout \(workout.rawValue.uuidString)")
+                }
+                current.health[workout] = health
+            }
+        }
+
+        public func health(of workout: WorkoutID) async throws -> WorkoutHealth? {
+            history.read { $0.health[workout] }
+        }
+
+        public func pendingHealth() async throws -> [PendingHealth] {
+            let logs = companion?.healthLogs() ?? []
+            return history.read { current in
+                logs.filter { log in
+                    current.entries[log.workoutID].map { !$0.isDeleted } == true && current.health[log.workoutID] == nil
+                }
+            }.sorted { left, right in
+                (left.createdAt, left.workoutID.rawValue.uuidString)
+                    < (right.createdAt, right.workoutID.rawValue.uuidString)
+            }
         }
     }
 #endif

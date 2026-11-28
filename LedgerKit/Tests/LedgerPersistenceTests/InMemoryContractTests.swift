@@ -64,6 +64,25 @@ struct InMemoryContractTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
+    @Test("The linked InMemoryWorkoutRepository keeps the health clause", arguments: WorkoutHealthContract.clauses)
+    func health_keepsTheContract(_ clause: WorkoutHealthContract.Clause) async throws {
+        let stores = try await Self.stores()
+        let history = HistoryStores(workouts: stores.workouts, stats: stores.stats, programs: stores.programs)
+        let issue = try await clause.check(
+            WorkoutHealthStores(health: stores.workouts, history: history, companion: stores.companion)
+        )
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
+    @Test("Without a companion store, a workout store has no pending health")
+    func unlinkedWorkouts_haveNoPendingHealth() async throws {
+        let workout = WorkoutRepositoryContract.workout()
+        let unlinked = InMemoryWorkoutRepository(workouts: [workout])
+        #expect(try await unlinked.pendingHealth() == [])
+        try await unlinked.saveHealth(WorkoutHealthContract.health(1), of: workout.id)
+        #expect(try await unlinked.health(of: workout.id) == WorkoutHealthContract.health(1))
+    }
+
     @Test("InMemoryCompanionStore keeps the contract clause", arguments: CompanionStoreContract.clauses)
     func companion_keepsTheContract(_ clause: CompanionStoreContract.Clause) async throws {
         let issue = try await clause.check(InMemoryCompanionStore())

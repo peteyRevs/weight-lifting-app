@@ -36,6 +36,7 @@
             stores.workouts.reset()
             stores.programs.reset()
             stores.events.reset()
+            stores.companion.reset()
             stores.settings.reset(to: restored)
         }
     }
