@@ -209,4 +209,26 @@ extension UnimplementedStubTests {
         #expect(await Self.isEmpty(stub.incoming))
         #expect(await Self.isEmpty(stub.link))
     }
+
+    @Test("The companion transport's stub throws from every send, ends every stream and reads as unpaired")
+    func companionTransport() async {
+        let stub = CompanionTransportKey.liveValue
+        let context = CompanionContext(
+            revision: 1, programID: nil, programName: nil, weekIndex: 0, weekCount: 0, isDeload: false,
+            nextDay: nil, settings: WatchSettings(Fixtures.settingsLb), acknowledgedWorkoutIDs: []
+        )
+        let record = FinishedWorkoutRecord(
+            workoutID: Self.workout, log: [], healthKitUUID: nil, finishedAt: Fixtures.now, device: Fixtures.deviceID
+        )
+        await Self.expectUnimplemented("companionTransport", [
+            { try await stub.updateContext(context) },
+            { try await stub.transfer(.workoutLog(record)) },
+            { try await stub.enqueue(record) }
+        ])
+        #expect(await Self.isEmpty(stub.receivedContext))
+        #expect(await Self.isEmpty(stub.receivedFiles))
+        #expect(await Self.isEmpty(stub.receivedRecords))
+        #expect(await stub.isPaired == false)
+        #expect(await stub.isWatchAppInstalled == false)
+    }
 }

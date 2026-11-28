@@ -156,7 +156,34 @@ private struct BriefStatsQueries: StatsQueries {
     }
 }
 
-private struct BriefShapes: CompanionTransport {}
+/// F19's `CompanionTransport`, from the brief's signatures.
+private struct BriefShapes: CompanionTransport {
+    var receivedContext: AsyncStream<CompanionContext> {
+        AsyncStream { $0.finish() }
+    }
+
+    var receivedFiles: AsyncStream<CompanionFile> {
+        AsyncStream { $0.finish() }
+    }
+
+    var receivedRecords: AsyncStream<FinishedWorkoutRecord> {
+        AsyncStream { $0.finish() }
+    }
+
+    var isPaired: Bool {
+        get async { false }
+    }
+
+    var isWatchAppInstalled: Bool {
+        get async { false }
+    }
+
+    func updateContext(_: CompanionContext) async throws {}
+
+    func transfer(_: CompanionFile) async throws {}
+
+    func enqueue(_: FinishedWorkoutRecord) async throws {}
+}
 
 /// F17's `LiveWorkoutTransport`, from the brief's signatures.
 private struct BriefLiveWorkoutTransport: LiveWorkoutTransport {

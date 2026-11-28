@@ -2,10 +2,10 @@
     import Foundation
     import LedgerDomain
 
-    // Fakes of the device protocols, for previews and tests (`FakeHealthStore` and `FakeLiveWorkoutTransport` have
-    // their own files). A protocol with no method yet (the companion transport and the Live Activity are shaped by
-    // F19 and F21) has a fake that records nothing: the brief that adds a method grows its fake with scriptable
-    // answers and recorded calls.
+    // Fakes of the device protocols, for previews and tests (`FakeHealthStore`, `FakeLiveWorkoutTransport` and
+    // `FakeCompanionTransport` have their own files). A protocol with no method yet (the Live Activity is shaped by
+    // F21) has a fake that records nothing: the brief that adds a method grows its fake with scriptable answers and
+    // recorded calls.
 
     /// `LiveConnectionClient` for previews and tests. Made with a state alone, each stream holds that state and ends.
     /// Made `scripted` (F17 S8), each reader's stream holds the state now, then each `change(to:)`, until `end()`; a
@@ -48,11 +48,6 @@
             }
             readers = []
         }
-    }
-
-    /// `CompanionTransport` for previews and tests; F19 adds recorded transfers.
-    public struct FakeCompanionTransport: CompanionTransport {
-        public init() {}
     }
 
     /// `HapticsClient` for previews and tests: it plays nothing and records what it was asked to play.

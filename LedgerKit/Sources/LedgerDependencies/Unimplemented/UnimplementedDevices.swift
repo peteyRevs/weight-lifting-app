@@ -108,7 +108,44 @@ struct UnimplementedLiveConnection: LiveConnectionClient {
     }
 }
 
-struct UnimplementedCompanionTransport: CompanionTransport {}
+/// Every call throws, every stream ends at once, and it reads as unpaired.
+struct UnimplementedCompanionTransport: CompanionTransport {
+    let stub = Unimplemented(key: "companionTransport")
+
+    var receivedContext: AsyncStream<CompanionContext> {
+        stub.emptyStream()
+    }
+
+    var receivedFiles: AsyncStream<CompanionFile> {
+        stub.emptyStream()
+    }
+
+    var receivedRecords: AsyncStream<FinishedWorkoutRecord> {
+        stub.emptyStream()
+    }
+
+    var isPaired: Bool {
+        stub.log(#function)
+        return false
+    }
+
+    var isWatchAppInstalled: Bool {
+        stub.log(#function)
+        return false
+    }
+
+    func updateContext(_: CompanionContext) async throws {
+        throw stub.failure()
+    }
+
+    func transfer(_: CompanionFile) async throws {
+        throw stub.failure()
+    }
+
+    func enqueue(_: FinishedWorkoutRecord) async throws {
+        throw stub.failure()
+    }
+}
 
 struct UnimplementedHaptics: HapticsClient {
     let stub = Unimplemented(key: "haptics")

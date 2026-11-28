@@ -72,7 +72,3 @@ public protocol LiveConnectionClient: Sendable {
     /// The state now, then each change, until the connection's owner stops.
     func states() async -> AsyncStream<LiveConnectionState>
 }
-
-/// Non-live phone ⇄ watch transfer: programs, settings, finished workouts (architecture §8).
-/// Shape only: full contract in F19.
-public protocol CompanionTransport: Sendable {}
