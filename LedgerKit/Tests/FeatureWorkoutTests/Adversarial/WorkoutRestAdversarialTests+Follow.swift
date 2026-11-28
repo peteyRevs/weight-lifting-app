@@ -87,16 +87,14 @@ extension WorkoutRestAdversarialTests {
         following.cancel()
     }
 
-    /// **As built, for F18** (ruling 21 records that `follow()` awaits the haptics client, so a client must
-    /// return at once; the phone's does). What a client that does not would meet: `follow()` does not stop
-    /// at its task's cancellation. It goes on with what its stream had buffered, and when it ends it marks
-    /// the store as not hearing the session. A follow cancelled while it waits in a slow `play` overlaps
-    /// the follow that replaces it: the new one plays the set the old one had not shown (`missedHaptics`),
-    /// the old one then shows and plays it too, and at its end the pump is told the store hears nothing, so
-    /// taps wait until the follow starts yet again. A check of `Task.isCancelled` in the loop ends all
-    /// three. When F18 builds its client, this test changes with it.
-    @Test("As built (F18): a follow cancelled inside a slow haptic plays a set twice and leaves the taps waiting")
-    func followCancelled_duringASlowHaptic_asBuilt() async throws {
+    /// Ruling 21 records that `follow()` awaits the haptics client, so a client must return at once; the
+    /// phone's does. A follow cancelled while it waits in a slow `play` overlaps the follow that replaces it,
+    /// as one cancelled in its stream's wait can (#185). Once replaced it touches the store no more: the new
+    /// one plays the set the old one had not shown (`missedHaptics`), the old one does not show or play it
+    /// again, and its end does not tell the pump the store hears nothing, so a tap made then is applied. It
+    /// once did all three: a set was felt twice and the taps waited until the follow started yet again.
+    @Test("A follow cancelled inside a slow haptic, then replaced, plays no set twice and leaves the taps flowing")
+    func followCancelled_duringASlowHaptic_isReplaced() async throws {
         let gated = Gated()
         let (session, store, haptics, rows) = (gated.session, gated.store, gated.haptics, gated.rows)
         let first = Task { await store.follow() }
@@ -108,26 +106,19 @@ extension WorkoutRestAdversarialTests {
         await giveWay()
         // The first follow is still in the first set's haptic. The view goes and comes back.
         first.cancel()
-        var second = Task { await store.follow() }
+        let second = Task { await store.follow() }
         await observed("the second follow to show both sets") { store.shown?.doneSets == 2 }
         for _ in 0 ..< 4 {
             await haptics.release()
             await giveWay()
         }
         await first.value
-        #expect(await haptics.played == [.setLogged, .setLogged, .setLogged], "two sets, three buzzes")
-        #expect(!store.isHearingTheSession, "the follow that ended last says the store hears nothing")
+        #expect(await haptics.played == [.setLogged, .setLogged], "two sets, two buzzes")
+        #expect(store.isHearingTheSession, "the follow that replaced it still hears the session")
         store.send(.edit(.stepReps(exerciseIndex: 0, setID: rows[2].id, .increment)))
         await store.drain()
-        #expect(await session.applied.isEmpty, "a tap made now waits")
-        // It is applied when the follow starts again, and nothing more is felt.
-        second.cancel()
-        await second.value
-        second = Task { await store.follow() }
-        await eventually("the follow to hear the session") { store.isHearingTheSession }
-        await store.drain()
-        #expect(await session.applied.count == 1)
-        #expect(await haptics.played.count == 3)
+        #expect(await session.applied.count == 1, "a tap made now is applied")
+        #expect(await haptics.played.count == 2, "and nothing more is felt")
         second.cancel()
     }
 

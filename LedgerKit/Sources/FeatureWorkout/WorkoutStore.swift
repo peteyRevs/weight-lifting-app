@@ -74,8 +74,10 @@ final class WorkoutStore {
     /// taken off a queue that has since been filled with other taps.
     @ObservationIgnored var queueEpoch = 0
     /// True from the first update of the stream being followed until that stream is left: only then is the
-    /// workout on screen the session's, and only then are taps planned.
+    /// workout on screen the session's, and only then are taps planned. Only the newest `follow()` sets it.
     @ObservationIgnored var isHearingTheSession = false
+    /// Counts the runs of `follow()`, so that one a later run has replaced leaves the store alone (#185).
+    @ObservationIgnored private var followRun = 0
     /// Wakes `pump()` when a tap is queued; nil while no pump runs, and the tap then waits for the next.
     @ObservationIgnored var wake: AsyncStream<Void>.Continuation?
     /// The session's answer to the last change, until the stream has shown it: the workout the next tap is
@@ -205,14 +207,21 @@ extension WorkoutStore {
     /// update has arrived. That first update carries no haptics, so what changed on the page between the
     /// follow before and this one is played here, as the engine says a change between two states is felt
     /// (`missedHaptics`): a set logged just before the cover's tasks started again is felt, once.
+    ///
+    /// The follow it replaced is cancelled but not waited for, as SwiftUI restarts a `.task`, so the two can
+    /// overlap. The replaced one touches the store no more: ending after the new one has heard, it would
+    /// say the store hears nothing, and the taps would wait for an update that may never come (#185).
     func follow() async {
         if case .idle = workout {
             workout = .loading
         }
-        ahead = nil
-        isHearingTheSession = false
-        defer { isHearingTheSession = false }
-        for await update in await session.updates() {
+        let run = beginFollowing()
+        defer {
+            if run == followRun {
+                isHearingTheSession = false
+            }
+        }
+        for await update in await session.updates() where run == followRun {
             guard let live = update.live else {
                 if let ended = update.state, isSavedHere(ended) {
                     showReceipt(ended)
@@ -241,10 +250,19 @@ extension WorkoutStore {
             }
             await play(missed + update.haptics + recordHaptics(in: live))
         }
-        guard !Task.isCancelled, exit == nil else {
+        guard !Task.isCancelled, exit == nil, run == followRun else {
             return
         }
         loseTheSession()
+    }
+
+    /// A run of `follow()` begins, the newest: it hears nothing until its stream's first update, and an answer
+    /// kept from before is forgotten. Its number, which a later run makes stale.
+    private func beginFollowing() -> Int {
+        followRun += 1
+        ahead = nil
+        isHearingTheSession = false
+        return followRun
     }
 
     /// Hears the live connection to the watch for as long as the cover is up (F17 criterion 12): the state shown,
@@ -275,23 +293,5 @@ extension WorkoutStore {
         dismiss([.finish, .swap])
         workout = .failed(WorkoutStoreError.updatesEnded)
         settled?.wake.yield()
-    }
-
-    /// Why the cover closes on an update whose workout is not live. No workout at all, which only a
-    /// stream's first update can say, has nothing to tell, but in two cases: this store asked the session
-    /// to save the workout and never heard the answer (the cover's tasks started again meanwhile), and the
-    /// host completes that call in a task of its own, so the workout is the one being saved; or this store's
-    /// discard was cancelled and the session said the workout was gone (`discard()`), so it was discarded.
-    private func exit(for ended: WorkoutState?) -> WorkoutExit {
-        guard let ended else {
-            if isSaving, let save = pendingSave, save.wasSent {
-                return .route(.saved(save.id))
-            }
-            if isDiscardConfirmed {
-                return .route(.discarded)
-            }
-            return .nothingToShow
-        }
-        return .route(ended.phase == .finished ? .saved(ended.id) : .discarded)
     }
 }
