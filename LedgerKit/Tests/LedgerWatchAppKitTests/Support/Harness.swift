@@ -43,6 +43,7 @@ final class Harness {
         processStart: Date? = nil,
         healthStore: (any HealthStore)? = nil,
         watchConnectivity: (any LiveWorkoutTransport)? = nil,
+        companionTransport: (any CompanionTransport)? = nil,
         syncClock: any Clock<Duration> = ContinuousClock(),
         startOwnWorkout: @escaping @Sendable () async -> Void = {},
         uiTest: WatchUITest.Launch = WatchUITest.Launch()
@@ -59,6 +60,7 @@ final class Harness {
                 processStart: processStart,
                 healthStore: healthStore,
                 watchConnectivity: watchConnectivity,
+                companionTransport: companionTransport,
                 syncClock: syncClock,
                 startOwnWorkout: startOwnWorkout,
                 uiTest: uiTest

@@ -233,6 +233,8 @@ extension AppComposition {
         var makeHealthStore: (HealthHooks) -> (any HealthStore)? = { _ in nil }
         /// The live workout's WatchConnectivity channel (the activator's transport); nil connects no live sync.
         var watchConnectivity: (any LiveWorkoutTransport)?
+        /// The companion payloads over WatchConnectivity (the activator's `companion`, F19); nil binds none.
+        var companionTransport: (any CompanionTransport)?
         /// The live transports' and the host's timers.
         var syncClock: any Clock<Duration> = ContinuousClock()
 
@@ -242,8 +244,10 @@ extension AppComposition {
             #if canImport(WatchConnectivity)
                 let activator = CompanionSessionActivator()
                 let liveChannel: (any LiveWorkoutTransport)? = activator.transport
+                let companion: (any CompanionTransport)? = activator.companion
             #else
                 let liveChannel: (any LiveWorkoutTransport)? = nil
+                let companion: (any CompanionTransport)? = nil
             #endif
             let offset = UITestClock.liveOffset(arguments: arguments)
             let isUITest = arguments.contains("-LEDGER_UITEST")
@@ -270,7 +274,8 @@ extension AppComposition {
                 regionalSettings: UITestRegion.liveSettings(isUITest: isUITest),
                 colorScheme: UITestAppearance.liveColorScheme(arguments: arguments),
                 makeHealthStore: health.makeStore,
-                watchConnectivity: liveChannel
+                watchConnectivity: liveChannel,
+                companionTransport: companion
             )
         }
     }
