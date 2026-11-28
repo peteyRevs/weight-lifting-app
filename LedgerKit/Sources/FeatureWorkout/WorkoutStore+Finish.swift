@@ -182,6 +182,24 @@ extension WorkoutStore {
         }
     }
 
+    /// Why the cover closes on an update whose workout is not live. No workout at all, which only a
+    /// stream's first update can say, has nothing to tell, but in two cases: this store asked the session
+    /// to save the workout and never heard the answer (the cover's tasks started again meanwhile), and the
+    /// host completes that call in a task of its own, so the workout is the one being saved; or this store's
+    /// discard was cancelled and the session said the workout was gone (`discard()`), so it was discarded.
+    func exit(for ended: WorkoutState?) -> WorkoutExit {
+        guard let ended else {
+            if isSaving, let save = pendingSave, save.wasSent {
+                return .route(.saved(save.id))
+            }
+            if isDiscardConfirmed {
+                return .route(.discarded)
+            }
+            return .nothingToShow
+        }
+        return .route(ended.phase == .finished ? .saved(ended.id) : .discarded)
+    }
+
     /// Judges the ending update that waited for `finish`'s answer, if one did, as any ending update is
     /// judged: true when it decided the cover's outcome.
     @discardableResult
