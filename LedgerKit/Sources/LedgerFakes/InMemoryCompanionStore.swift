@@ -63,6 +63,27 @@
             }
         }
 
+        /// Every stored log that names a HealthKit UUID, acknowledged or not, in no order: what
+        /// `InMemoryWorkoutRepository.pendingHealth()` reads, as the database joins `finished_log`.
+        func healthLogs() -> [PendingHealth] {
+            stored.withLock { stored in
+                stored.logs.values.compactMap { entry in
+                    entry.record.healthKitUUID.map { uuid in
+                        PendingHealth(
+                            workoutID: entry.record.workoutID,
+                            healthKitUUID: uuid,
+                            createdAt: entry.createdAt
+                        )
+                    }
+                }
+            }
+        }
+
+        /// Forgets everything, as "Delete all data" empties the tables (`InMemoryDataReset`).
+        func reset() {
+            stored.withLock { $0 = Stored() }
+        }
+
         public func state() async throws -> CompanionState {
             stored.withLock(\.state)
         }

@@ -17,6 +17,8 @@
         /// The workout each exercise and set id belongs to, kept after a delete: the ids stay taken.
         var exerciseOwners: [WorkoutExerciseID: WorkoutID] = [:]
         var setOwners: [SetID: WorkoutID] = [:]
+        /// Each workout's HealthKit statistics (`workout_health`), kept after a delete as the row is (F19 S3b).
+        var health: [WorkoutID: WorkoutHealth] = [:]
 
         // MARK: Reads
 

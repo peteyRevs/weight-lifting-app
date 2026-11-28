@@ -3,7 +3,8 @@
     import IssueReporting
     import LedgerDomain
 
-    /// The six in-memory stores, linked where one database links them: the stats read the workouts' history; a
+    /// The in-memory stores, linked where one database links them: the stats read the workouts' history, and the
+    /// workouts' pending health the companion store's finished logs; a
     /// materialised workout's slot updates and program updates reach the programs in the same step, and its
     /// event log is dropped in that step when the save is asked to
     /// (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`); and a program saved with a slot naming an
@@ -68,6 +69,8 @@
         public let stats: InMemoryStatsQueries
         public let settings: InMemorySettingsRepository
         public let events: InMemoryWorkoutEventStore
+        /// The companion tables (F19), whose finished logs the workouts' pending health reads.
+        public let companion: InMemoryCompanionStore
 
         /// "Delete all data" over these stores (F14 S3), seeding the bundled catalog.
         public var reset: InMemoryDataReset {
@@ -83,7 +86,13 @@
             exercises = InMemoryExerciseRepository(catalog: seed.catalog, version: seed.catalogVersion)
             programs = InMemoryProgramRepository(programs: seed.programs, exercises: exercises)
             events = InMemoryWorkoutEventStore(seed.envelopes)
-            workouts = InMemoryWorkoutRepository(programs: programs, workouts: seed.workouts, events: events)
+            companion = InMemoryCompanionStore()
+            workouts = InMemoryWorkoutRepository(
+                programs: programs,
+                workouts: seed.workouts,
+                events: events,
+                companion: companion
+            )
             stats = InMemoryStatsQueries(workouts, now: now)
             settings = InMemorySettingsRepository(seed.settings, programs: programs)
         }
